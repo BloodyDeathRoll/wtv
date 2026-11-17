@@ -14,13 +14,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.IconButton
 import androidx.tv.material3.IconButtonDefaults
 import com.wtv.app.ui.theme.WtvColors
 
-enum class RailItem { Search, Categories, Watchlist, Settings }
+enum class RailItem(val label: Int) {
+    Search(com.wtv.app.R.string.rail_search),
+    Categories(com.wtv.app.R.string.rail_categories),
+    Watchlist(com.wtv.app.R.string.rail_watchlist),
+    Settings(com.wtv.app.R.string.rail_settings),
+}
 
 /** The narrow icon rail on the left: search, categories, watchlist, settings. */
 @Composable
@@ -45,7 +51,7 @@ fun SideRail(onSelect: (RailItem) -> Unit, modifier: Modifier = Modifier) {
                     focusedContentColor = WtvColors.Background,
                 ),
             ) {
-                Icon(icon, contentDescription = item.name, modifier = Modifier.size(22.dp))
+                Icon(icon, contentDescription = stringResource(item.label), modifier = Modifier.size(22.dp))
             }
         }
     }

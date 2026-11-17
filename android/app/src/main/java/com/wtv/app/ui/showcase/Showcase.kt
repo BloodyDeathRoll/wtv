@@ -27,7 +27,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.wtv.app.R
 import com.wtv.app.ui.TmdbSize
 import com.wtv.app.ui.components.ActionIcon
 import com.wtv.app.ui.components.Backdrop
@@ -64,24 +67,25 @@ fun Showcase() {
             SideRail(onSelect = {})
             Column(Modifier.padding(start = 28.dp, top = 56.dp)) {
                 HeroText(
+                    modifier = Modifier.width(520.dp),
                     title = focused.title,
-                    highlight = "Recommended by WTW",
+                    highlight = stringResource(R.string.recommended_by_wtw),
                     meta = { MetaRow(items = listOf(focused.year.toString(), focused.genres), badges = listOf(focused.cert, "HD")) },
                     synopsis = focused.synopsis,
                     actions = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            PlayButton("Play", onClick = {}, modifier = Modifier.focusRequester(play))
+                            PlayButton(stringResource(R.string.play), onClick = {}, modifier = Modifier.focusRequester(play))
                             Spacer(Modifier.padding(start = 12.dp))
-                            ActionIcon(Icons.Outlined.Add, "Add to watchlist", onClick = {})
-                            ActionIcon(Icons.Outlined.FavoriteBorder, "Love", onClick = {})
-                            ActionIcon(Icons.Outlined.ThumbUp, "Like", onClick = {}, selected = true)
-                            ActionIcon(Icons.Outlined.ThumbDown, "Dislike", onClick = {})
-                            ActionIcon(Icons.Outlined.Info, "More info", onClick = {})
+                            ActionIcon(Icons.Outlined.Add, stringResource(R.string.add_to_watchlist), onClick = {})
+                            ActionIcon(Icons.Outlined.FavoriteBorder, stringResource(R.string.rate_love), onClick = {})
+                            ActionIcon(Icons.Outlined.ThumbUp, stringResource(R.string.rate_like), onClick = {}, selected = true)
+                            ActionIcon(Icons.Outlined.ThumbDown, stringResource(R.string.rate_dislike), onClick = {})
+                            ActionIcon(Icons.Outlined.Info, stringResource(R.string.more_info), onClick = {})
                         }
                     },
                 )
                 Spacer(Modifier.height(28.dp))
-                RowTitle("Customers also liked")
+                RowTitle(stringResource(R.string.row_also_liked))
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     contentPadding = PaddingValues(end = 48.dp, top = 6.dp, bottom = 6.dp),

@@ -35,7 +35,6 @@ fun PlayButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier
             focusedContainerColor = WtvColors.TextPrimary,
             focusedContentColor = WtvColors.Background,
         ),
-        contentPadding = ButtonDefaults.ContentPadding,
     ) {
         Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(8.dp))

@@ -16,6 +16,15 @@ android {
         versionName = "0.1.0"
     }
 
+    buildTypes {
+        release {
+            // Drops unused code, e.g. most of the Material icon set.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

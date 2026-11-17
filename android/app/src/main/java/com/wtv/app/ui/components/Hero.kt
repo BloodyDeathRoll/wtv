@@ -13,13 +13,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -33,6 +34,16 @@ import com.wtv.app.ui.theme.WtvColors
  */
 @Composable
 fun Backdrop(imageUrl: String?, modifier: Modifier = Modifier) {
+    // The image sits at the end (right in English, left in Hebrew); the fade
+    // starts from the other side. A gradient does not flip by itself.
+    val stops = arrayOf(
+        0.0f to WtvColors.Background,
+        0.32f to WtvColors.Background,
+        0.62f to WtvColors.Background.copy(alpha = 0.35f),
+        1.0f to Color.Transparent,
+    )
+    val fromStart = LocalLayoutDirection.current == LayoutDirection.Ltr
+    val fade = if (fromStart) stops else stops.map { (at, color) -> (1f - at) to color }.reversed().toTypedArray()
     Box(modifier.fillMaxSize().background(WtvColors.Background)) {
         Crossfade(targetState = imageUrl, modifier = Modifier.fillMaxSize(), label = "backdrop") { url ->
             Box(Modifier.fillMaxSize()) {
@@ -47,16 +58,7 @@ fun Backdrop(imageUrl: String?, modifier: Modifier = Modifier) {
                 }
             }
         }
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.horizontalGradient(
-                    0.0f to WtvColors.Background,
-                    0.32f to WtvColors.Background,
-                    0.62f to WtvColors.Background.copy(alpha = 0.35f),
-                    1.0f to Color.Transparent,
-                ),
-            ),
-        )
+        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(*fade)))
         Box(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(0.45f to Color.Transparent, 0.8f to WtvColors.Background),
@@ -67,7 +69,7 @@ fun Backdrop(imageUrl: String?, modifier: Modifier = Modifier) {
 
 /**
  * The header text block: title, highlight line, meta row, synopsis, and an
- * optional row of actions (title pages only).
+ * optional row of actions (title pages only). The caller sets the width.
  */
 @Composable
 fun HeroText(
@@ -78,7 +80,7 @@ fun HeroText(
     highlight: String? = null,
     actions: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
-    Column(modifier.width(520.dp)) {
+    Column(modifier) {
         Text(title, style = MaterialTheme.typography.displayMedium, color = WtvColors.TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (highlight != null) {
             Spacer(Modifier.height(6.dp))

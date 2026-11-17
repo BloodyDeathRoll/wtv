@@ -1,6 +1,9 @@
 package com.wtv.app.ui
 
-/** TMDB image sizes the app uses. */
+/**
+ * TMDB image sizes the app uses. TMDB serves backdrops only at w300, w780
+ * and w1280: w300 is too soft for a 400 px card, so cards use w780.
+ */
 enum class TmdbSize(val path: String) {
     Poster("w342"),
     Card("w780"),

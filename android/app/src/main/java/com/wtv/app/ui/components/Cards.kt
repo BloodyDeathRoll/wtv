@@ -9,6 +9,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -48,7 +52,7 @@ fun ImageCard(
         modifier = modifier
             .width(width)
             .aspectRatio(aspectRatio)
-            .onFocusChanged { if (it.isFocused) onFocused() },
+            .onFocusChanged { if (it.hasFocus) onFocused() },
         shape = CardDefaults.shape(CardShape),
         scale = CardDefaults.scale(focusedScale = 1.04f),
         border = CardDefaults.border(
@@ -57,15 +61,17 @@ fun ImageCard(
         colors = CardDefaults.colors(containerColor = WtvColors.Surface),
     ) {
         Box(Modifier.fillMaxSize()) {
-            if (imageUrl != null) {
+            // No image, or one that fails to load: the title on a plain card.
+            var failed by remember(imageUrl) { mutableStateOf(false) }
+            if (imageUrl != null && !failed) {
                 AsyncImage(
                     model = imageUrl,
                     contentDescription = title,
                     contentScale = ContentScale.Crop,
+                    onError = { failed = true },
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
-                // No image: the title on a plain card.
                 Text(
                     title,
                     style = MaterialTheme.typography.labelLarge,
