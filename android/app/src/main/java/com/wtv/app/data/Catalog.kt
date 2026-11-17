@@ -88,8 +88,14 @@ data class Episode(
     val tmdbStill: String?,
     val providerImage: String?,
 ) {
-    /** Null when there is no real name: the page writes "Episode 3" in the app's language. */
+    /**
+     * Null when there is no real name: the page writes "Episode 3" in the
+     * app's language. TMDB's own stand-ins ("Episode 3") are stored empty by
+     * the enrichment job.
+     */
     fun displayName(hebrew: Boolean): String? = if (hebrew) nameHe ?: nameEn else nameEn
+
+    /** As for titles: in Hebrew the provider's (Hebrew) plot comes before TMDB's English. */
     fun synopsis(hebrew: Boolean): String? = if (hebrew) overviewHe ?: plot ?: overviewEn else overviewEn ?: plot
     val image: String? get() = tmdbImage(tmdbStill, TmdbSize.Still) ?: providerImage
 }
@@ -133,12 +139,18 @@ class Catalog(private val api: Api) {
     suspend fun page(category: Category, sort: Sort, hebrew: Boolean, offset: Int, limit: Int): List<Title> =
         api.get(pagePath(category, sort, hebrew, offset, limit)).objects().map(::title)
 
-    /** A series' episodes in order. */
-    suspend fun episodes(seriesId: Long): List<Episode> =
-        api.get(
-            "episodes?select=id,ext_id,container_ext,season,episode,name_en,name_he,overview_en,overview_he,plot,duration_secs,tmdb_still,image_url" +
-                "&title_id=eq.$seriesId&order=season,episode",
-        ).objects().map(::episode)
+    /**
+     * A series' episodes in order. Read 1,000 at a time: the REST API returns
+     * no more per call, and daily shows have up to 1,500.
+     */
+    suspend fun episodes(seriesId: Long): List<Episode> {
+        val all = mutableListOf<Episode>()
+        while (true) {
+            val page = api.get(episodesPath(seriesId, offset = all.size)).objects().map(::episode)
+            all += page
+            if (page.size < EPISODES_PAGE) return all
+        }
+    }
 
     /** Billed cast of a title, in order. */
     suspend fun cast(titleId: Long): List<CastMember> =
@@ -207,6 +219,12 @@ internal fun title(o: JSONObject) = Title(
     originalLanguage = o.text("original_language"),
     groupId = if (o.isNull("group_id") || !o.has("group_id")) null else o.getLong("group_id"),
 )
+
+internal const val EPISODES_PAGE = 1000
+
+internal fun episodesPath(seriesId: Long, offset: Int): String =
+    "episodes?select=id,ext_id,container_ext,season,episode,name_en,name_he,overview_en,overview_he,plot,duration_secs,tmdb_still,image_url" +
+        "&title_id=eq.$seriesId&order=season,episode,id&offset=$offset&limit=$EPISODES_PAGE"
 
 internal fun episode(o: JSONObject) = Episode(
     id = o.getLong("id"),

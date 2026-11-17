@@ -54,19 +54,20 @@ import com.wtv.app.data.Kind
 import com.wtv.app.data.Title
 import com.wtv.app.data.asCopy
 import com.wtv.app.data.copyLabels
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.components.ActionIcon
 import com.wtv.app.ui.components.Backdrop
 import com.wtv.app.ui.components.HeroText
+import com.wtv.app.ui.components.LandscapeCard
 import com.wtv.app.ui.components.MetaRow
 import com.wtv.app.ui.components.PersonCard
 import com.wtv.app.ui.components.PlayButton
 import com.wtv.app.ui.components.RowTitle
 import com.wtv.app.ui.components.RowsAtTop
 import com.wtv.app.ui.components.Sideways
-import com.wtv.app.ui.components.LandscapeCard
 import com.wtv.app.ui.theme.WtvColors
 
 private data class Extras(val cast: List<CastMember>, val copies: List<Copy>, val genres: Map<Pair<Kind, Int>, Genre>, val loaded: Boolean)
@@ -89,9 +90,9 @@ fun TitleScreen(
     // Cast, copies and genres are extras: the page shows without them.
     val extras by produceState(Extras(emptyList(), emptyList(), emptyMap(), loaded = false), title.id) {
         value = coroutineScope {
-            val cast = async { runCatching { catalog.cast(title.id) }.getOrDefault(emptyList()) }
-            val copies = async { runCatching { catalog.copies(title) }.getOrDefault(emptyList()) }
-            val genres = async { runCatching { catalog.genres() }.getOrDefault(emptyMap()) }
+            val cast = async { orDefault(emptyList()) { catalog.cast(title.id) } }
+            val copies = async { orDefault(emptyList()) { catalog.copies(title) } }
+            val genres = async { orDefault(emptyMap()) { catalog.genres() } }
             Extras(cast.await(), copies.await(), genres.await(), loaded = true)
         }
     }
@@ -112,12 +113,23 @@ fun TitleScreen(
     LaunchedEffect(title.id) { play.requestFocus() }
 
     // Series: the episodes, a season at a time; the header shows the focused episode.
-    val episodes by produceState(emptyList<Episode>(), title.id) {
-        if (title.kind == Kind.Series) value = runCatching { catalog.episodes(title.id) }.getOrDefault(emptyList())
+    // Null until loaded.
+    val episodes by produceState<List<Episode>?>(if (title.kind == Kind.Series) null else emptyList(), title.id) {
+        if (title.kind == Kind.Series) value = orDefault(emptyList()) { catalog.episodes(title.id) }
     }
-    val seasons = remember(episodes) { episodes.map { it.season }.distinct() }
+    val allEpisodes = episodes.orEmpty()
+    val seasons = remember(allEpisodes) { allEpisodes.map { it.season }.distinct() }
     var season by remember(title.id) { mutableStateOf<Int?>(null) }
     val shownSeason = season ?: seasons.firstOrNull()
+    val seasonEpisodes = remember(allEpisodes, shownSeason) { allEpisodes.filter { it.season == shownSeason } }
+    // Play on a series pressed before the episodes arrived: answered once they do.
+    var episodePending by remember(title.id) { mutableStateOf(false) }
+    LaunchedEffect(episodes, episodePending) {
+        if (episodes != null && episodePending) {
+            episodePending = false
+            seasonEpisodes.firstOrNull()?.let(onPlayEpisode)
+        }
+    }
     var episode by remember(title.id) { mutableStateOf<Episode?>(null) }
     // Focus outside the episodes row: the header is the title's again.
     val showsTitle = Modifier.onFocusChanged { if (it.hasFocus) episode = null }
@@ -158,8 +170,11 @@ fun TitleScreen(
                                 stringResource(R.string.play),
                                 onClick = {
                                     // TODO(P3-2): series resume at the next episode to watch.
-                                    if (title.kind == Kind.Series) episodes.firstOrNull { it.season == shownSeason }?.let(onPlayEpisode)
-                                    else if (extras.loaded) play() else playPending = true
+                                    when {
+                                        title.kind != Kind.Series -> if (extras.loaded) play() else playPending = true
+                                        episodes == null -> episodePending = true
+                                        else -> seasonEpisodes.firstOrNull()?.let(onPlayEpisode)
+                                    }
                                 },
                                 modifier = Modifier.focusRequester(play),
                             )
@@ -180,31 +195,32 @@ fun TitleScreen(
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                     contentPadding = PaddingValues(top = 8.dp, bottom = 400.dp),
                 ) {
-                    if (episodes.isNotEmpty()) {
+                    if (seasonEpisodes.isNotEmpty()) {
                         item(key = "episodes") {
                             Column {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     RowTitle(stringResource(R.string.row_episodes))
                                     if (seasons.size > 1) {
                                         Spacer(Modifier.width(20.dp))
-                                        SeasonChips(seasons, shownSeason, onSeason = { season = it; episode = null })
+                                        // On the chips the header is the series' again.
+                                        Box(showsTitle) { SeasonChips(seasons, shownSeason, onSeason = { season = it }) }
                                     }
                                 }
                                 // A new row per season: it starts at episode 1, not at the old scroll position.
                                 key(shownSeason) {
-                                Sideways {
-                                    LazyRow(
-                                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                        contentPadding = PaddingValues(end = 48.dp, top = 6.dp, bottom = 6.dp),
-                                    ) {
-                                        items(episodes.filter { it.season == shownSeason }, key = { it.id }) { e ->
-                                            LandscapeCard(
-                                                imageUrl = e.image ?: title.cardImage,
-                                                title = e.displayName(hebrew) ?: stringResource(R.string.episode_number, e.number),
-                                                label = stringResource(R.string.episode_number, e.number),
-                                                onClick = { onPlayEpisode(e) },
-                                                onFocused = { episode = e },
-                                            )
+                                    Sideways {
+                                        LazyRow(
+                                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                            contentPadding = PaddingValues(end = 48.dp, top = 6.dp, bottom = 6.dp),
+                                        ) {
+                                            items(seasonEpisodes, key = { it.id }) { e ->
+                                                LandscapeCard(
+                                                    imageUrl = e.image ?: title.cardImage,
+                                                    title = e.displayName(hebrew) ?: stringResource(R.string.episode_number, e.number),
+                                                    label = stringResource(R.string.episode_number, e.number),
+                                                    onClick = { onPlayEpisode(e) },
+                                                    onFocused = { episode = e },
+                                                )
                                         }
                                     }
                                 }
@@ -306,3 +322,13 @@ private fun SeasonChips(seasons: List<Int>, shown: Int?, onSeason: (Int) -> Unit
         }
     }
 }
+
+/** The value of `block`, or `default` if it fails; cancellation is not a failure. */
+private suspend fun <T> orDefault(default: T, block: suspend () -> T): T =
+    try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        default
+    }

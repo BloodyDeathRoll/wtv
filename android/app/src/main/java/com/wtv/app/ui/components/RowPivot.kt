@@ -6,9 +6,13 @@ import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+
+@OptIn(ExperimentalFoundationApi::class)
+private val LocalSideways = staticCompositionLocalOf<BringIntoViewSpec?> { null }
 
 /** Room above a focused card for its row title. */
 private val RowTitleSpace = 40.dp
@@ -16,7 +20,7 @@ private val RowTitleSpace = 40.dp
 /**
  * A vertical list of rows in which the focused row always lands at the top,
  * with its title showing, as in the reference. `titleSpace` is the room kept
- * above a focused card (more where the title line holds chips). Rows inside
+ * above a focused card in `titleSpaceDp` (more where the title line holds chips). Rows inside
  * scroll sideways the default way: wrap each in [Sideways].
  */
 @OptIn(ExperimentalFoundationApi::class)
@@ -40,5 +44,3 @@ fun Sideways(content: @Composable () -> Unit) {
     if (default == null) content() else CompositionLocalProvider(LocalBringIntoViewSpec provides default) { content() }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
-private val LocalSideways = androidx.compose.runtime.staticCompositionLocalOf<BringIntoViewSpec?> { null }

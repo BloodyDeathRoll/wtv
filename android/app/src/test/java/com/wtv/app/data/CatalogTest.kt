@@ -46,6 +46,27 @@ class CatalogTest {
         assertEquals(listOf(Copy(10, 387982, "mp4", false)), copiesFrom(t, emptyList(), setOf(99)))
     }
 
+    @Test fun `an episode parses, and its name and synopsis fall back like a title's`() {
+        val o = JSONObject().put("id", 5).put("ext_id", 369702).put("season", 1).put("episode", 3)
+            .put("name_en", "Pilot").put("name_he", JSONObject.NULL).put("overview_en", "EN").put("plot", "PROVIDER")
+            .put("duration_secs", 2555).put("tmdb_still", "/s.jpg").put("image_url", "https://p/e.jpg")
+        val e = episode(o)
+        assertEquals(1, e.season)
+        assertEquals(3, e.number)
+        assertEquals(2555, e.durationSecs)
+        assertEquals("Pilot", e.displayName(hebrew = false))
+        assertEquals("Pilot", e.displayName(hebrew = true))
+        assertEquals("EN", e.synopsis(hebrew = false))
+        assertEquals("PROVIDER", e.synopsis(hebrew = true))
+        assertEquals("https://image.tmdb.org/t/p/w300/s.jpg", e.image)
+        assertNull(episode(JSONObject().put("id", 6).put("ext_id", 1).put("season", 1).put("episode", 4)).displayName(hebrew = false))
+    }
+
+    @Test fun `episodes are read in pages of 1000 in a stable order`() {
+        val path = episodesPath(15791, offset = 1000)
+        for (part in listOf("&title_id=eq.15791", "&order=season,episode,id", "&offset=1000", "&limit=1000")) assertTrue(part, path.contains(part))
+    }
+
     @Test fun `copy labels number several HD copies only`() {
         val k = Copy(1, 1, null, true)
         val hd = Copy(2, 2, null, false)
