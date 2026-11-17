@@ -62,6 +62,8 @@ function fakeDb(available: Record<string, number> = {}) {
     },
     update: async (table, filter, values) => void calls.push({ op: 'update', table, filter, values }),
     remove: async (table, filter) => void calls.push({ op: 'remove', table, filter }),
+    select: async () => assert.fail('not used by the list sync'),
+    rpc: async () => assert.fail('not used by the list sync'),
   }
   return { db, calls }
 }

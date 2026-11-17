@@ -162,7 +162,7 @@ milestone.
 |---|---|
 | P1-1 | Xtream client: sign-in, lists, per-title details, programme data, player user agent |
 | P1-2 | Catalog sync: movies, series, channels and categories into the WTV database; later runs take only what changed |
-| P1-3 | TMDB id backfill: the per-title detail calls for the whole catalog, rate-limited and resumable; then new titles only. Series are matched by TMDB title search and confirmed by season id |
+| P1-3 | TMDB id backfill: the per-title detail calls for the whole catalog, rate-limited and resumable; then new titles only. Series are matched by TMDB title search (then by cast) and confirmed by season id |
 | P1-4 | TMDB enrichment: English and Hebrew title and synopsis, genres, backdrop, age rating, cast with person ids, episodes |
 | P1-5 | WTW match: mark which provider titles WTW has scored; coverage report (answers O1) |
 | P1-6 | Category names: English names for the provider's Hebrew categories |

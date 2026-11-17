@@ -287,6 +287,8 @@ export function toSeriesInfo(body: unknown): SeriesInfo {
     : Array.isArray(body.episodes)
       ? body.episodes
       : []
+  // One row per episode id: the database upsert rejects a repeat in one batch.
+  const seen = new Set<number>()
   for (const group of groups) {
     if (!Array.isArray(group)) continue
     for (const e of group.filter(isRaw)) {
@@ -294,7 +296,8 @@ export function toSeriesInfo(body: unknown): SeriesInfo {
       const extId = int(e.id)
       const season = int(e.season) ?? int(info.season)
       const episode = int(e.episode_num)
-      if (extId === null || season === null || episode === null) continue
+      if (extId === null || season === null || episode === null || seen.has(extId)) continue
+      seen.add(extId)
       out.episodes.push({
         extId,
         season,

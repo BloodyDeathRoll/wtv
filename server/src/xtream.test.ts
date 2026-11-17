@@ -173,6 +173,9 @@ test('series details: season TMDB ids and episodes, for both episode layouts', (
   const keyed = toSeriesInfo({ seasons, info: {}, episodes: { '1': [episode, { id: 'bad' }] } })
   assert.deepEqual(keyed, { tmdbSeasonIds: { 1: 460408 }, episodes: [expected] })
 
+  const repeated = toSeriesInfo({ seasons: [], episodes: { '1': [episode], '2': [{ ...episode, title: 'repeat' }] } })
+  assert.deepEqual(repeated.episodes, [expected])
+
   const listed = toSeriesInfo({ seasons: [], episodes: [[episode]] })
   assert.deepEqual(listed, { tmdbSeasonIds: {}, episodes: [expected] })
 
