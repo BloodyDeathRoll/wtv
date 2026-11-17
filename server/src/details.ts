@@ -160,7 +160,8 @@ export async function fetchDetails(
         }
         const info = await xtream.seriesInfo(t.ext_id)
         // Searched on the first fetch only: a series TMDB does not know is not
-        // searched again on every new episode.
+        // searched again on every new episode. A miss is permanent until the
+        // row's `details_at` is cleared by hand.
         const tmdbId = t.details_at !== null
           ? t.tmdb_id
           : await matchSeries(tmdb, { name: t.name, year: t.year, castNames: t.cast_names }, Object.values(info.tmdbSeasonIds))
@@ -199,10 +200,10 @@ export async function fetchDetails(
     for (const kind of ['movie', 'series'] as const) {
       const titles = page.filter(t => t.kind === kind)
       for (let i = 0; i < titles.length; i += CHUNK) {
-        if (now() >= deadline) {
+        if (report.outOfTime || now() >= deadline) {
           report.outOfTime = true
+          return report
         }
-        if (report.outOfTime) return report
         const chunk = titles.slice(i, i + CHUNK)
         tried.push(...chunk.map(t => t.id))
         await runChunk(chunk, kind)
