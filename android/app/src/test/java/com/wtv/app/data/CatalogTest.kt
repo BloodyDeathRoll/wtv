@@ -79,6 +79,24 @@ class CatalogTest {
         assertEquals(setOf(9L), cardsMissingFor(listOf(t(1, true, 1), t(2, false, 1), t(3, false, 9), t(4, false, null))))
     }
 
+    @Test fun `search quotes the query for the or filter and encodes it`() {
+        val path = searchPath("bad, (boys) \"x\"*", hebrew = false)
+        val or = java.net.URLDecoder.decode(path.substringAfter("&or=").substringBefore("&"), "UTF-8")
+        assertEquals(
+            "(sort_name_en.ilike.\"*bad, (boys) \\\"x\\\"*\",sort_name_he.ilike.\"*bad, (boys) \\\"x\\\"*\",name.ilike.\"*bad, (boys) \\\"x\\\"*\")",
+            or,
+        )
+        assertTrue(path.contains("&is_primary=is.true"))
+        assertTrue(path.contains("&order=sort_name_en.asc,id"))
+        assertTrue(searchPath("שוטר", hebrew = true).contains("&order=sort_name_he.asc,id"))
+    }
+
+    @Test fun `search ranks names starting with the query first`() {
+        fun t(id: Int, en: String) = title(row("title_en" to en).put("id", id))
+        val ranked = rankSearch(listOf(t(1, "The Bad Guys"), t(2, "Bad Boys II"), t(3, "Bad Boys")), "bad", hebrew = false)
+        assertEquals(listOf(3L, 2L, 1L), ranked.map { it.id })
+    }
+
     @Test fun `copy labels number several HD copies only`() {
         val k = Copy(1, 1, null, true)
         val hd = Copy(2, 2, null, false)

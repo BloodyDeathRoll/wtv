@@ -51,4 +51,7 @@
         <item quantity="two">%1$d כותרים בשירות</item>
         <item quantity="other">%1$d כותרים בשירות</item>
     </plurals>
+    <string name="search_hint">חיפוש סרטים וסדרות</string>
+    <string name="searching">מחפש…</string>
+    <string name="no_results">לא נמצא דבר עבור „%1$s”</string>
 </resources>

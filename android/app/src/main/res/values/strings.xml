@@ -49,4 +49,7 @@
         <item quantity="one">%1$d title on this service</item>
         <item quantity="other">%1$d titles on this service</item>
     </plurals>
+    <string name="search_hint">Search movies and series</string>
+    <string name="searching">Searching…</string>
+    <string name="no_results">Nothing found for “%1$s”</string>
 </resources>
