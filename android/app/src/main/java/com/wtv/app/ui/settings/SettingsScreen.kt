@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -33,7 +34,7 @@ import com.wtv.app.ui.theme.WtvColors
 @Composable
 fun SettingsScreen(firstFocus: FocusRequester) {
     val context = LocalContext.current
-    val current = AppLanguage.current(context)
+    val current = remember { AppLanguage.current(context) }
     Column(Modifier.fillMaxSize().padding(start = 88.dp, top = 48.dp)) {
         Text(stringResource(R.string.rail_settings), style = MaterialTheme.typography.displayMedium, color = WtvColors.TextPrimary)
         Spacer(Modifier.height(32.dp))
@@ -55,10 +56,12 @@ fun SettingsScreen(firstFocus: FocusRequester) {
                     ) {
                         // Each language is named in itself, so it can be found whatever the current one.
                         Text(
-                            when (language) {
-                                AppLanguage.English -> "English"
-                                AppLanguage.Hebrew -> "עברית"
-                            },
+                            stringResource(
+                                when (language) {
+                                    AppLanguage.English -> R.string.language_english
+                                    AppLanguage.Hebrew -> R.string.language_hebrew
+                                },
+                            ),
                         )
                     }
                 }

@@ -6,8 +6,11 @@ import java.util.Locale
 
 /**
  * The app's language, chosen in Settings: English (the default) or Hebrew.
- * Applied to every activity's context, so menus, layout direction (Hebrew is
- * right to left) and the language of titles and synopses all follow it.
+ * Applied to the activity, so menus, layout direction (Hebrew is right to
+ * left) and the language of titles and synopses all follow it.
+ *
+ * Hebrew is "iw", Android's resource code for it (`values-iw`); `isHebrew()`
+ * accepts "he" too.
  */
 enum class AppLanguage(val tag: String) {
     English("en"),
@@ -18,23 +21,28 @@ enum class AppLanguage(val tag: String) {
         private const val PREFS = "settings"
         private const val KEY = "language"
 
-        fun current(context: Context): AppLanguage {
-            val tag = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null)
-            return entries.firstOrNull { it.tag == tag } ?: English
-        }
+        /** The language for a stored tag; English for none or an unknown one. */
+        internal fun fromTag(tag: String?): AppLanguage = entries.firstOrNull { it.tag == tag } ?: English
 
+        fun current(context: Context): AppLanguage =
+            fromTag(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY, null))
+
+        /** Written at once: the activity is recreated right after and reads it back. */
         fun save(context: Context, language: AppLanguage) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, language.tag).apply()
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, language.tag).commit()
         }
 
-        /** `base` with the chosen language. */
-        fun wrap(base: Context): Context {
-            val locale = Locale.forLanguageTag(current(base).tag)
+        /**
+         * The configuration override that sets the chosen language. The default
+         * locale is set too, on purpose: dates and numbers follow the app's language.
+         */
+        fun override(context: Context): Configuration {
+            val locale = Locale.forLanguageTag(current(context).tag)
             Locale.setDefault(locale)
-            val config = Configuration(base.resources.configuration)
-            config.setLocale(locale)
-            config.setLayoutDirection(locale)
-            return base.createConfigurationContext(config)
+            return Configuration().apply {
+                setLocale(locale)
+                setLayoutDirection(locale)
+            }
         }
     }
 }

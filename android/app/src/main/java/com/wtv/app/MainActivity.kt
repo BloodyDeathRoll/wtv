@@ -8,8 +8,12 @@ import com.wtv.app.ui.WtvApp
 import com.wtv.app.ui.theme.WtvTheme
 
 class MainActivity : ComponentActivity() {
+    // An override, not a frozen copy of the configuration: other changes (font
+    // scale, density) still reach the activity. The app has one activity; a
+    // second one, or a service with text, needs the same.
     override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(AppLanguage.wrap(newBase))
+        super.attachBaseContext(newBase)
+        applyOverrideConfiguration(AppLanguage.override(newBase))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
