@@ -52,4 +52,8 @@
     <string name="search_hint">Search movies and series</string>
     <string name="searching">Searching…</string>
     <string name="no_results">Nothing found for “%1$s”</string>
+    <string name="setting_language">Language</string>
+    <!-- Each language named in itself, the same in every app language. -->
+    <string name="language_english" translatable="false">English</string>
+    <string name="language_hebrew" translatable="false">עברית</string>
 </resources>

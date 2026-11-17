@@ -63,7 +63,7 @@ private sealed interface Load {
     data class Failed(val message: String) : Load
 }
 
-/** True when the app runs in Hebrew. */
+/** True when the app runs in Hebrew: Android reports it as "iw" (the old code) or "he". */
 @Composable
 fun isHebrew(): Boolean = LocalConfiguration.current.locales[0].language.let { it == "he" || it == "iw" }
 
