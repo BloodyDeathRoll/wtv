@@ -60,9 +60,11 @@ fun WtvApp() {
     // Down from the tabs enters the page here, never the rail.
     val page = remember { FocusRequester() }
 
-    LaunchedEffect(Unit) { selectedTab.requestFocus() }
+    // On start and whenever a rail page closes, focus the selected tab. Not
+    // while a rail page is open (also after the activity is recreated with one
+    // open): the tabs are not composed then, and their requesters are unattached.
+    LaunchedEffect(railPage) { if (railPage == null) selectedTab.requestFocus() }
 
-    // Order matters: the last enabled handler wins.
     BackHandler(enabled = railPage == null && !tabsHaveFocus) { selectedTab.requestFocus() }
     BackHandler(enabled = railPage != null) { railPage = null }
 
@@ -114,14 +116,25 @@ fun WtvApp() {
                 }
             }
         }
-        SideRail(onSelect = { railPage = it }, modifier = Modifier.align(Alignment.CenterStart))
+        SideRail(
+            onSelect = {
+                // The tabs leave composition with the page open; their focus flag would go stale.
+                tabsHaveFocus = false
+                railPage = it
+            },
+            modifier = Modifier.align(Alignment.CenterStart),
+        )
     }
 }
 
-/** Stands in for a page that is not built yet. Focusable, so Down from the tabs lands somewhere. */
+/** Stands in for a page that is not built yet. Focusable, so Down from the tabs lands somewhere; brightens when focused. */
 @Composable
 private fun Placeholder(title: String, focus: FocusRequester) {
-    Box(Modifier.fillMaxSize().focusRequester(focus).focusable(), contentAlignment = Alignment.Center) {
-        Text(title, style = MaterialTheme.typography.headlineMedium, color = WtvColors.TextMuted)
+    var focused by remember { mutableStateOf(false) }
+    Box(
+        Modifier.fillMaxSize().focusRequester(focus).onFocusChanged { focused = it.isFocused }.focusable(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(title, style = MaterialTheme.typography.headlineMedium, color = if (focused) WtvColors.TextPrimary else WtvColors.TextMuted)
     }
 }
