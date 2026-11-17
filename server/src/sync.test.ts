@@ -83,7 +83,7 @@ const lists = {
 test('writes every list under the provider and reports the counts', async () => {
   const { db, calls } = fakeDb()
   const report = await syncCatalog(fakeXtream(lists), db, 'prov1', now)
-  assert.deepEqual(report, { categories: 3, movies: 2, series: 1, channels: 1, distrusted: [] })
+  assert.deepEqual(report, { categories: 3, movies: 2, series: 1, channels: 1, distrusted: [], untranslated: ['ישראל'] })
 
   assert.deepEqual(calls[0], { op: 'upsertOne', table: 'providers', rows: [{ name: 'prov1', kind: 'xtream' }] })
 

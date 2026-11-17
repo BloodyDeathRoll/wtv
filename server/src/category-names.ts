@@ -48,6 +48,8 @@ const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
 export function categoryNames(raw: string): { en: string | null; he: string } {
   const name = tidy(raw)
+  // The table comes first: some Hebrew-only names contain " - " too
+  // ("מותחן - מסתורין"), and the split below would misread them.
   const known = ENGLISH[name]
   if (known) return { en: known, he: name }
 

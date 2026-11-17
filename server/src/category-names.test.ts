@@ -21,4 +21,6 @@ test('Hebrew-only names come from the table, including ones with a dash', () => 
 
 test('an unknown Hebrew name has no English name', () => {
   assert.deepEqual(categoryNames('קטגוריה חדשה'), { en: null, he: 'קטגוריה חדשה' })
+  // Mixed script without the " - " separator: not guessed.
+  assert.deepEqual(categoryNames('4K סרטים'), { en: null, he: '4K סרטים' })
 })
