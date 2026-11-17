@@ -27,6 +27,7 @@ import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import com.wtv.app.ui.remembersFocus
 import com.wtv.app.ui.theme.WtvColors
 
 private val CardShape = RoundedCornerShape(8.dp)
@@ -50,6 +51,7 @@ fun ImageCard(
     Card(
         onClick = onClick,
         modifier = modifier
+            .remembersFocus()
             .width(width)
             .aspectRatio(aspectRatio)
             .onFocusChanged { if (it.hasFocus) onFocused() },

@@ -2,11 +2,16 @@ package com.wtv.app.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -32,6 +37,8 @@ import com.wtv.app.ui.components.RailItem
 import com.wtv.app.ui.components.SideRail
 import com.wtv.app.data.Category
 import com.wtv.app.data.Kind
+import com.wtv.app.data.Title
+import com.wtv.app.ui.title.TitleScreen
 import com.wtv.app.ui.browse.BrowseScreen
 import com.wtv.app.ui.browse.BrowseSource
 import com.wtv.app.ui.grid.GridScreen
@@ -53,39 +60,73 @@ enum class Section(@StringRes val label: Int) {
  * - Back from inside a page goes to the tabs; Back on the tabs leaves the app.
  * - A rail item opens its page over the section; Back closes it.
  */
+/** What is on top: the section, a category's grid, a title's page, or a rail page. */
+private enum class Top { Base, Grid, Title, Rail }
+
 @Composable
 fun WtvApp() {
     var section by rememberSaveable { mutableStateOf(Section.Home) }
     var railPage by rememberSaveable { mutableStateOf<RailItem?>(null) }
     // A category's full grid, opened from a row's More card.
     var more by remember { mutableStateOf<Category?>(null) }
+    // A title's page, over the section or the grid it was opened from.
+    var opened by remember { mutableStateOf<Title?>(null) }
     var tabsHaveFocus by remember { mutableStateOf(false) }
     // One per tab: Back focuses the selected tab, not the first one (which would switch section).
     val tabs = remember { Section.entries.associateWith { FocusRequester() } }
     val selectedTab = tabs.getValue(section)
     // Down from the tabs enters the page here, never the rail.
     val page = remember { FocusRequester() }
+    val gridFirst = remember { FocusRequester() }
+    // Each layer remembers its last focused card, to return to it.
+    val baseMemory = remember { FocusMemory() }
+    val gridMemory = remember { FocusMemory() }
+    val titleMemory = remember { FocusMemory() }
+    val titleFirst = remember { FocusRequester() }
 
-    // On start and whenever a rail page closes, focus the selected tab. Not
-    // while a rail page is open (also after the activity is recreated with one
-    // open): the tabs are not composed then, and their requesters are unattached.
-    LaunchedEffect(railPage, more) { if (railPage == null && more == null) selectedTab.requestFocus() }
-    // The card that opened a category is gone: focus the page that replaced it, not whatever is nearest.
-    LaunchedEffect(more) { if (more != null && railPage == null) page.requestFocus() }
+    // Closing a page removes the focused item, and Android then gives the focus
+    // to the first focusable item: the Home tab, which switches the section.
+    // So before a page closes, the focus parks here; the layer underneath then
+    // takes it back. Not focusable otherwise, so the remote never lands on it.
+    var parking by remember { mutableStateOf(false) }
+    val parked = remember { FocusRequester() }
+    fun close(change: () -> Unit) {
+        parking = true
+        runCatching { parked.requestFocus() }
+        change()
+    }
 
-    BackHandler(enabled = railPage == null && more == null && !tabsHaveFocus) { selectedTab.requestFocus() }
-    BackHandler(enabled = more != null && railPage == null) { more = null }
-    BackHandler(enabled = railPage != null) { railPage = null }
+    val top = when {
+        railPage != null -> Top.Rail
+        opened != null -> Top.Title
+        more != null -> Top.Grid
+        else -> Top.Base
+    }
+
+    // Where the focus goes when the top changes. Going back, a layer gets the
+    // focus it had (the card a title was opened from); going forward, the new
+    // layer's first item. The title page focuses its Play button itself.
+    var shown by remember { mutableStateOf<Top?>(null) }
+    LaunchedEffect(top) {
+        val from = shown
+        shown = top
+        when (top) {
+            Top.Base -> if (from == null || from == Top.Rail) selectedTab.requestFocus() else baseMemory.restore(fallback = page)
+            Top.Grid -> if (from == Top.Base) gridFirst.requestFocus() else gridMemory.restore(fallback = gridFirst)
+            Top.Title -> if (from == Top.Rail) titleMemory.restore(fallback = titleFirst)
+            Top.Rail -> Unit
+        }
+        parking = false
+    }
+
+    BackHandler(enabled = top == Top.Base && !tabsHaveFocus) { selectedTab.requestFocus() }
+    BackHandler(enabled = top == Top.Grid) { close { more = null } }
+    BackHandler(enabled = top == Top.Title) { close { opened = null } }
+    BackHandler(enabled = top == Top.Rail) { close { railPage = null } }
 
     Box(Modifier.fillMaxSize()) {
-        val open = railPage
-        val grid = more
-        if (open != null) {
-            Placeholder(stringResource(open.label), page)
-        } else if (grid != null) {
-            // TODO(P2-6, P2-7): open the title page.
-            GridScreen(grid, firstFocus = page, onOpen = {})
-        } else {
+        Box(Modifier.size(1.dp).focusRequester(parked).focusProperties { canFocus = parking }.focusable())
+        Layer(blocked = top != Top.Base, memory = baseMemory) {
             val source = when (section) {
                 Section.Home -> BrowseSource.Home
                 Section.Movies -> BrowseSource.Section(Kind.Movie)
@@ -93,8 +134,7 @@ fun WtvApp() {
                 Section.LiveTv -> null
             }
             if (source == null) Placeholder(stringResource(section.label), page)
-            // TODO(P2-6, P2-7): open the title page.
-            else BrowseScreen(source, firstFocus = page, up = selectedTab, onMore = { more = it }, onOpen = {})
+            else BrowseScreen(source, firstFocus = page, up = selectedTab, onMore = { more = it }, onOpen = { opened = it })
             TabRow(
                 selectedTabIndex = section.ordinal,
                 modifier = Modifier
@@ -134,9 +174,21 @@ fun WtvApp() {
                 }
             }
         }
+        more?.let { grid ->
+            Layer(blocked = top != Top.Grid, memory = gridMemory) {
+                GridScreen(grid, firstFocus = gridFirst, onOpen = { opened = it })
+            }
+        }
+        opened?.let { title ->
+            Layer(blocked = top != Top.Title, memory = titleMemory) {
+                // TODO(P3-1): play the chosen copy. TODO(P2-8): the person page.
+                TitleScreen(title, play = titleFirst, onPlay = {}, onPerson = {})
+            }
+        }
+        railPage?.let { Placeholder(stringResource(it.label), remember { FocusRequester() }) }
         SideRail(
             onSelect = {
-                // The tabs leave composition with the page open; their focus flag would go stale.
+                // The tabs' focus flag would go stale under the page.
                 tabsHaveFocus = false
                 railPage = it
             },
@@ -145,12 +197,30 @@ fun WtvApp() {
     }
 }
 
-/** Stands in for a page that is not built yet. Focusable, so Down from the tabs lands somewhere; brightens when focused. */
+/**
+ * One screen of the stack. Layers below the top stay composed (no reload,
+ * same scroll) but cannot take the focus. Cards inside record themselves in
+ * `memory`, so the layer can give the focus back to the last one.
+ */
+@Composable
+private fun Layer(blocked: Boolean, memory: FocusMemory, content: @Composable BoxScope.() -> Unit) {
+    CompositionLocalProvider(LocalFocusMemory provides memory) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .focusProperties { onEnter = { if (blocked) cancelFocusChange() } }
+                .focusGroup(),
+            content = content,
+        )
+    }
+}
+
+/** Stands in for a page that is not built yet. Opaque; focusable, so Down from the tabs lands somewhere; brightens when focused. */
 @Composable
 private fun Placeholder(title: String, focus: FocusRequester) {
     var focused by remember { mutableStateOf(false) }
     Box(
-        Modifier.fillMaxSize().focusRequester(focus).onFocusChanged { focused = it.isFocused }.focusable(),
+        Modifier.fillMaxSize().background(WtvColors.Background).focusRequester(focus).onFocusChanged { focused = it.isFocused }.focusable(),
         contentAlignment = Alignment.Center,
     ) {
         Text(title, style = MaterialTheme.typography.headlineMedium, color = if (focused) WtvColors.TextPrimary else WtvColors.TextMuted)
