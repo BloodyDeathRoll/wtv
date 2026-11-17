@@ -9,7 +9,7 @@ import org.junit.Test
 
 class CatalogTest {
     private fun row(vararg pairs: Pair<String, Any?>) = JSONObject().apply {
-        put("id", 10); put("kind", "movie"); put("name", "החיה")
+        put("id", 10); put("ext_id", 387982); put("kind", "movie"); put("name", "החיה")
         for ((k, v) in pairs) put(k, v ?: JSONObject.NULL)
     }
 
@@ -23,6 +23,35 @@ class CatalogTest {
         assertNull(t.plot)
         assertEquals(listOf(28, 53), t.genreIds)
         assertEquals("R", t.certification)
+    }
+
+    @Test fun `details take the TMDB runtime first and read group and rating, missing and null alike`() {
+        val t = title(row("runtime_min" to 99, "tmdb_runtime_min" to 101, "tmdb_rating" to 6.4, "group_id" to 7, "container_ext" to "mkv"))
+        assertEquals(101, t.runtimeMin)
+        assertEquals(6.4, t.tmdbRating!!, 0.0001)
+        assertEquals(7L, t.groupId)
+        assertEquals(387982L, t.extId)
+        assertEquals("mkv", t.containerExt)
+        assertEquals(99, title(row("runtime_min" to 99, "tmdb_runtime_min" to null)).runtimeMin)
+        assertNull(title(row("group_id" to null)).groupId)
+        assertNull(title(row()).groupId)
+    }
+
+    @Test fun `copies list 4K first and at least the title itself`() {
+        val t = title(row("container_ext" to "mp4"))
+        fun copy(id: Long, cats: List<Int>) = JSONObject().put("id", id).put("ext_id", id * 10).put("container_ext", "mkv").put("category_ids", org.json.JSONArray(cats))
+        val copies = copiesFrom(t, listOf(copy(1, listOf(449)), copy(2, listOf(99, 449))), fourK = setOf(99))
+        assertEquals(listOf(2L, 1L), copies.map { it.id })
+        assertEquals(listOf(true, false), copies.map { it.is4k })
+        assertEquals(listOf(Copy(10, 387982, "mp4", false)), copiesFrom(t, emptyList(), setOf(99)))
+    }
+
+    @Test fun `copy labels number several HD copies only`() {
+        val k = Copy(1, 1, null, true)
+        val hd = Copy(2, 2, null, false)
+        assertEquals(listOf("4K", "HD"), copyLabels(listOf(k, hd)))
+        assertEquals(listOf("4K", "HD 1", "HD 2"), copyLabels(listOf(k, hd, hd.copy(id = 3))))
+        assertEquals(listOf("HD"), copyLabels(listOf(hd)))
     }
 
     @Test fun `missing optional columns do not fail`() {

@@ -36,4 +36,5 @@
     <string name="info_language">Original language</string>
     <string name="info_rating">Rating</string>
     <string name="close">Close</string>
+    <string name="info_rating_value">%1$.1f / 10 (TMDB)</string>
 </resources>

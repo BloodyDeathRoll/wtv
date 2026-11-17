@@ -81,7 +81,8 @@ fun WtvApp() {
     // Each layer remembers its last focused card, to return to it.
     val baseMemory = remember { FocusMemory() }
     val gridMemory = remember { FocusMemory() }
-    val titleMemory = remember { FocusMemory() }
+    // Per title: a cast card of the previous title is no place to return to.
+    val titleMemory = remember(opened?.id) { FocusMemory() }
     val titleFirst = remember { FocusRequester() }
 
     // Closing a page removes the focused item, and Android then gives the focus
@@ -175,12 +176,12 @@ fun WtvApp() {
             }
         }
         more?.let { grid ->
-            Layer(blocked = top != Top.Grid, memory = gridMemory) {
+            Layer(blocked = top != Top.Grid, memory = gridMemory, opaque = true) {
                 GridScreen(grid, firstFocus = gridFirst, onOpen = { opened = it })
             }
         }
         opened?.let { title ->
-            Layer(blocked = top != Top.Title, memory = titleMemory) {
+            Layer(blocked = top != Top.Title, memory = titleMemory, opaque = true) {
                 // TODO(P3-1): play the chosen copy. TODO(P2-8): the person page.
                 TitleScreen(title, play = titleFirst, onPlay = {}, onPerson = {})
             }
@@ -203,11 +204,13 @@ fun WtvApp() {
  * `memory`, so the layer can give the focus back to the last one.
  */
 @Composable
-private fun Layer(blocked: Boolean, memory: FocusMemory, content: @Composable BoxScope.() -> Unit) {
+private fun Layer(blocked: Boolean, memory: FocusMemory, opaque: Boolean = false, content: @Composable BoxScope.() -> Unit) {
     CompositionLocalProvider(LocalFocusMemory provides memory) {
         Box(
             Modifier
                 .fillMaxSize()
+                // A layer over another hides it whatever its own content draws.
+                .then(if (opaque) Modifier.background(WtvColors.Background) else Modifier)
                 .focusProperties { onEnter = { if (blocked) cancelFocusChange() } }
                 .focusGroup(),
             content = content,

@@ -36,4 +36,5 @@
     <string name="info_language">שפת מקור</string>
     <string name="info_rating">דירוג</string>
     <string name="close">סגירה</string>
+    <string name="info_rating_value">%1$.1f / 10 (TMDB)</string>
 </resources>

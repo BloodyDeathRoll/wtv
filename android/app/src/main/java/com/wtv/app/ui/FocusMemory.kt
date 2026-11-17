@@ -19,10 +19,13 @@ class FocusMemory {
         last = item
     }
 
-    /** Focuses the remembered item, or `fallback` if there is none or it is gone. */
+    /**
+     * Focuses the remembered item, or `fallback` if there is none, it is gone
+     * (throws) or cannot take the focus now (returns false).
+     */
     fun restore(fallback: FocusRequester) {
         val item = last
-        if (item == null || runCatching { item.requestFocus() }.isFailure) runCatching { fallback.requestFocus() }
+        if (item == null || !runCatching { item.requestFocus() }.getOrDefault(false)) runCatching { fallback.requestFocus() }
     }
 }
 

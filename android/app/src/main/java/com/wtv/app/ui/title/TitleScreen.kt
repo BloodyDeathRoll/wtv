@@ -45,6 +45,10 @@ import com.wtv.app.data.Copy
 import com.wtv.app.data.Genre
 import com.wtv.app.data.Kind
 import com.wtv.app.data.Title
+import com.wtv.app.data.asCopy
+import com.wtv.app.data.copyLabels
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.components.ActionIcon
 import com.wtv.app.ui.components.Backdrop
@@ -67,11 +71,12 @@ fun TitleScreen(title: Title, play: FocusRequester, onPlay: (Copy) -> Unit, onPe
     val hebrew = isHebrew()
     // Cast, copies and genres are extras: the page shows without them.
     val extras by produceState(Extras(emptyList(), emptyList(), emptyMap()), title.id) {
-        value = Extras(
-            cast = runCatching { catalog.cast(title.id) }.getOrDefault(emptyList()),
-            copies = runCatching { catalog.copies(title) }.getOrDefault(emptyList()),
-            genres = runCatching { catalog.genres() }.getOrDefault(emptyMap()),
-        )
+        value = coroutineScope {
+            val cast = async { runCatching { catalog.cast(title.id) }.getOrDefault(emptyList()) }
+            val copies = async { runCatching { catalog.copies(title) }.getOrDefault(emptyList()) }
+            val genres = async { runCatching { catalog.genres() }.getOrDefault(emptyMap()) }
+            Extras(cast.await(), copies.await(), genres.await())
+        }
     }
     var choosing by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf(false) }
@@ -87,7 +92,7 @@ fun TitleScreen(title: Title, play: FocusRequester, onPlay: (Copy) -> Unit, onPe
                     MetaRow(
                         items = listOfNotNull(
                             title.year?.toString(),
-                            title.runtimeMin?.let { runtime(it) },
+                            title.runtimeMin?.let { runtimeLabel(it) },
                             title.genreIds.mapNotNull { extras.genres[title.kind to it]?.label(hebrew) }.take(2).joinToString(" • ").ifEmpty { null },
                         ),
                         badges = listOfNotNull(title.certification, if (extras.copies.any { it.is4k }) "4K" else null),
@@ -99,11 +104,8 @@ fun TitleScreen(title: Title, play: FocusRequester, onPlay: (Copy) -> Unit, onPe
                         PlayButton(
                             stringResource(R.string.play),
                             onClick = {
-                                val copies = extras.copies
-                                when {
-                                    copies.size > 1 -> choosing = true
-                                    copies.size == 1 -> onPlay(copies.first())
-                                }
+                                // Copies not loaded (yet, or the call failed): play this copy.
+                                if (extras.copies.size > 1) choosing = true else onPlay(extras.copies.firstOrNull() ?: title.asCopy())
                             },
                             modifier = Modifier.focusRequester(play),
                         )
@@ -141,7 +143,7 @@ fun TitleScreen(title: Title, play: FocusRequester, onPlay: (Copy) -> Unit, onPe
 }
 
 @Composable
-private fun runtime(minutes: Int): String =
+private fun runtimeLabel(minutes: Int): String =
     if (minutes >= 60) stringResource(R.string.runtime_hours, minutes / 60, minutes % 60) else stringResource(R.string.runtime_minutes, minutes)
 
 /** "Play in 4K / HD": one button per copy, the first (4K if any) focused. */
@@ -154,10 +156,7 @@ private fun CopyChooser(copies: List<Copy>, onChoose: (Copy) -> Unit, onDismiss:
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(stringResource(R.string.choose_copy), style = MaterialTheme.typography.titleMedium, color = WtvColors.TextPrimary)
-            // Several HD copies are numbered so they can be told apart.
-            var hd = 0
-            copies.forEachIndexed { i, c ->
-                val label = if (c.is4k) "4K" else if (copies.count { !it.is4k } > 1) "HD ${++hd}" else "HD"
+            copies.zip(copyLabels(copies)).forEachIndexed { i, (c, label) ->
                 Button(onClick = { onChoose(c) }, modifier = if (i == 0) Modifier.focusRequester(first) else Modifier) { Text(label) }
             }
         }
@@ -181,7 +180,7 @@ private fun MoreInfo(title: Title, cast: List<CastMember>, hebrew: Boolean, onDi
                 title.director?.let { stringResource(R.string.info_director) to it },
                 castLine.takeIf { it.isNotEmpty() }?.let { stringResource(R.string.info_cast) to it },
                 title.originalLanguage?.let { stringResource(R.string.info_language) to it.uppercase() },
-                title.tmdbRating?.let { stringResource(R.string.info_rating) to "%.1f / 10 (TMDB)".format(it) },
+                title.tmdbRating?.let { stringResource(R.string.info_rating) to stringResource(R.string.info_rating_value, it) },
             ).forEach { (label, value) ->
                 Text("$label: $value", style = MaterialTheme.typography.bodyMedium, color = WtvColors.TextSecondary)
             }
