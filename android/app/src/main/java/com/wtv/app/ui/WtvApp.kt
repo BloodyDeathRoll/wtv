@@ -1,5 +1,6 @@
 package com.wtv.app.ui
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
@@ -26,6 +27,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -35,27 +37,25 @@ import androidx.tv.material3.TabRow
 import androidx.tv.material3.TabRowDefaults
 import androidx.tv.material3.Text
 import com.wtv.app.R
-import com.wtv.app.ui.components.RailItem
-import com.wtv.app.ui.components.SideRail
 import com.wtv.app.data.CastMember
 import com.wtv.app.data.Category
 import com.wtv.app.data.Kind
 import com.wtv.app.data.Title
-import com.wtv.app.ui.person.PersonScreen
-import com.wtv.app.ui.search.SearchScreen
-import com.wtv.app.ui.settings.SettingsScreen
 import com.wtv.app.player.PlayerScreen
 import com.wtv.app.player.ProviderLogin
 import com.wtv.app.player.StreamKind
 import com.wtv.app.player.streamUrl
-import com.wtv.app.ui.browse.isHebrew
-import android.widget.Toast
-import androidx.compose.ui.platform.LocalContext
-import com.wtv.app.ui.title.TitleScreen
 import com.wtv.app.ui.browse.BrowseScreen
 import com.wtv.app.ui.browse.BrowseSource
+import com.wtv.app.ui.browse.isHebrew
+import com.wtv.app.ui.components.RailItem
+import com.wtv.app.ui.components.SideRail
 import com.wtv.app.ui.grid.GridScreen
+import com.wtv.app.ui.person.PersonScreen
+import com.wtv.app.ui.search.SearchScreen
+import com.wtv.app.ui.settings.SettingsScreen
 import com.wtv.app.ui.theme.WtvColors
+import com.wtv.app.ui.title.TitleScreen
 
 /** The four sections in the top tabs. */
 enum class Section(@StringRes val label: Int) {

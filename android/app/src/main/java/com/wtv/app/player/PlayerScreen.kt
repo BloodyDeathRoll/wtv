@@ -24,6 +24,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -60,6 +63,14 @@ fun PlayerScreen(url: String, title: String, firstFocus: FocusRequester, onClose
                 playWhenReady = true
             }
     }
+    // The app sent to the background (Home, another app): playback pauses; it is
+    // released when the page closes. The stream address (it holds the login) is never logged.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(player, lifecycle) {
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) player.pause() }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onPlayerError(e: PlaybackException) {
@@ -81,7 +92,6 @@ fun PlayerScreen(url: String, title: String, firstFocus: FocusRequester, onClose
                     this.player = player
                     keepScreenOn = true
                     setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
-                    requestFocus()
                 }
             },
             modifier = Modifier.fillMaxSize().focusRequester(firstFocus),

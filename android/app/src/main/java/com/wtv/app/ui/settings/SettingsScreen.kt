@@ -106,22 +106,31 @@ private fun ProviderSection(focus: FocusRequester?) {
     var server by remember { mutableStateOf(saved?.server.orEmpty()) }
     var user by remember { mutableStateOf(saved?.user.orEmpty()) }
     var password by remember { mutableStateOf(saved?.password.orEmpty()) }
-    var done by remember { mutableStateOf(false) }
+    // Null: nothing to say; else the message after Save.
+    var result by remember { mutableStateOf<Int?>(null) }
 
     Text(stringResource(R.string.setting_provider), style = MaterialTheme.typography.titleMedium, color = WtvColors.TextPrimary)
     Spacer(Modifier.height(12.dp))
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SettingField(stringResource(R.string.provider_server), server, { server = it; done = false }, focus = focus)
-        SettingField(stringResource(R.string.provider_user), user, { user = it; done = false })
-        SettingField(stringResource(R.string.provider_password), password, { password = it; done = false }, secret = true)
+        SettingField(stringResource(R.string.provider_server), server, { server = it; result = null }, focus = focus)
+        SettingField(stringResource(R.string.provider_user), user, { user = it; result = null })
+        SettingField(stringResource(R.string.provider_password), password, { password = it; result = null }, secret = true)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = {
-                ProviderLogin.save(context, ProviderLogin(server, user, password))
-                done = true
+                val login = ProviderLogin(server, user, password)
+                result = when {
+                    !login.isComplete -> R.string.provider_incomplete
+                    ProviderLogin.save(context, login) -> R.string.saved
+                    else -> R.string.provider_save_failed
+                }
             }) { Text(stringResource(R.string.save)) }
-            if (done) {
+            result?.let {
                 Spacer(Modifier.width(16.dp))
-                Text(stringResource(R.string.saved), style = MaterialTheme.typography.bodyMedium, color = WtvColors.Accent)
+                Text(
+                    stringResource(it),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (it == R.string.saved) WtvColors.Accent else WtvColors.TextSecondary,
+                )
             }
         }
     }

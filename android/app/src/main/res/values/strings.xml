@@ -64,4 +64,6 @@
     <string name="saved">Saved</string>
     <string name="provider_missing">Add your provider login in Settings to play</string>
     <string name="play_failed">This could not be played (%1$s)</string>
+    <string name="provider_incomplete">Fill in all three fields</string>
+    <string name="provider_save_failed">Could not save on this device</string>
 </resources>

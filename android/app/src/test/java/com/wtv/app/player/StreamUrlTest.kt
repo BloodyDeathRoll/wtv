@@ -17,6 +17,11 @@ class StreamUrlTest {
         assertEquals("http://p.example/movie/u/p/1.mp4", streamUrl(ProviderLogin("http://p.example", "u", "p"), StreamKind.Movie, 1, null))
     }
 
+    @Test fun `a path in the server is kept, any scheme case`() {
+        assertEquals("https://p.example/xtream/movie/u/p/1.mkv", streamUrl(ProviderLogin("p.example/xtream/", "u", "p"), StreamKind.Movie, 1, "mkv"))
+        assertEquals("HTTP://p.example/live/u/p/2.ts", streamUrl(ProviderLogin("HTTP://p.example", "u", "p"), StreamKind.Live, 2, null))
+    }
+
     @Test fun `a login with an empty field is not complete`() {
         assertFalse(ProviderLogin("p.example", "u", " ").isComplete)
     }
