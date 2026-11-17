@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Db, Row } from './db.ts'
-import { matchWtw, parseVector } from './wtw-match.ts'
+import { matchWtw, parseVector, sameVector } from './wtw-match.ts'
 
 test('parseVector reads pgvector text and rejects anything else', () => {
   assert.deepEqual(parseVector('[-0.34307024,0.25,0]'), [-0.34307024, 0.25, 0])
@@ -9,6 +9,15 @@ test('parseVector reads pgvector text and rejects anything else', () => {
   assert.equal(parseVector('[]'), null)
   assert.equal(parseVector('[1,"x"]'), null)
   assert.equal(parseVector('not json'), null)
+})
+
+test('sameVector ignores float printing differences only', () => {
+  assert.equal(sameVector([-1.5270355, 0.1 + 0.2], [-1.5270355, 0.3]), true)
+  assert.equal(sameVector([-1.52704], [-1.5270355]), false)
+  assert.equal(sameVector([0.25], [0.26]), false)
+  assert.equal(sameVector([0.25], [0.25, 1]), false)
+  assert.equal(sameVector(null, null), true)
+  assert.equal(sameVector(null, [1]), false)
 })
 
 /** A Db where only `select`, `selectAll` and (for WTV) `upsert` are expected. */
@@ -32,6 +41,8 @@ function fakeDb(tables: Record<string, Row[]>) {
   return { db, upserts, calls }
 }
 
+const none = { wtw_title_id: null, wtw_taste_vec: null, wtw_taste_version: null }
+
 test('titles are matched by kind and TMDB id; coverage is counted per kind', async () => {
   const wtw = fakeDb({
     titles: [
@@ -43,23 +54,56 @@ test('titles are matched by kind and TMDB id; coverage is counted per kind', asy
   })
   const wtv = fakeDb({
     titles: [
-      { id: 10, kind: 'movie', ext_id: 387982, name: 'החיה', tmdb_id: 1185344 },
-      { id: 11, kind: 'movie', ext_id: 5, name: 'unknown', tmdb_id: 999 },
-      { id: 12, kind: 'series', ext_id: 5829, name: 'דוקטור X', tmdb_id: 22 },
+      { id: 10, kind: 'movie', ext_id: 387982, name: 'החיה', tmdb_id: 1185344, ...none },
+      { id: 11, kind: 'movie', ext_id: 5, name: 'unknown', tmdb_id: 999, ...none },
+      { id: 12, kind: 'series', ext_id: 5829, name: 'דוקטור X', tmdb_id: 22, ...none },
     ],
   })
   const report = await matchWtw(wtv.db, wtw.db, 'prov1')
   assert.deepEqual(report, {
     wtwTitles: 3,
+    wtwDuplicates: 0,
     movie: { withTmdbId: 2, inWtw: 1, scored: 1 },
     series: { withTmdbId: 1, inWtw: 1, scored: 0 },
+    updated: 2,
   })
+  // The unknown movie had nothing and still has nothing: not written.
   assert.deepEqual(wtv.upserts, [[
     { provider_id: 7, kind: 'movie', ext_id: 387982, name: 'החיה', wtw_title_id: 1, wtw_taste_vec: [0.5, -1], wtw_taste_version: 1 },
-    { provider_id: 7, kind: 'movie', ext_id: 5, name: 'unknown', wtw_title_id: null, wtw_taste_vec: null, wtw_taste_version: null },
     { provider_id: 7, kind: 'series', ext_id: 5829, name: 'דוקטור X', wtw_title_id: 2, wtw_taste_vec: null, wtw_taste_version: null },
   ]])
   // WTW is only read.
   assert.deepEqual(wtw.upserts, [])
-  assert.deepEqual(wtv.calls, ['titles?id,kind,ext_id,name,tmdb_id&provider_id=eq.7&tmdb_id=not.is.null'])
+  assert.deepEqual(wtv.calls, [
+    'titles?id,kind,ext_id,name,tmdb_id,wtw_title_id,wtw_taste_vec,wtw_taste_version&provider_id=eq.7&or=(tmdb_id.not.is.null,wtw_title_id.not.is.null)',
+  ])
+})
+
+test('unchanged titles are not written; a lost TMDB id clears the match', async () => {
+  const wtw = fakeDb({ titles: [{ id: 1, tmdb_id: '100', type: 'movie', taste_vec: '[0.5,-1]', taste_version: 1 }] })
+  const wtv = fakeDb({
+    titles: [
+      { id: 10, kind: 'movie', ext_id: 1, name: 'same', tmdb_id: 100, wtw_title_id: 1, wtw_taste_vec: [0.5, -1], wtw_taste_version: 1 },
+      { id: 11, kind: 'movie', ext_id: 2, name: 'lost id', tmdb_id: null, wtw_title_id: 1, wtw_taste_vec: [0.5, -1], wtw_taste_version: 1 },
+    ],
+  })
+  const report = await matchWtw(wtv.db, wtw.db, 'prov1')
+  assert.equal(report.updated, 1)
+  // The title without a TMDB id is not counted in coverage.
+  assert.deepEqual(report.movie, { withTmdbId: 1, inWtw: 1, scored: 1 })
+  assert.deepEqual(wtv.upserts, [[{ provider_id: 7, kind: 'movie', ext_id: 2, name: 'lost id', ...none }]])
+})
+
+test('of two WTW rows for one title, the scored one is used and the duplicate counted', async () => {
+  const wtw = fakeDb({
+    titles: [
+      { id: 1, tmdb_id: '100', type: 'movie', taste_vec: null, taste_version: null },
+      { id: 2, tmdb_id: '100', type: 'movie', taste_vec: '[1,2]', taste_version: 1 },
+      { id: 3, tmdb_id: '100', type: 'movie', taste_vec: '[3,4]', taste_version: 1 },
+    ],
+  })
+  const wtv = fakeDb({ titles: [{ id: 10, kind: 'movie', ext_id: 1, name: 'x', tmdb_id: 100, ...none }] })
+  const report = await matchWtw(wtv.db, wtw.db, 'prov1')
+  assert.equal(report.wtwDuplicates, 2)
+  assert.equal(wtv.upserts[0]?.[0]?.wtw_title_id, 2)
 })

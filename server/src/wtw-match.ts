@@ -22,7 +22,10 @@ interface OurTitle {
   kind: 'movie' | 'series'
   ext_id: number
   name: string
-  tmdb_id: number
+  tmdb_id: number | null
+  wtw_title_id: number | null
+  wtw_taste_vec: number[] | null
+  wtw_taste_version: number | null
 }
 
 export interface Coverage {
@@ -36,8 +39,18 @@ export interface Coverage {
 
 export interface WtwReport {
   wtwTitles: number
+  /** WTW rows sharing a kind and TMDB id with another; the scored one is used. */
+  wtwDuplicates: number
   movie: Coverage
   series: Coverage
+  /** Titles whose WTW fields changed and were written. */
+  updated: number
+}
+
+/** Same vector as stored, give or take float printing in the last digits. */
+export function sameVector(stored: number[] | null, next: number[] | null): boolean {
+  if (stored === null || next === null) return stored === next
+  return stored.length === next.length && stored.every((x, i) => Math.abs(x - next[i]!) <= 1e-9 * Math.max(1, Math.abs(x)))
 }
 
 /** "[0.1,-0.2]" → [0.1, -0.2]; anything else → null. */
@@ -56,30 +69,50 @@ export async function matchWtw(wtv: Db, wtw: Db, providerName: string): Promise<
   if (!provider) throw new Error(`Unknown provider ${providerName}: run the sync first`)
 
   const wtwTitles = await wtw.selectAll<WtwTitle>('titles', 'id,tmdb_id,type,taste_vec,taste_version')
-  const byKey = new Map(wtwTitles.map(t => [`${t.type}:${String(t.tmdb_id).trim()}`, t]))
+  const byKey = new Map<string, WtwTitle>()
+  let wtwDuplicates = 0
+  for (const t of wtwTitles) {
+    const key = `${t.type}:${String(t.tmdb_id).trim()}`
+    const seen = byKey.get(key)
+    if (seen) wtwDuplicates++
+    // A scored row wins over an unscored one; otherwise the first (lowest id) stays.
+    if (!seen || (!parseVector(seen.taste_vec) && parseVector(t.taste_vec))) byKey.set(key, t)
+  }
 
-  const ours = await wtv.selectAll<OurTitle>('titles', 'id,kind,ext_id,name,tmdb_id', `provider_id=eq.${provider.id}&tmdb_id=not.is.null`)
+  // Titles with a TMDB id, and titles that still carry WTW fields (a TMDB id
+  // that went away must not leave a stale match behind).
+  const ours = await wtv.selectAll<OurTitle>(
+    'titles',
+    'id,kind,ext_id,name,tmdb_id,wtw_title_id,wtw_taste_vec,wtw_taste_version',
+    `provider_id=eq.${provider.id}&or=(tmdb_id.not.is.null,wtw_title_id.not.is.null)`,
+  )
   const empty = (): Coverage => ({ withTmdbId: 0, inWtw: 0, scored: 0 })
-  const report: WtwReport = { wtwTitles: wtwTitles.length, movie: empty(), series: empty() }
+  const report: WtwReport = { wtwTitles: wtwTitles.length, wtwDuplicates, movie: empty(), series: empty(), updated: 0 }
 
-  const rows: Row[] = ours.map(t => {
-    const match = byKey.get(`${t.kind === 'movie' ? 'movie' : 'tv'}:${t.tmdb_id}`)
+  const rows: Row[] = []
+  for (const t of ours) {
+    const match = t.tmdb_id === null ? undefined : byKey.get(`${t.kind === 'movie' ? 'movie' : 'tv'}:${t.tmdb_id}`)
     const vec = match ? parseVector(match.taste_vec) : null
-    const coverage = report[t.kind]
-    coverage.withTmdbId++
-    if (match) coverage.inWtw++
-    if (vec) coverage.scored++
-    return {
-      provider_id: provider.id,
-      kind: t.kind,
-      ext_id: t.ext_id,
-      name: t.name,
+    const next = {
       wtw_title_id: match?.id ?? null,
       wtw_taste_vec: vec,
       wtw_taste_version: vec ? match?.taste_version ?? null : null,
     }
-  })
+    if (t.tmdb_id !== null) {
+      const coverage = report[t.kind]
+      coverage.withTmdbId++
+      if (match) coverage.inWtw++
+      if (vec) coverage.scored++
+    }
+    // Unchanged rows are not written: every write moves `updated_at`.
+    const same =
+      t.wtw_title_id === next.wtw_title_id &&
+      t.wtw_taste_version === next.wtw_taste_version &&
+      sameVector(t.wtw_taste_vec, next.wtw_taste_vec)
+    if (!same) rows.push({ provider_id: provider.id, kind: t.kind, ext_id: t.ext_id, name: t.name, ...next })
+  }
   await wtv.upsert('titles', 'provider_id,kind,ext_id', rows)
+  report.updated = rows.length
   return report
 }
 

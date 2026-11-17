@@ -65,6 +65,7 @@ export function createDb(config: DbConfig, fetchFn: typeof fetch = fetch) {
     /**
      * Every row matching `filter`, read 1,000 at a time in id order (the REST
      * API returns at most 1,000 rows per call). `columns` must include `id`.
+     * `columns` and `filter` go into the URL as given: encode values in them.
      */
     async selectAll<T extends { id: number }>(table: string, columns: string, filter = ''): Promise<T[]> {
       const all: T[] = []
