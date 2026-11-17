@@ -102,7 +102,11 @@ export async function syncCatalog(xtream: Xtream, db: Db, providerName: string, 
     return false
   }
 
-  /** Writes one list, then marks what the provider no longer lists. */
+  /**
+   * Writes one list, then marks what the provider no longer lists. The rows
+   * must be unique by key: one upsert cannot touch the same row twice.
+   * `xtream.ts` merges the provider's repeats.
+   */
   async function replace(list: string, table: string, onConflict: string, scope: string, rows: Row[]): Promise<void> {
     const stored = await db.count(table, `${scope}&available=is.true`)
     await db.upsert(table, onConflict, rows)
@@ -117,7 +121,9 @@ export async function syncCatalog(xtream: Xtream, db: Db, providerName: string, 
     const scope = `${byProvider}&kind=eq.${kind}`
     const stored = await db.count('categories', scope)
     await db.upsert('categories', 'provider_id,kind,ext_id', list.map(categoryRow(provider.id)))
-    if (list.length > 0 && trusted(`${kind} categories`, stored, list.length)) {
+    // An empty list against stored categories is reported as distrusted;
+    // empty against empty has nothing to delete (and `not.in.()` is invalid).
+    if (trusted(`${kind} categories`, stored, list.length) && list.length > 0) {
       await db.remove('categories', `${scope}&ext_id=not.in.(${list.map(c => c.extId).join(',')})`)
     }
   }

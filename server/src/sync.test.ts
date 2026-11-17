@@ -150,7 +150,9 @@ test('a list under half its stored size is written but removes nothing', async (
 
 test('stale categories are deleted, but never on an empty list', async () => {
   const { db, calls } = fakeDb()
-  await syncCatalog(fakeXtream(lists), db, 'prov1', now)
+  const report = await syncCatalog(fakeXtream(lists), db, 'prov1', now)
+  // Series has no categories, here and in the database: nothing to report.
+  assert.deepEqual(report.distrusted, [])
   assert.deepEqual(
     calls.filter(c => c.op === 'remove').map(c => c.filter),
     ['provider_id=eq.7&kind=eq.movie&ext_id=not.in.(118)', 'provider_id=eq.7&kind=eq.live&ext_id=not.in.(1,4)'],
@@ -163,6 +165,13 @@ test('a category list under half its stored size deletes nothing', async () => {
   const report = await syncCatalog(fakeXtream(lists), db, 'prov1', now)
   assert.deepEqual(report.distrusted, [{ list: 'live categories', stored: 6, listed: 2 }])
   assert.deepEqual(calls.filter(c => c.op === 'remove').map(c => c.filter), ['provider_id=eq.7&kind=eq.movie&ext_id=not.in.(118)'])
+})
+
+test('an empty category list against stored categories is reported and deletes nothing', async () => {
+  const { db, calls } = fakeDb({ categoriesseries: 15 })
+  const report = await syncCatalog(fakeXtream(lists), db, 'prov1', now)
+  assert.deepEqual(report.distrusted, [{ list: 'series categories', stored: 15, listed: 0 }])
+  assert.equal(calls.some(c => c.op === 'remove' && c.filter?.includes('kind=eq.series')), false)
 })
 
 test('a list that fails to load stops the sync before anything is written', async () => {

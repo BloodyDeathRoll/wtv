@@ -362,9 +362,11 @@ export function createXtream(config: XtreamConfig, fetchFn: Fetch = fetch) {
     params: Record<string, string | number> = {},
     timeoutMs = TIMEOUT_MS,
   ): Promise<unknown> {
-    const base = /^https?:\/\//i.test(config.server) ? config.server : `https://${config.server}`
-    // Relative to the base with a trailing slash, so a path in the server is kept.
-    const url = new URL('player_api.php', base.endsWith('/') ? base : `${base}/`)
+    // A path in the server is kept; a query or fragment in it is dropped.
+    const url = new URL(/^https?:\/\//i.test(config.server) ? config.server : `https://${config.server}`)
+    url.pathname = url.pathname.replace(/\/?$/, '/player_api.php')
+    url.search = ''
+    url.hash = ''
     url.searchParams.set('username', config.user)
     url.searchParams.set('password', config.password)
     if (action) url.searchParams.set('action', action)

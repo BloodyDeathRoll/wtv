@@ -14,7 +14,9 @@ export class DbError extends Error {}
 
 export function createDb(config: DbConfig, fetchFn: typeof fetch = fetch) {
   async function request(method: string, path: string, body?: unknown, prefer?: string): Promise<Response> {
-    const res = await fetchFn(new URL(`/rest/v1/${path}`, config.url), {
+    // Relative to the base with a trailing slash, so a path in the URL (a proxy) is kept.
+    const base = config.url.endsWith('/') ? config.url : `${config.url}/`
+    const res = await fetchFn(new URL(`rest/v1/${path}`, base), {
       method,
       headers: {
         apikey: config.secretKey,

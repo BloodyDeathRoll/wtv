@@ -44,6 +44,12 @@ test('upsert sends batches of 500 with the conflict target and the secret key', 
   assert.deepEqual((calls[2]?.body as { id: number }[])[0], { id: 1000 })
 })
 
+test('a path in the database URL is kept', async () => {
+  const { fetchFn, calls } = fakeFetch()
+  await createDb({ ...config, url: 'https://proxy.example/supabase' }, fetchFn).upsert('titles', 'x', [{ id: 1 }])
+  assert.equal(calls[0]?.url.pathname, '/supabase/rest/v1/titles')
+})
+
 test('upsert of nothing makes no call', async () => {
   const { fetchFn, calls } = fakeFetch()
   await createDb(config, fetchFn).upsert('titles', 'x', [])
