@@ -30,11 +30,19 @@ data class ProviderLogin(val server: String, val user: String, val password: Str
             return ProviderLogin(json.optString("server"), json.optString("user"), json.optString("password"))
         }
 
-        /** False if the keystore failed (it does on some TV boxes); nothing is stored then. */
-        fun save(context: Context, login: ProviderLogin): Boolean = runCatching {
-            val json = JSONObject().put("server", login.server.trim()).put("user", login.user.trim()).put("password", login.password)
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, encrypt(json.toString())).commit()
-        }.getOrDefault(false)
+        /**
+         * False if the keystore failed (it does on some TV boxes); nothing is stored then.
+         * A key that exists but no longer works (invalidated) is replaced once: what it
+         * protected is unreadable anyway.
+         */
+        fun save(context: Context, login: ProviderLogin): Boolean {
+            val json = JSONObject().put("server", login.server.trim()).put("user", login.user.trim()).put("password", login.password).toString()
+            val sealed = runCatching { encrypt(json) }.recoverCatching {
+                KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(ALIAS)
+                encrypt(json)
+            }.getOrNull() ?: return false
+            return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, sealed).commit()
+        }
 
         private fun key(): SecretKey {
             val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
