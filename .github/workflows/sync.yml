@@ -50,6 +50,9 @@ jobs:
       # Usually a few new titles. A large backlog is worked through over
       # several runs: the job stops at its budget and resumes next time.
       - name: Details
+        # Reads its work list from the database: runs even when the sync step
+        # failed, so titles already synced still get their details.
+        if: ${{ !cancelled() }}
         timeout-minutes: 12
         working-directory: server
         run: node src/details.ts
