@@ -1,0 +1,180 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import type { Db, Row } from './db.ts'
+import { fetchDetails, matchSeries, type Pending } from './details.ts'
+import type { Tmdb, TmdbCredit } from './tmdb.ts'
+import type { Xtream } from './xtream.ts'
+
+/** A TMDB with fixed answers; records which series were looked up. */
+function fakeTmdb(data: {
+  search?: Record<string, number[]>
+  seasons?: Record<number, number[]>
+  people?: Record<string, number>
+  credits?: Record<number, TmdbCredit[]>
+}) {
+  const looked: number[] = []
+  const tmdb: Tmdb = {
+    searchSeries: async (name, year) => data.search?.[`${name}|${year ?? ''}`] ?? [],
+    series: async id => {
+      looked.push(id)
+      return { id, seasons: (data.seasons?.[id] ?? []).map(s => ({ id: s })) }
+    },
+    searchPerson: async name => data.people?.[name] ?? null,
+    personSeries: async id => data.credits?.[id] ?? [],
+  }
+  return { tmdb, looked }
+}
+
+const doctorX = { name: 'דוקטור X', year: 2026, castNames: 'Kim Ji-won, Lee Jung-eun' }
+
+test('match: a title hit counts only when it has one of the provider season ids', async () => {
+  const { tmdb } = fakeTmdb({ search: { 'דוקטור X|2026': [11, 22] }, seasons: { 11: [999], 22: [460408] } })
+  assert.equal(await matchSeries(tmdb, doctorX, [460408]), 22)
+})
+
+test('match: falls back to any year, then to the cast, nearest year first', async () => {
+  const anyYear = fakeTmdb({ search: { 'דוקטור X|': [33] }, seasons: { 33: [460408] } })
+  assert.equal(await matchSeries(anyYear.tmdb, doctorX, [460408]), 33)
+
+  const byCast = fakeTmdb({
+    people: { 'Lee Jung-eun': 5 },
+    credits: { 5: [{ id: 70, first_air_date: '2010-01-01' }, { id: 71, first_air_date: '2026-03-01' }] },
+    seasons: { 70: [460408], 71: [460408] },
+  })
+  assert.equal(await matchSeries(byCast.tmdb, doctorX, [460408]), 71)
+  // The first cast member is unknown to TMDB; the second is tried. Nearest year checked first.
+  assert.deepEqual(byCast.looked, [71])
+})
+
+test('match: no season ids or no confirmed hit gives null; a candidate is looked up once', async () => {
+  const { tmdb, looked } = fakeTmdb({ search: { 'דוקטור X|2026': [11], 'דוקטור X|': [11] }, seasons: { 11: [1] } })
+  assert.equal(await matchSeries(tmdb, doctorX, []), null)
+  assert.equal(await matchSeries(tmdb, doctorX, [460408]), null)
+  assert.deepEqual(looked, [11])
+})
+
+const movie = (ext_id: number): Pending => ({ id: ext_id, kind: 'movie', ext_id, name: `m${ext_id}`, year: 2020, cast_names: null, tmdb_id: null })
+const series = (ext_id: number, tmdb_id: number | null = null): Pending => ({ id: 1000 + ext_id, kind: 'series', ext_id, name: 'דוקטור X', year: 2026, cast_names: null, tmdb_id })
+
+function fakeXtream(failing: number[] = []): Xtream {
+  const fail = (id: number) => {
+    if (failing.includes(id)) throw new Error(`get info ${id}: HTTP 503`)
+  }
+  return {
+    signIn: async () => assert.fail(),
+    categories: async () => assert.fail(),
+    movies: async () => assert.fail(),
+    series: async () => assert.fail(),
+    channels: async () => assert.fail(),
+    programmes: async () => assert.fail(),
+    movieInfo: async id => {
+      fail(id)
+      return { tmdbId: id === 2 ? null : 500 + id, durationSecs: 60, backdropUrl: `https://img/${id}.jpg` }
+    },
+    seriesInfo: async id => {
+      fail(id)
+      return {
+        tmdbSeasonIds: { 1: 460408 },
+        episodes: [{ extId: 369702, season: 1, episode: 1, name: 'S01E01', plot: null, durationSecs: 3974, imageUrl: null, containerExt: 'mp4', addedAt: new Date('2026-10-10T00:00:00Z') }],
+      }
+    },
+  }
+}
+
+function fakeDb(pending: Pending[], pageSize = 1000) {
+  const upserts: { table: string; rows: Row[] }[] = []
+  const rpcCalls: number[][] = []
+  const db: Db = {
+    select: async <T,>() => [{ id: 7 }] as T[],
+    // Like the database function: pages of `pageSize`, skipping the ids given.
+    rpc: async <T,>(name: string, args: Row) => {
+      assert.equal(name, 'titles_needing_details')
+      assert.equal(args.p_provider, 7)
+      rpcCalls.push([...(args.p_skip as number[])])
+      const skip = new Set(args.p_skip as number[])
+      return pending.filter(t => !skip.has(t.id)).slice(0, pageSize) as T[]
+    },
+    upsert: async (table, _onConflict, rows) => void upserts.push({ table, rows }),
+    upsertOne: async () => assert.fail(),
+    count: async () => assert.fail(),
+    update: async () => assert.fail(),
+    remove: async () => assert.fail(),
+  }
+  return { db, upserts, rpcCalls }
+}
+
+const clock = (start = 0, step = 0) => {
+  let t = start
+  return () => (t += step)
+}
+
+test('details: movies get their TMDB id and backdrop; series their episodes and a matched id', async () => {
+  const { db, upserts } = fakeDb([movie(1), movie(2), series(5)])
+  const { tmdb } = fakeTmdb({ search: { 'דוקטור X|2026': [22] }, seasons: { 22: [460408] } })
+  const report = await fetchDetails(fakeXtream(), tmdb, db, 'prov1', 60_000, clock(1_794_900_000_000))
+  assert.deepEqual(report, { pending: 3, done: 3, withTmdbId: 2, episodes: 1, failed: 0, outOfTime: false })
+
+  const titles = upserts.filter(u => u.table === 'titles').flatMap(u => u.rows)
+  const at = new Date(1_794_900_000_000).toISOString()
+  assert.deepEqual(titles, [
+    { provider_id: 7, kind: 'movie', ext_id: 1, name: 'm1', tmdb_id: 501, backdrop_url: 'https://img/1.jpg', details_at: at },
+    { provider_id: 7, kind: 'movie', ext_id: 2, name: 'm2', tmdb_id: null, backdrop_url: 'https://img/2.jpg', details_at: at },
+    { provider_id: 7, kind: 'series', ext_id: 5, name: 'דוקטור X', tmdb_id: 22, details_at: at },
+  ])
+  const episodes = upserts.filter(u => u.table === 'episodes').flatMap(u => u.rows)
+  assert.deepEqual(episodes, [
+    { title_id: 1005, ext_id: 369702, season: 1, episode: 1, name: 'S01E01', plot: null, duration_secs: 3974, image_url: null, container_ext: 'mp4', added_at: '2026-10-10T00:00:00.000Z' },
+  ])
+  // Episodes are written before the series is marked done.
+  assert.ok(upserts.findIndex(u => u.table === 'episodes' && u.rows.length > 0) < upserts.findLastIndex(u => u.table === 'titles'))
+})
+
+test('details: a series that already has a TMDB id is not searched again', async () => {
+  const { db, upserts } = fakeDb([series(5, 77)])
+  const { tmdb, looked } = fakeTmdb({})
+  await fetchDetails(fakeXtream(), tmdb, db, 'prov1', 60_000)
+  assert.deepEqual(looked, [])
+  assert.equal(upserts.find(u => u.table === 'titles')?.rows[0]?.tmdb_id, 77)
+})
+
+test('details: a failing title is skipped and left for the next run', async () => {
+  const { db, upserts } = fakeDb([movie(1), movie(3)])
+  const report = await fetchDetails(fakeXtream([3]), fakeTmdb({}).tmdb, db, 'prov1', 60_000)
+  assert.equal(report.failed, 1)
+  assert.deepEqual(upserts.filter(u => u.table === 'titles').flatMap(u => u.rows.map(r => r.ext_id)), [1])
+})
+
+test('details: stops at the time budget, keeping what was written', async () => {
+  const pending = Array.from({ length: 250 }, (_, i) => movie(i + 10))
+  const { db, upserts } = fakeDb(pending)
+  // Every clock read moves 100 s against a 150 s budget: the first chunk runs, the second does not start.
+  const report = await fetchDetails(fakeXtream(), fakeTmdb({}).tmdb, db, 'prov1', 150_000, clock(0, 100_000))
+  assert.equal(report.outOfTime, true)
+  assert.equal(report.done, 100)
+  assert.equal(upserts.filter(u => u.table === 'titles').length, 1)
+})
+
+test('details: many failures in a row stop the run', async () => {
+  const pending = Array.from({ length: 40 }, (_, i) => movie(i + 100))
+  const { db } = fakeDb(pending)
+  await assert.rejects(
+    fetchDetails(fakeXtream(pending.map(p => p.ext_id)), fakeTmdb({}).tmdb, db, 'prov1', 60_000),
+    /Stopped after 25 failures in a row; last: get info \d+: HTTP 503/,
+  )
+})
+
+test('details: the work list is read in pages until it is empty; failed titles are not asked for again', async () => {
+  const pending = Array.from({ length: 250 }, (_, i) => movie(i + 10))
+  const { db, rpcCalls } = fakeDb(pending, 120)
+  const report = await fetchDetails(fakeXtream([10]), fakeTmdb({}).tmdb, db, 'prov1', 60_000)
+  assert.deepEqual(report, { pending: 250, done: 249, withTmdbId: 249, episodes: 0, failed: 1, outOfTime: false })
+  // 120 + 120 + 10, then an empty page. Every call skips all titles tried so far, failed ones included.
+  assert.deepEqual(rpcCalls.map(skip => skip.length), [0, 120, 240, 250])
+  assert.ok(rpcCalls[1]?.includes(10))
+})
+
+test('details: an unknown provider is an error', async () => {
+  const { db } = fakeDb([])
+  db.select = async <T,>() => [] as T[]
+  await assert.rejects(fetchDetails(fakeXtream(), fakeTmdb({}).tmdb, db, 'nope', 1000), /Unknown provider nope/)
+})

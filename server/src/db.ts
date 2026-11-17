@@ -56,6 +56,16 @@ export function createDb(config: DbConfig, fetchFn: typeof fetch = fetch) {
       return total
     },
 
+    /** `filter` is a PostgREST query string, e.g. `name=eq.prov1&select=id`. */
+    async select<T>(table: string, filter: string): Promise<T[]> {
+      return (await (await request('GET', `${table}?${filter}`)).json()) as T[]
+    },
+
+    /** Calls a database function and returns its rows. */
+    async rpc<T>(name: string, args: Row): Promise<T[]> {
+      return (await (await request('POST', `rpc/${name}`, args)).json()) as T[]
+    },
+
     async update(table: string, filter: string, values: Row): Promise<void> {
       await (await request('PATCH', `${table}?${filter}`, values, 'return=minimal')).body?.cancel()
     },

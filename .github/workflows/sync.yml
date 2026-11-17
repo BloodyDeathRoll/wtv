@@ -1,6 +1,7 @@
 name: Catalog sync
 
-# Copies the provider's catalog into the WTV database (server/src/sync.ts).
+# Copies the provider's catalog into the WTV database (server/src/sync.ts),
+# then fetches details for new and changed titles (server/src/details.ts).
 # A failed run opens an issue (or comments on the open one).
 # If this repo is ever made public: GitHub pauses scheduled workflows in public
 # repos after 60 days without activity (it emails first).
@@ -17,7 +18,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
       issues: write
@@ -43,6 +44,21 @@ jobs:
           XTREAM_PROV1_PASSWORD: ${{ secrets.XTREAM_PROV1_PASSWORD }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+
+      # Usually a few new titles. A large backlog is worked through over
+      # several runs: the job stops at its budget and resumes next time.
+      - name: Details
+        timeout-minutes: 12
+        working-directory: server
+        run: node src/details.ts
+        env:
+          DETAILS_BUDGET_MIN: '9'
+          XTREAM_PROV1_SERVER: ${{ secrets.XTREAM_PROV1_SERVER }}
+          XTREAM_PROV1_USER: ${{ secrets.XTREAM_PROV1_USER }}
+          XTREAM_PROV1_PASSWORD: ${{ secrets.XTREAM_PROV1_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
 
       - name: Report the failure as an issue
         if: failure()
