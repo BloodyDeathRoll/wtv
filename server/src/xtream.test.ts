@@ -256,7 +256,7 @@ test('a path in the server is kept', async () => {
   }
   assert.deepEqual(calls.map(c => c.url.pathname), ['/panel/player_api.php', '/panel/player_api.php', '/panel/player_api.php', '/player_api.php'])
   assert.equal(calls[2]?.url.searchParams.get('x'), null)
-  assert.equal(calls[3]?.url.username + calls[3]?.url.password, '')
+  assert.equal(`${calls[3]?.url.username}${calls[3]?.url.password}`, '')
 })
 
 test('categories keep the provider order', async () => {
