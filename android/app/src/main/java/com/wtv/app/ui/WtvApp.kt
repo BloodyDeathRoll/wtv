@@ -83,6 +83,7 @@ fun WtvApp() {
         if (open != null) {
             Placeholder(stringResource(open.label), page)
         } else if (grid != null) {
+            // TODO(P2-6, P2-7): open the title page.
             GridScreen(grid, firstFocus = page, onOpen = {})
         } else {
             val source = when (section) {
@@ -92,7 +93,7 @@ fun WtvApp() {
                 Section.LiveTv -> null
             }
             if (source == null) Placeholder(stringResource(section.label), page)
-            // Opening a title comes with the title pages (P2-6, P2-7).
+            // TODO(P2-6, P2-7): open the title page.
             else BrowseScreen(source, firstFocus = page, up = selectedTab, onMore = { more = it }, onOpen = {})
             TabRow(
                 selectedTabIndex = section.ordinal,

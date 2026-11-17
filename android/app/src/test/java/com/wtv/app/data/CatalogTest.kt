@@ -74,6 +74,14 @@ class CatalogTest {
         for (s in Sort.entries) assertTrue(s.name, s.order(hebrew = false).endsWith(",id"))
     }
 
+    @Test fun `a grid page asks for one category, available titles, the order, offset and limit`() {
+        val path = pagePath(Category(185, Kind.Series, "Netflix", null, null), Sort.Rating, hebrew = false, offset = 120, limit = 60)
+        assertTrue(path, path.startsWith("titles?select="))
+        for (part in listOf("&kind=eq.series", "&available=is.true", "&category_ids=cs.%7B185%7D", "&order=tmdb_rating.desc.nullslast,id", "&offset=120", "&limit=60")) {
+            assertTrue(part, path.contains(part))
+        }
+    }
+
     @Test fun `poster prefers TMDB, then the provider's`() {
         assertEquals("https://image.tmdb.org/t/p/w342/p.jpg", title(row("tmdb_poster" to "/p.jpg", "poster_url" to "https://p/p.jpg")).posterImage)
         assertEquals("https://p/p.jpg", title(row("poster_url" to "https://p/p.jpg")).posterImage)

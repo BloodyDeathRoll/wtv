@@ -94,10 +94,7 @@ class Catalog(private val api: Api) {
 
     /** One page of a category in the given order. */
     suspend fun page(category: Category, sort: Sort, hebrew: Boolean, offset: Int, limit: Int): List<Title> =
-        api.get(
-            "titles?select=$TITLE_COLUMNS&kind=eq.${category.kind.db}&available=is.true&category_ids=cs.%7B${category.id}%7D" +
-                "&order=${sort.order(hebrew)}&offset=$offset&limit=$limit",
-        ).objects().map(::title)
+        api.get(pagePath(category, sort, hebrew, offset, limit)).objects().map(::title)
 
     /** One row per provider category, newest first; empty categories left out. */
     suspend fun rows(kind: Kind, perRow: Int = 10): List<Pair<Category, List<Title>>> = coroutineScope {
@@ -106,10 +103,13 @@ class Catalog(private val api: Api) {
             .filter { it.second.isNotEmpty() }
     }
 
-    private companion object {
-        const val TITLE_COLUMNS = "id,kind,name,title_en,title_he,year,plot,overview_en,overview_he,tmdb_genre_ids,certification,tmdb_backdrop,tmdb_poster,backdrop_url,poster_url"
-    }
 }
+
+internal fun pagePath(category: Category, sort: Sort, hebrew: Boolean, offset: Int, limit: Int): String =
+    "titles?select=$TITLE_COLUMNS&kind=eq.${category.kind.db}&available=is.true&category_ids=cs.%7B${category.id}%7D" +
+        "&order=${sort.order(hebrew)}&offset=$offset&limit=$limit"
+
+private const val TITLE_COLUMNS = "id,kind,name,title_en,title_he,year,plot,overview_en,overview_he,tmdb_genre_ids,certification,tmdb_backdrop,tmdb_poster,backdrop_url,poster_url"
 
 private fun kindOf(db: String): Kind = Kind.entries.firstOrNull { it.db == db } ?: throw ApiException("Unknown kind: $db")
 
