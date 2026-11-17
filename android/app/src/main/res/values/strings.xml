@@ -52,4 +52,5 @@
     <string name="search_hint">Search movies and series</string>
     <string name="searching">Searching…</string>
     <string name="no_results">Nothing found for “%1$s”</string>
+    <string name="setting_language">Language</string>
 </resources>
