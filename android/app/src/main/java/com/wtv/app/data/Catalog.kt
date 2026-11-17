@@ -51,7 +51,7 @@ enum class Sort { Added, Year, Name, Rating }
 
 /** The REST `order` value for a sort; every order ends on `id`, so paging is stable. */
 internal fun Sort.order(hebrew: Boolean): String = when (this) {
-    Sort.Added -> "added_at.desc.nullslast,id"
+    Sort.Added -> "group_added_at.desc.nullslast,id"
     Sort.Year -> "year.desc.nullslast,id"
     Sort.Name -> "${if (hebrew) "sort_name_he" else "sort_name_en"}.asc,id"
     Sort.Rating -> "tmdb_rating.desc.nullslast,id"
@@ -86,11 +86,8 @@ class Catalog(private val api: Api) {
     }
 
     /** The newest titles the provider has, in one category or all. */
-    suspend fun latest(kind: Kind, category: Int? = null, limit: Int = 10): List<Title> {
-        val inCategory = category?.let { "&category_ids=cs.%7B$it%7D" } ?: ""
-        return api.get("titles?select=$TITLE_COLUMNS&kind=eq.${kind.db}&available=is.true$inCategory&order=added_at.desc.nullslast,id&limit=$limit")
-            .objects().map(::title)
-    }
+    suspend fun latest(kind: Kind, category: Int? = null, limit: Int = 10): List<Title> =
+        api.get(latestPath(kind, category, limit)).objects().map(::title)
 
     /** One page of a category in the given order. */
     suspend fun page(category: Category, sort: Sort, hebrew: Boolean, offset: Int, limit: Int): List<Title> =
@@ -104,9 +101,19 @@ class Catalog(private val api: Api) {
     }
 }
 
+/**
+ * Rows and grids show cards: one title per group of copies (#56). A card's
+ * categories and date are those of all its copies.
+ */
+private fun cards(kind: Kind, category: Int?): String =
+    "titles?select=$TITLE_COLUMNS&kind=eq.${kind.db}&available=is.true&is_primary=is.true" +
+        (category?.let { "&group_category_ids=cs.%7B$it%7D" } ?: "")
+
+internal fun latestPath(kind: Kind, category: Int?, limit: Int): String =
+    cards(kind, category) + "&order=${Sort.Added.order(hebrew = false)}&limit=$limit"
+
 internal fun pagePath(category: Category, sort: Sort, hebrew: Boolean, offset: Int, limit: Int): String =
-    "titles?select=$TITLE_COLUMNS&kind=eq.${category.kind.db}&available=is.true&category_ids=cs.%7B${category.id}%7D" +
-        "&order=${sort.order(hebrew)}&offset=$offset&limit=$limit"
+    cards(category.kind, category.id) + "&order=${sort.order(hebrew)}&offset=$offset&limit=$limit"
 
 private const val TITLE_COLUMNS = "id,kind,name,title_en,title_he,year,plot,overview_en,overview_he,tmdb_genre_ids,certification,tmdb_backdrop,tmdb_poster,backdrop_url,poster_url"
 
