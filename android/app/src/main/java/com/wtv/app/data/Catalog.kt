@@ -102,7 +102,6 @@ class Catalog(private val api: Api) {
             .awaitAll()
             .filter { it.second.isNotEmpty() }
     }
-
 }
 
 internal fun pagePath(category: Category, sort: Sort, hebrew: Boolean, offset: Int, limit: Int): String =

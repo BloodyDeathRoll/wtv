@@ -78,6 +78,7 @@ fun GridScreen(category: Category, firstFocus: FocusRequester, onOpen: (Title) -
     fun loadMore() {
         if (loading || end) return
         loading = true
+        val before = titles.size
         scope.launch {
             runCatching { catalog.page(category, sort, hebrew, fetched, PAGE) }
                 .onSuccess {
@@ -90,7 +91,10 @@ fun GridScreen(category: Category, firstFocus: FocusRequester, onOpen: (Title) -
                     error = null
                 }
                 .onFailure { error = it.message ?: it.toString() }
+            val addedNothing = error == null && titles.size == before
             loading = false
+            // A page made only of repeats: no new card to focus, so fetch the next one now.
+            if (addedNothing) loadMore()
         }
     }
     LaunchedEffect(sort, hebrew) { loadMore() }
