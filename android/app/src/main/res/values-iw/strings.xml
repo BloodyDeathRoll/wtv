@@ -22,4 +22,5 @@
     <string name="loading">טוען…</string>
     <string name="load_failed">הטעינה נכשלה: %1$s</string>
     <string name="nothing_here">אין כאן עדיין כלום</string>
+    <string name="retry">ניסיון חוזר</string>
 </resources>

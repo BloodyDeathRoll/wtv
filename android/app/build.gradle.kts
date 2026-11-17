@@ -58,4 +58,6 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network)
     implementation(libs.okhttp)
+    testImplementation(libs.junit)
+    testImplementation(libs.org.json)
 }

@@ -11,6 +11,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.io.IOException
 
 /**
  * The signed-in session with the WTV database. Until Google sign-in (P4-1)
@@ -23,6 +24,7 @@ class Session(context: Context, private val http: OkHttpClient) {
 
     /** A valid access token, refreshed or created as needed. */
     suspend fun token(): String = lock.withLock {
+        requireConfigured()
         current() ?: refresh() ?: signUpAnonymously()
     }
 
@@ -33,13 +35,22 @@ class Session(context: Context, private val http: OkHttpClient) {
 
     private fun current(): String? {
         val token = prefs.getString(ACCESS, null) ?: return null
-        val expiresAt = prefs.getLong(EXPIRES_AT, 0)
-        return token.takeIf { System.currentTimeMillis() / 1000 < expiresAt - 60 }
+        return token.takeIf { isFresh(prefs.getLong(EXPIRES_AT, 0), System.currentTimeMillis() / 1000) }
     }
 
+    /**
+     * A new access token from the refresh token, or null when the server
+     * rejects it (revoked, expired, user gone): only then is a new user made.
+     * A network error is thrown, not treated as a rejection: signing up again
+     * would leave the user's data behind on the old account.
+     */
     private suspend fun refresh(): String? {
         val refresh = prefs.getString(REFRESH, null) ?: return null
-        return runCatching { auth("token?grant_type=refresh_token", JSONObject().put("refresh_token", refresh)) }.getOrNull()
+        return try {
+            auth("token?grant_type=refresh_token", JSONObject().put("refresh_token", refresh))
+        } catch (e: AuthRejected) {
+            null
+        }
     }
 
     private suspend fun signUpAnonymously(): String = auth("signup", JSONObject())
@@ -51,18 +62,27 @@ class Session(context: Context, private val http: OkHttpClient) {
             .header("apikey", BuildConfig.SUPABASE_KEY)
             .post(body.toString().toRequestBody(JSON))
             .build()
-        http.newCall(request).execute().use { res ->
-            if (!res.isSuccessful) throw ApiException("Sign-in failed (HTTP ${res.code})")
-            val session = JSONObject(res.body!!.string())
-            val access = session.getString("access_token")
-            prefs.edit()
-                .putString(ACCESS, access)
-                .putString(REFRESH, session.getString("refresh_token"))
-                .putLong(EXPIRES_AT, session.getLong("expires_at"))
-                .apply()
-            access
+        val (code, text) = try {
+            http.newCall(request).execute().use { it.code to it.body?.string().orEmpty() }
+        } catch (e: IOException) {
+            throw ApiException("No connection to the server")
         }
+        if (code in 400..499) throw AuthRejected(code)
+        if (code !in 200..299) throw ApiException("Sign-in failed (HTTP $code)")
+        val session = runCatching { JSONObject(text) }.getOrNull()
+        val access = session?.optString("access_token").orEmpty()
+        val refresh = session?.optString("refresh_token").orEmpty()
+        val expiresAt = session?.optLong("expires_at") ?: 0
+        if (access.isEmpty() || refresh.isEmpty() || expiresAt == 0L) throw ApiException("Sign-in answer could not be read")
+        prefs.edit()
+            .putString(ACCESS, access)
+            .putString(REFRESH, refresh)
+            .putLong(EXPIRES_AT, expiresAt)
+            .apply()
+        access
     }
+
+    private class AuthRejected(code: Int) : ApiException("Sign-in refused (HTTP $code)")
 
     private companion object {
         const val ACCESS = "access_token"
@@ -72,4 +92,14 @@ class Session(context: Context, private val http: OkHttpClient) {
     }
 }
 
-class ApiException(message: String) : Exception(message)
+/** An access token is used until a minute before it expires. */
+internal fun isFresh(expiresAtSeconds: Long, nowSeconds: Long): Boolean = nowSeconds < expiresAtSeconds - 60
+
+/** A build without the database settings (local.properties) fails with a clear message, not a crash. */
+internal fun requireConfigured() {
+    if (BuildConfig.SUPABASE_URL.isBlank() || BuildConfig.SUPABASE_KEY.isBlank()) {
+        throw ApiException("This build has no database settings (SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY in local.properties)")
+    }
+}
+
+open class ApiException(message: String) : Exception(message)

@@ -5,6 +5,10 @@ import com.wtv.app.ui.tmdbImage
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -47,18 +51,25 @@ data class Genre(val nameEn: String, val nameHe: String?) {
 
 /** Catalog reads, cached for the app's lifetime (the catalog changes every few hours at most). */
 class Catalog(private val api: Api) {
+    // One lock for both caches: a quick tab switch must not fetch twice or race.
+    private val cacheLock = Mutex()
     private val categories = mutableMapOf<Kind, List<Category>>()
     private var genres: Map<Pair<Kind, Int>, Genre>? = null
 
-    suspend fun categories(kind: Kind): List<Category> = categories.getOrPut(kind) {
-        api.get("categories?select=ext_id,name,name_en,name_he&kind=eq.${kind.db}&order=position").objects().map {
-            Category(it.getInt("ext_id"), kind, it.getString("name"), it.text("name_en"), it.text("name_he"))
-        }
+    /** Parallel row requests. ~25 categories at once is a lot for a TV's Wi-Fi. */
+    private val rowRequests = Semaphore(6)
+
+    suspend fun categories(kind: Kind): List<Category> = cacheLock.withLock {
+        categories[kind] ?: api.get("categories?select=ext_id,name,name_en,name_he&kind=eq.${kind.db}&order=position").objects()
+            .map { Category(it.getInt("ext_id"), kind, it.getString("name"), it.text("name_en"), it.text("name_he")) }
+            .also { categories[kind] = it }
     }
 
-    suspend fun genres(): Map<Pair<Kind, Int>, Genre> = genres ?: api.get("genres?select=kind,id,name_en,name_he").objects()
-        .associate { (Kind.entries.first { k -> k.db == it.getString("kind") } to it.getInt("id")) to Genre(it.getString("name_en"), it.text("name_he")) }
-        .also { genres = it }
+    suspend fun genres(): Map<Pair<Kind, Int>, Genre> = cacheLock.withLock {
+        genres ?: api.get("genres?select=kind,id,name_en,name_he").objects()
+            .associate { (kindOf(it.getString("kind")) to it.getInt("id")) to Genre(it.getString("name_en"), it.text("name_he")) }
+            .also { genres = it }
+    }
 
     /** The newest titles the provider has, in one category or all. */
     suspend fun latest(kind: Kind, category: Int? = null, limit: Int = 10): List<Title> {
@@ -69,33 +80,38 @@ class Catalog(private val api: Api) {
 
     /** One row per provider category, newest first; empty categories left out. */
     suspend fun rows(kind: Kind, perRow: Int = 10): List<Pair<Category, List<Title>>> = coroutineScope {
-        categories(kind).map { c -> async { c to latest(kind, c.id, perRow) } }.awaitAll().filter { it.second.isNotEmpty() }
+        categories(kind).map { c -> async { rowRequests.withPermit { c to latest(kind, c.id, perRow) } } }
+            .awaitAll()
+            .filter { it.second.isNotEmpty() }
     }
-
-    private fun title(o: JSONObject) = Title(
-        id = o.getLong("id"),
-        kind = Kind.entries.first { it.db == o.getString("kind") },
-        name = o.getString("name"),
-        nameEn = o.text("title_en"),
-        nameHe = o.text("title_he"),
-        year = if (o.isNull("year")) null else o.getInt("year"),
-        plot = o.text("plot"),
-        overviewEn = o.text("overview_en"),
-        overviewHe = o.text("overview_he"),
-        genreIds = o.optJSONArray("tmdb_genre_ids")?.let { a -> List(a.length()) { a.getInt(it) } } ?: emptyList(),
-        certification = o.text("certification"),
-        tmdbBackdrop = o.text("tmdb_backdrop"),
-        tmdbPoster = o.text("tmdb_poster"),
-        providerBackdrop = o.text("backdrop_url"),
-        providerPoster = o.text("poster_url"),
-    )
 
     private companion object {
         const val TITLE_COLUMNS = "id,kind,name,title_en,title_he,year,plot,overview_en,overview_he,tmdb_genre_ids,certification,tmdb_backdrop,tmdb_poster,backdrop_url,poster_url"
     }
 }
 
+private fun kindOf(db: String): Kind = Kind.entries.firstOrNull { it.db == db } ?: throw ApiException("Unknown kind: $db")
+
+/** A title row from the REST API. */
+internal fun title(o: JSONObject) = Title(
+    id = o.getLong("id"),
+    kind = kindOf(o.getString("kind")),
+    name = o.getString("name"),
+    nameEn = o.text("title_en"),
+    nameHe = o.text("title_he"),
+    year = if (o.isNull("year")) null else o.getInt("year"),
+    plot = o.text("plot"),
+    overviewEn = o.text("overview_en"),
+    overviewHe = o.text("overview_he"),
+    genreIds = o.optJSONArray("tmdb_genre_ids")?.let { a -> List(a.length()) { a.getInt(it) } } ?: emptyList(),
+    certification = o.text("certification"),
+    tmdbBackdrop = o.text("tmdb_backdrop"),
+    tmdbPoster = o.text("tmdb_poster"),
+    providerBackdrop = o.text("backdrop_url"),
+    providerPoster = o.text("poster_url"),
+)
+
 private fun JSONArray.objects(): List<JSONObject> = List(length()) { getJSONObject(it) }
 
 /** The string at `key`, or null for a missing, null or blank value. */
-private fun JSONObject.text(key: String): String? = if (isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
+internal fun JSONObject.text(key: String): String? = if (isNull(key)) null else optString(key).takeIf { it.isNotBlank() }

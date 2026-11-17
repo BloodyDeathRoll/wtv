@@ -16,7 +16,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.CompositionLocalProvider
@@ -32,6 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.wtv.app.R
@@ -84,15 +87,19 @@ fun BrowseScreen(
     val hebrew = isHebrew()
     val recentMovies = stringResource(R.string.row_recent_movies)
     val recentSeries = stringResource(R.string.row_recent_series)
-    val load by produceState<Load>(Load.Loading, source, hebrew) {
+    var attempt by remember { mutableIntStateOf(0) }
+    val load by produceState<Load>(Load.Loading, source, hebrew, attempt) {
+        value = Load.Loading
         value = runCatching {
-            Load.Ready(loadRows(catalog, source, hebrew, recentMovies, recentSeries), catalog.genres())
+            val rows = loadRows(catalog, source, hebrew, recentMovies, recentSeries)
+            // Genre names are a nicety: without them the meta line just has no genres.
+            Load.Ready(rows, runCatching { catalog.genres() }.getOrDefault(emptyMap()))
         }.getOrElse { Load.Failed(it.message ?: it.toString()) }
     }
 
     when (val state = load) {
         Load.Loading -> Message(stringResource(R.string.loading), firstFocus)
-        is Load.Failed -> Message(stringResource(R.string.load_failed, state.message), firstFocus)
+        is Load.Failed -> Message(stringResource(R.string.load_failed, state.message), firstFocus, onRetry = { attempt++ })
         is Load.Ready ->
             if (state.rows.isEmpty()) Message(stringResource(R.string.nothing_here), firstFocus)
             else Rows(state.rows, state.genres, hebrew, firstFocus, up, onMore, onOpen)
@@ -122,6 +129,7 @@ private fun Rows(
     onMore: (Category) -> Unit,
     onOpen: (Title) -> Unit,
 ) {
+    // Safe: loadRows leaves out empty rows, and an empty page never gets here.
     var focused by remember(rows) { mutableStateOf(rows.first().titles.first()) }
     // Vertically, the focused row always lands at the top of the list, under the
     // header, as in the reference. Rows scroll sideways the default way.
@@ -146,40 +154,41 @@ private fun Rows(
                 )
             }
             CompositionLocalProvider(LocalBringIntoViewSpec provides rowAtTop) {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(20.dp),
-                contentPadding = PaddingValues(top = 8.dp, bottom = 400.dp),
-            ) {
-                itemsIndexed(rows, key = { _, r -> r.label }) { rowIndex, row ->
-                    Column {
-                        RowTitle(row.label)
-                        // Up from the first row goes to the tabs; spatially the rail is nearer.
-                        val rowModifier = if (rowIndex == 0) Modifier.focusProperties { this.up = up } else Modifier
-                        CompositionLocalProvider(LocalBringIntoViewSpec provides sideways) {
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                            contentPadding = PaddingValues(end = 48.dp, top = 6.dp, bottom = 6.dp),
-                        ) {
-                            itemsIndexed(row.titles, key = { _, t -> t.id }) { i, t ->
-                                LandscapeCard(
-                                    imageUrl = t.cardImage,
-                                    title = t.displayName(hebrew),
-                                    onClick = { onOpen(t) },
-                                    onFocused = { focused = t },
-                                    modifier = rowModifier.then(if (rowIndex == 0 && i == 0) Modifier.focusRequester(firstFocus) else Modifier),
-                                )
-                            }
-                            val category = row.category
-                            if (category != null) {
-                                item {
-                                    LandscapeCard(imageUrl = null, title = stringResource(R.string.more), onClick = { onMore(category) }, modifier = rowModifier)
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 400.dp),
+                ) {
+                    // Two categories can share a label; their ids differ.
+                    itemsIndexed(rows, key = { _, r -> r.category?.id ?: r.label }) { rowIndex, row ->
+                        Column {
+                            RowTitle(row.label)
+                            // Up from the first row goes to the tabs; spatially the rail is nearer.
+                            val rowModifier = if (rowIndex == 0) Modifier.focusProperties { this.up = up } else Modifier
+                            CompositionLocalProvider(LocalBringIntoViewSpec provides sideways) {
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                    contentPadding = PaddingValues(end = 48.dp, top = 6.dp, bottom = 6.dp),
+                                ) {
+                                    itemsIndexed(row.titles, key = { _, t -> t.id }) { i, t ->
+                                        LandscapeCard(
+                                            imageUrl = t.cardImage,
+                                            title = t.displayName(hebrew),
+                                            onClick = { onOpen(t) },
+                                            onFocused = { focused = t },
+                                            modifier = rowModifier.then(if (rowIndex == 0 && i == 0) Modifier.focusRequester(firstFocus) else Modifier),
+                                        )
+                                    }
+                                    val category = row.category
+                                    if (category != null) {
+                                        item {
+                                            LandscapeCard(imageUrl = null, title = stringResource(R.string.more), onClick = { onMore(category) }, modifier = rowModifier)
+                                        }
+                                    }
                                 }
                             }
                         }
-                        }
                     }
                 }
-            }
             }
         }
     }
@@ -192,10 +201,20 @@ private fun metaItems(t: Title, genres: Map<Pair<Kind, Int>, Genre>, hebrew: Boo
         t.genreIds.mapNotNull { genres[t.kind to it]?.label(hebrew) }.take(2).joinToString(" • ").ifEmpty { null },
     )
 
-/** Loading, error or empty page. Focusable, so Down from the tabs lands somewhere. */
+/**
+ * Loading, error or empty page. Focusable, so Down from the tabs lands
+ * somewhere; with `onRetry`, a Retry button takes the focus instead.
+ */
 @Composable
-private fun Message(text: String, focus: FocusRequester) {
-    Box(Modifier.fillMaxSize().focusRequester(focus).focusable(), contentAlignment = Alignment.Center) {
-        Text(text, style = MaterialTheme.typography.titleMedium, color = WtvColors.TextMuted)
+private fun Message(text: String, focus: FocusRequester, onRetry: (() -> Unit)? = null) {
+    val box = if (onRetry == null) Modifier.focusRequester(focus).focusable() else Modifier
+    Box(Modifier.fillMaxSize().then(box), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text, style = MaterialTheme.typography.titleMedium, color = WtvColors.TextMuted)
+            if (onRetry != null) {
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = onRetry, modifier = Modifier.focusRequester(focus)) { Text(stringResource(R.string.retry)) }
+            }
+        }
     }
 }
