@@ -179,7 +179,11 @@ internal fun title(o: JSONObject) = Title(
     groupId = if (o.isNull("group_id") || !o.has("group_id")) null else o.getLong("group_id"),
 )
 
-/** A title as its only copy: what Play uses when the copies are not known. */
+/**
+ * A title as its only copy: what Play uses when the copies are not known.
+ * For a grouped title whose copies all went unavailable this copy may not
+ * play either; playback (P3-1) must show a failed stream as an error.
+ */
 fun Title.asCopy(): Copy = Copy(id, extId, containerExt, is4k = false)
 
 /** Copies from rows of `titles`; a copy is 4K when it is in one of `fourK` (categories named with "4K"). */

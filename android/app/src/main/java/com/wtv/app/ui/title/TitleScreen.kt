@@ -59,7 +59,7 @@ import com.wtv.app.ui.components.PlayButton
 import com.wtv.app.ui.components.RowTitle
 import com.wtv.app.ui.theme.WtvColors
 
-private data class Extras(val cast: List<CastMember>, val copies: List<Copy>, val genres: Map<Pair<Kind, Int>, Genre>)
+private data class Extras(val cast: List<CastMember>, val copies: List<Copy>, val genres: Map<Pair<Kind, Int>, Genre>, val loaded: Boolean)
 
 /**
  * A title's page: the header with Play and the title's actions, then its cast.
@@ -70,15 +70,27 @@ fun TitleScreen(title: Title, play: FocusRequester, onPlay: (Copy) -> Unit, onPe
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
     val hebrew = isHebrew()
     // Cast, copies and genres are extras: the page shows without them.
-    val extras by produceState(Extras(emptyList(), emptyList(), emptyMap()), title.id) {
+    val extras by produceState(Extras(emptyList(), emptyList(), emptyMap(), loaded = false), title.id) {
         value = coroutineScope {
             val cast = async { runCatching { catalog.cast(title.id) }.getOrDefault(emptyList()) }
             val copies = async { runCatching { catalog.copies(title) }.getOrDefault(emptyList()) }
             val genres = async { runCatching { catalog.genres() }.getOrDefault(emptyMap()) }
-            Extras(cast.await(), copies.await(), genres.await())
+            Extras(cast.await(), copies.await(), genres.await(), loaded = true)
         }
     }
     var choosing by remember { mutableStateOf(false) }
+    // Play pressed before the copies arrived: answered once they do, so a 4K copy is not skipped.
+    var playPending by remember(title.id) { mutableStateOf(false) }
+    fun play() {
+        // Copies failed to load: play this copy.
+        if (extras.copies.size > 1) choosing = true else onPlay(extras.copies.firstOrNull() ?: title.asCopy())
+    }
+    LaunchedEffect(extras.loaded, playPending) {
+        if (extras.loaded && playPending) {
+            playPending = false
+            play()
+        }
+    }
     var info by remember { mutableStateOf(false) }
     LaunchedEffect(title.id) { play.requestFocus() }
 
@@ -103,10 +115,7 @@ fun TitleScreen(title: Title, play: FocusRequester, onPlay: (Copy) -> Unit, onPe
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         PlayButton(
                             stringResource(R.string.play),
-                            onClick = {
-                                // Copies not loaded (yet, or the call failed): play this copy.
-                                if (extras.copies.size > 1) choosing = true else onPlay(extras.copies.firstOrNull() ?: title.asCopy())
-                            },
+                            onClick = { if (extras.loaded) play() else playPending = true },
                             modifier = Modifier.focusRequester(play),
                         )
                         Spacer(Modifier.width(12.dp))

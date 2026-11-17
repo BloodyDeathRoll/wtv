@@ -52,6 +52,9 @@ enum class Section(@StringRes val label: Int) {
     LiveTv(R.string.tab_live),
 }
 
+/** What is on top: the section, a category's grid, a title's page, or a rail page. */
+private enum class Top { Base, Grid, Title, Rail }
+
 /**
  * The app frame: top tabs, the left rail, and the page in between.
  *
@@ -60,9 +63,6 @@ enum class Section(@StringRes val label: Int) {
  * - Back from inside a page goes to the tabs; Back on the tabs leaves the app.
  * - A rail item opens its page over the section; Back closes it.
  */
-/** What is on top: the section, a category's grid, a title's page, or a rail page. */
-private enum class Top { Base, Grid, Title, Rail }
-
 @Composable
 fun WtvApp() {
     var section by rememberSaveable { mutableStateOf(Section.Home) }
