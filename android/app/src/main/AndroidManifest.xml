@@ -8,6 +8,7 @@
     <uses-feature android:name="android.software.leanback" android:required="true" />
 
     <application
+        android:name=".WtvApplication"
         android:allowBackup="false"
         android:banner="@drawable/banner"
         android:icon="@drawable/banner"

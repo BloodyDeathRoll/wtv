@@ -6,6 +6,11 @@ composeBom = "2026.09.00"
 tvMaterial = "1.1.0"
 coil = "3.6.3"
 materialIcons = "1.7.8"
+# The version Coil's network module uses; one OkHttp in the app.
+okhttp = "4.12.0"
+junit = "4.13.2"
+# Real org.json for unit tests: Android's copy is a stub off-device.
+orgJson = "20260814"
 
 [libraries]
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
@@ -16,6 +21,9 @@ androidx-tv-material = { group = "androidx.tv", name = "tv-material", version.re
 androidx-material-icons = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIcons" }
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 coil-network = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

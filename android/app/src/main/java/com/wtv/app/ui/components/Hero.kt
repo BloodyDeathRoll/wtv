@@ -77,11 +77,12 @@ fun HeroText(
     meta: @Composable () -> Unit,
     synopsis: String?,
     modifier: Modifier = Modifier,
+    titleMaxLines: Int = 2,
     highlight: String? = null,
     actions: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     Column(modifier) {
-        Text(title, style = MaterialTheme.typography.displayMedium, color = WtvColors.TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(title, style = MaterialTheme.typography.displayMedium, color = WtvColors.TextPrimary, maxLines = titleMaxLines, overflow = TextOverflow.Ellipsis)
         if (highlight != null) {
             Spacer(Modifier.height(6.dp))
             Text(highlight, style = MaterialTheme.typography.titleSmall, color = WtvColors.Accent)
