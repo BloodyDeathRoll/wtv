@@ -50,8 +50,8 @@ export function categoryNames(raw: string): { en: string | null; he: string } {
   const name = tidy(raw)
   // The table comes first: some Hebrew-only names contain " - " too
   // ("מותחן - מסתורין"), and the split below would misread them.
-  const known = ENGLISH[name]
-  if (known) return { en: known, he: name }
+  // Own keys only: "constructor" must not find Object.prototype's.
+  if (Object.hasOwn(ENGLISH, name)) return { en: ENGLISH[name]!, he: name }
 
   // "English - עברית": Latin on the left, Hebrew on the right.
   const split = name.split(' - ')

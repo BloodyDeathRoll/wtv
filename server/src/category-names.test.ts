@@ -19,6 +19,11 @@ test('Hebrew-only names come from the table, including ones with a dash', () => 
   assert.deepEqual(categoryNames('סרטים - טבע, תיעודי, דוקו'), { en: 'Nature & Documentaries', he: 'סרטים - טבע, תיעודי, דוקו' })
 })
 
+test('names that match Object.prototype members are not looked up there', () => {
+  assert.deepEqual(categoryNames('constructor'), { en: 'Constructor', he: 'constructor' })
+  assert.deepEqual(categoryNames('toString'), { en: 'ToString', he: 'toString' })
+})
+
 test('an unknown Hebrew name has no English name', () => {
   assert.deepEqual(categoryNames('קטגוריה חדשה'), { en: null, he: 'קטגוריה חדשה' })
   // Mixed script without the " - " separator: not guessed.
