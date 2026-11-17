@@ -1,3 +1,15 @@
 <resources>
     <string name="app_name">WTV</string>
+    <string name="play">Play</string>
+    <string name="recommended_by_wtw">Recommended by WTW</string>
+    <string name="row_also_liked">Customers also liked</string>
+    <string name="add_to_watchlist">Add to watchlist</string>
+    <string name="rate_love">Love</string>
+    <string name="rate_like">Like</string>
+    <string name="rate_dislike">Dislike</string>
+    <string name="more_info">More info</string>
+    <string name="rail_search">Search</string>
+    <string name="rail_categories">Categories</string>
+    <string name="rail_watchlist">Watchlist</string>
+    <string name="rail_settings">Settings</string>
 </resources>

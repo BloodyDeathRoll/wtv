@@ -1,0 +1,15 @@
+<resources>
+    <!-- Hebrew. "iw" is Android's resource code for Hebrew. -->
+    <string name="play">צפייה</string>
+    <string name="recommended_by_wtw">מומלץ על ידי WTW</string>
+    <string name="row_also_liked">צופים אהבו גם</string>
+    <string name="add_to_watchlist">הוספה לרשימת הצפייה</string>
+    <string name="rate_love">אהבתי מאוד</string>
+    <string name="rate_like">אהבתי</string>
+    <string name="rate_dislike">לא אהבתי</string>
+    <string name="more_info">מידע נוסף</string>
+    <string name="rail_search">חיפוש</string>
+    <string name="rail_categories">קטגוריות</string>
+    <string name="rail_watchlist">רשימת צפייה</string>
+    <string name="rail_settings">הגדרות</string>
+</resources>
