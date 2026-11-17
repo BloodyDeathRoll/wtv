@@ -42,6 +42,7 @@ import com.wtv.app.data.Category
 import com.wtv.app.data.Kind
 import com.wtv.app.data.Title
 import com.wtv.app.ui.person.PersonScreen
+import com.wtv.app.ui.search.SearchScreen
 import com.wtv.app.ui.title.TitleScreen
 import com.wtv.app.ui.browse.BrowseScreen
 import com.wtv.app.ui.browse.BrowseSource
@@ -71,6 +72,10 @@ private sealed interface Page {
 
     data class Person(val person: CastMember) : Page {
         override val id get() = "person:${person.personId}"
+    }
+
+    data object Search : Page {
+        override val id get() = "search"
     }
 }
 
@@ -214,6 +219,7 @@ fun WtvApp() {
                             onPerson = { open(Page.Person(it)) },
                         )
                         is Page.Person -> PersonScreen(p.person, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
+                        Page.Search -> SearchScreen(field = entry.first, onOpen = { open(Page.TitlePage(it)) })
                     }
                 }
             }
@@ -223,7 +229,13 @@ fun WtvApp() {
             onSelect = {
                 // The tabs' focus flag would go stale under the page.
                 tabsHaveFocus = false
-                railPage = it
+                // Search is a page like the others: titles open over it, Back returns to it.
+                if (it == RailItem.Search) {
+                    railPage = null
+                    open(Page.Search)
+                } else {
+                    railPage = it
+                }
             },
             modifier = Modifier.align(Alignment.CenterStart),
         )

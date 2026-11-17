@@ -168,6 +168,17 @@ class Catalog(private val api: Api) {
         return personCards(rows + cards)
     }
 
+    /** Cards whose name contains `query`, in English, Hebrew or the provider's own; names starting with it first. */
+    suspend fun search(query: String, hebrew: Boolean): List<Title> {
+        val q = query.replace("*", "").trim()
+        if (q.isEmpty()) return emptyList()
+        return coroutineScope {
+            val startsWith = async { api.get(searchPath(q, hebrew, prefix = true)).objects().map(::title) }
+            val contains = async { api.get(searchPath(q, hebrew, prefix = false)).objects().map(::title) }
+            mergeSearch(startsWith.await(), contains.await())
+        }
+    }
+
     /** Billed cast of a title, in order. */
     suspend fun cast(titleId: Long): List<CastMember> =
         api.get("title_cast?select=position,character,people(tmdb_id,name,profile)&title_id=eq.$titleId&order=position").objects().map {
@@ -251,6 +262,33 @@ internal fun personCards(rows: List<JSONObject>): List<Title> =
         .map(::title)
         .distinctBy { it.id }
         .sortedWith(compareByDescending<Title> { it.year ?: Int.MIN_VALUE }.thenBy { it.id })
+
+/**
+ * Cards whose names start with (`prefix`) or contain `query`, over the three
+ * names. The value is quoted for PostgREST's `or=(…)` syntax (commas,
+ * parentheses and quotes are text) and URL-encoded. `*` is PostgREST's ilike
+ * wildcard; `%` and `_` in the query are escaped so they match themselves.
+ */
+internal fun searchPath(query: String, hebrew: Boolean, prefix: Boolean): String {
+    val literal = query
+        .replace("*", "")
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    // Inside a quoted PostgREST value, backslashes and quotes are escaped once more.
+    val quotedBody = literal.replace("\\", "\\\\").replace("\"", "\\\"")
+    val pattern = "\"" + (if (prefix) "" else "*") + quotedBody + "*\""
+    val or = "(sort_name_en.ilike.$pattern,sort_name_he.ilike.$pattern,name.ilike.$pattern)"
+    return "titles?select=$TITLE_COLUMNS&is_primary=is.true&available=is.true" +
+        "&or=${java.net.URLEncoder.encode(or, "UTF-8").replace("+", "%20")}" +
+        "&order=${Sort.Name.order(hebrew)}&limit=$SEARCH_LIMIT"
+}
+
+internal const val SEARCH_LIMIT = 60
+
+/** Names that start with the query first (each fetched on its own, so the limit cannot cut them), then the rest. */
+internal fun mergeSearch(startsWith: List<Title>, contains: List<Title>): List<Title> =
+    (startsWith + contains).distinctBy { it.id }.take(SEARCH_LIMIT)
 
 internal const val EPISODES_PAGE = 1000
 
