@@ -117,9 +117,14 @@ code, no endpoints, no tables, no data writes. WTV only reads.
 - 15,964 movies, 5,700 series, 584 live channels.
 - 95 channels have catch-up; 261 have programme data.
 - 3 simultaneous connections; `ts` output only for live.
-- TMDB ids come only from the per-title detail calls (`get_vod_info`,
-  `get_series_info`), not from the list calls. The first match is about 21,700
-  detail calls; after that, only new titles.
+- Movies: the TMDB id comes only from the per-title detail call
+  (`get_vod_info`), not from the list. The first match is about 15,800 detail
+  calls; after that, only new titles.
+- Series: the provider gives no TMDB id for the series. `get_series_info` gives
+  the TMDB ids of its seasons and episodes only. A series is matched by a TMDB
+  title search, and the season id confirms the match (found 2026-11-17).
+- The lists repeat a title once per category. Without repeats and unnamed rows:
+  15,777 movies, 5,685 series, 583 channels (53 of them radio).
 - All titles, plots and genres are in Hebrew. Cast names are mixed languages.
 - The provider rejects unknown user agents; requests need a player user agent.
 - Programme titles arrive base64-encoded.
@@ -157,7 +162,7 @@ milestone.
 |---|---|
 | P1-1 | Xtream client: sign-in, lists, per-title details, programme data, player user agent |
 | P1-2 | Catalog sync: movies, series, channels and categories into the WTV database; later runs take only what changed |
-| P1-3 | TMDB id backfill: the per-title detail calls for the whole catalog, rate-limited and resumable; then new titles only |
+| P1-3 | TMDB id backfill: the per-title detail calls for the whole catalog, rate-limited and resumable; then new titles only. Series are matched by TMDB title search and confirmed by season id |
 | P1-4 | TMDB enrichment: English and Hebrew title and synopsis, genres, backdrop, age rating, cast with person ids, episodes |
 | P1-5 | WTW match: mark which provider titles WTW has scored; coverage report (answers O1) |
 | P1-6 | Category names: English names for the provider's Hebrew categories |
