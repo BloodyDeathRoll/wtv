@@ -72,6 +72,28 @@ data class CastMember(val personId: Int, val name: String, val character: String
     val photo: String? get() = tmdbImage(profile, TmdbSize.Profile)
 }
 
+/** An episode of a series. Names and synopses as for titles: TMDB first, then the provider's. */
+data class Episode(
+    val id: Long,
+    val extId: Long,
+    val containerExt: String?,
+    val season: Int,
+    val number: Int,
+    val nameEn: String?,
+    val nameHe: String?,
+    val overviewEn: String?,
+    val overviewHe: String?,
+    val plot: String?,
+    val durationSecs: Int?,
+    val tmdbStill: String?,
+    val providerImage: String?,
+) {
+    /** Null when there is no real name: the page writes "Episode 3" in the app's language. */
+    fun displayName(hebrew: Boolean): String? = if (hebrew) nameHe ?: nameEn else nameEn
+    fun synopsis(hebrew: Boolean): String? = if (hebrew) overviewHe ?: plot ?: overviewEn else overviewEn ?: plot
+    val image: String? get() = tmdbImage(tmdbStill, TmdbSize.Still) ?: providerImage
+}
+
 /** One provider copy of a title; Play chooses among them. */
 data class Copy(val id: Long, val extId: Long, val containerExt: String?, val is4k: Boolean)
 
@@ -110,6 +132,13 @@ class Catalog(private val api: Api) {
     /** One page of a category in the given order. */
     suspend fun page(category: Category, sort: Sort, hebrew: Boolean, offset: Int, limit: Int): List<Title> =
         api.get(pagePath(category, sort, hebrew, offset, limit)).objects().map(::title)
+
+    /** A series' episodes in order. */
+    suspend fun episodes(seriesId: Long): List<Episode> =
+        api.get(
+            "episodes?select=id,ext_id,container_ext,season,episode,name_en,name_he,overview_en,overview_he,plot,duration_secs,tmdb_still,image_url" +
+                "&title_id=eq.$seriesId&order=season,episode",
+        ).objects().map(::episode)
 
     /** Billed cast of a title, in order. */
     suspend fun cast(titleId: Long): List<CastMember> =
@@ -177,6 +206,22 @@ internal fun title(o: JSONObject) = Title(
     tmdbRating = if (o.isNull("tmdb_rating") || !o.has("tmdb_rating")) null else o.getDouble("tmdb_rating"),
     originalLanguage = o.text("original_language"),
     groupId = if (o.isNull("group_id") || !o.has("group_id")) null else o.getLong("group_id"),
+)
+
+internal fun episode(o: JSONObject) = Episode(
+    id = o.getLong("id"),
+    extId = o.getLong("ext_id"),
+    containerExt = o.text("container_ext"),
+    season = o.getInt("season"),
+    number = o.getInt("episode"),
+    nameEn = o.text("name_en"),
+    nameHe = o.text("name_he"),
+    overviewEn = o.text("overview_en"),
+    overviewHe = o.text("overview_he"),
+    plot = o.text("plot"),
+    durationSecs = o.int("duration_secs"),
+    tmdbStill = o.text("tmdb_still"),
+    providerImage = o.text("image_url"),
 )
 
 /**

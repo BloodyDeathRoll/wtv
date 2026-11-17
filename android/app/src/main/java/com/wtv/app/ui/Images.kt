@@ -9,6 +9,8 @@ enum class TmdbSize(val path: String) {
     Card("w780"),
     Backdrop("w1280"),
     Profile("w185"),
+    /** Episode stills: TMDB serves them at w92, w185, w300 and original only. */
+    Still("w300"),
 }
 
 /** A TMDB image path ("/abc.jpg") as a URL, or null. */
