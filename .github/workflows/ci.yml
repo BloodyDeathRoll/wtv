@@ -5,14 +5,15 @@ on:
   push:
     branches: [main]
 
-# A new push supersedes the previous run on the same ref.
+# A new push supersedes the previous run on the same branch. Every commit on main is built.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   android:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     defaults:
@@ -33,3 +34,10 @@ jobs:
 
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug
+
+      # For sideloading a PR build onto a real TV.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wtv-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
