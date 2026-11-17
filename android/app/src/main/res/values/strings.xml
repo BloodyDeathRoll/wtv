@@ -12,4 +12,8 @@
     <string name="rail_categories">Categories</string>
     <string name="rail_watchlist">Watchlist</string>
     <string name="rail_settings">Settings</string>
+    <string name="tab_home">Home</string>
+    <string name="tab_movies">Movies</string>
+    <string name="tab_series">Series</string>
+    <string name="tab_live">Live TV</string>
 </resources>

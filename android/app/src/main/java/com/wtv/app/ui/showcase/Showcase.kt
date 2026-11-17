@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -18,7 +19,6 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.ThumbDown
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,8 +26,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.foundation.layout.width
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.wtv.app.R
@@ -39,7 +39,6 @@ import com.wtv.app.ui.components.LandscapeCard
 import com.wtv.app.ui.components.MetaRow
 import com.wtv.app.ui.components.PlayButton
 import com.wtv.app.ui.components.RowTitle
-import com.wtv.app.ui.components.SideRail
 import com.wtv.app.ui.tmdbImage
 
 /** Sample titles from the provider catalog (TMDB data, 2026-11-17). Replaced by real data in P2-4. */
@@ -55,17 +54,16 @@ private val Samples = listOf(
     Sample("Girl Taken", 2026, "Drama • Crime", "TV-MA", "/pPA3PDOZgq55QXTSj5FlFC6KTpJ.jpg", "Twin sisters Lily and Abby's lives are shattered when Lily is abducted from their quiet rural English town."),
 )
 
-/** The design system on one screen: header, actions, a row that drives the header, the rail. */
+/** The design system on one screen: header, actions, a row that drives the header. Home's content until P2-4. */
 @Composable
-fun Showcase() {
+fun Showcase(firstFocus: FocusRequester, up: FocusRequester, modifier: Modifier = Modifier) {
+    // Up from the top row goes to the tabs; spatially the rail is nearer.
+    val toTabs = Modifier.focusProperties { this.up = up }
     var focused by remember { mutableStateOf(Samples.first()) }
-    val play = remember { FocusRequester() }
-    LaunchedEffect(Unit) { play.requestFocus() }
-    Box(Modifier.fillMaxSize()) {
+    Box(modifier.fillMaxSize()) {
         Backdrop(tmdbImage(focused.backdrop, TmdbSize.Backdrop))
         Row(Modifier.fillMaxSize()) {
-            SideRail(onSelect = {})
-            Column(Modifier.padding(start = 28.dp, top = 56.dp)) {
+            Column(Modifier.padding(start = 88.dp, top = 76.dp)) {
                 HeroText(
                     modifier = Modifier.width(520.dp),
                     title = focused.title,
@@ -74,13 +72,13 @@ fun Showcase() {
                     synopsis = focused.synopsis,
                     actions = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            PlayButton(stringResource(R.string.play), onClick = {}, modifier = Modifier.focusRequester(play))
+                            PlayButton(stringResource(R.string.play), onClick = {}, modifier = toTabs.focusRequester(firstFocus))
                             Spacer(Modifier.padding(start = 12.dp))
-                            ActionIcon(Icons.Outlined.Add, stringResource(R.string.add_to_watchlist), onClick = {})
-                            ActionIcon(Icons.Outlined.FavoriteBorder, stringResource(R.string.rate_love), onClick = {})
-                            ActionIcon(Icons.Outlined.ThumbUp, stringResource(R.string.rate_like), onClick = {}, selected = true)
-                            ActionIcon(Icons.Outlined.ThumbDown, stringResource(R.string.rate_dislike), onClick = {})
-                            ActionIcon(Icons.Outlined.Info, stringResource(R.string.more_info), onClick = {})
+                            ActionIcon(Icons.Outlined.Add, stringResource(R.string.add_to_watchlist), onClick = {}, modifier = toTabs)
+                            ActionIcon(Icons.Outlined.FavoriteBorder, stringResource(R.string.rate_love), onClick = {}, modifier = toTabs)
+                            ActionIcon(Icons.Outlined.ThumbUp, stringResource(R.string.rate_like), onClick = {}, modifier = toTabs, selected = true)
+                            ActionIcon(Icons.Outlined.ThumbDown, stringResource(R.string.rate_dislike), onClick = {}, modifier = toTabs)
+                            ActionIcon(Icons.Outlined.Info, stringResource(R.string.more_info), onClick = {}, modifier = toTabs)
                         }
                     },
                 )
