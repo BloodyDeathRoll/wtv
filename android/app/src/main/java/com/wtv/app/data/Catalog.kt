@@ -51,21 +51,23 @@ data class Genre(val nameEn: String, val nameHe: String?) {
 
 /** Catalog reads, cached for the app's lifetime (the catalog changes every few hours at most). */
 class Catalog(private val api: Api) {
-    // One lock for both caches: a quick tab switch must not fetch twice or race.
-    private val cacheLock = Mutex()
+    // A lock per cache: a quick tab switch must not fetch twice or race, and
+    // the two fetches do not wait for each other.
+    private val categoriesLock = Mutex()
+    private val genresLock = Mutex()
     private val categories = mutableMapOf<Kind, List<Category>>()
     private var genres: Map<Pair<Kind, Int>, Genre>? = null
 
     /** Parallel row requests. ~25 categories at once is a lot for a TV's Wi-Fi. */
     private val rowRequests = Semaphore(6)
 
-    suspend fun categories(kind: Kind): List<Category> = cacheLock.withLock {
+    suspend fun categories(kind: Kind): List<Category> = categoriesLock.withLock {
         categories[kind] ?: api.get("categories?select=ext_id,name,name_en,name_he&kind=eq.${kind.db}&order=position").objects()
             .map { Category(it.getInt("ext_id"), kind, it.getString("name"), it.text("name_en"), it.text("name_he")) }
             .also { categories[kind] = it }
     }
 
-    suspend fun genres(): Map<Pair<Kind, Int>, Genre> = cacheLock.withLock {
+    suspend fun genres(): Map<Pair<Kind, Int>, Genre> = genresLock.withLock {
         genres ?: api.get("genres?select=kind,id,name_en,name_he").objects()
             .associate { (kindOf(it.getString("kind")) to it.getInt("id")) to Genre(it.getString("name_en"), it.text("name_he")) }
             .also { genres = it }

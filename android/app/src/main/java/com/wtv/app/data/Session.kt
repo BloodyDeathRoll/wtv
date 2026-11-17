@@ -67,7 +67,8 @@ class Session(context: Context, private val http: OkHttpClient) {
         } catch (e: IOException) {
             throw ApiException("No connection to the server")
         }
-        if (code in 400..499) throw AuthRejected(code)
+        if (code in REJECTED) throw AuthRejected(code)
+        // Anything else, 429 and 5xx included, is passing trouble: never a reason to make a new user.
         if (code !in 200..299) throw ApiException("Sign-in failed (HTTP $code)")
         val session = runCatching { JSONObject(text) }.getOrNull()
         val access = session?.optString("access_token").orEmpty()
@@ -88,6 +89,9 @@ class Session(context: Context, private val http: OkHttpClient) {
         const val ACCESS = "access_token"
         const val REFRESH = "refresh_token"
         const val EXPIRES_AT = "expires_at"
+
+        /** The answers that mean "this refresh token is no good" (Supabase uses 400 for an invalid one). */
+        val REJECTED = setOf(400, 401, 403, 404, 422)
         val JSON = "application/json".toMediaType()
     }
 }
