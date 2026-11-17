@@ -8,7 +8,7 @@
  */
 
 export interface XtreamConfig {
-  /** Base URL, e.g. `https://host:443`. */
+  /** Base URL, e.g. `https://host:443`. Without a scheme, https is used. */
   server: string
   user: string
   password: string
@@ -362,7 +362,7 @@ export function createXtream(config: XtreamConfig, fetchFn: Fetch = fetch) {
     params: Record<string, string | number> = {},
     timeoutMs = TIMEOUT_MS,
   ): Promise<unknown> {
-    const url = new URL('/player_api.php', config.server)
+    const url = new URL('/player_api.php', /^https?:\/\//i.test(config.server) ? config.server : `https://${config.server}`)
     url.searchParams.set('username', config.user)
     url.searchParams.set('password', config.password)
     if (action) url.searchParams.set('action', action)

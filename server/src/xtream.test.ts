@@ -243,6 +243,12 @@ test('requests carry the credentials, the action and the player user agent', asy
   assert.deepEqual(Object.fromEntries(second.url.searchParams), { username: 'u', password: 'p', action: 'get_short_epg', stream_id: '7', limit: '2' })
 })
 
+test('a server given without a scheme is called over https', async () => {
+  const { fetchFn, calls } = fakeFetch({ get_vod_info: { info: {} } })
+  await createXtream({ ...config, server: 'provider.example:8443' }, fetchFn).movieInfo(1)
+  assert.equal(calls[0]?.url.origin, 'https://provider.example:8443')
+})
+
 test('categories keep the provider order', async () => {
   const { fetchFn } = fakeFetch({
     get_live_categories: [
