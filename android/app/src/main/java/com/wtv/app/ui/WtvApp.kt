@@ -1,5 +1,6 @@
 package com.wtv.app.ui
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
@@ -26,6 +27,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -35,20 +37,25 @@ import androidx.tv.material3.TabRow
 import androidx.tv.material3.TabRowDefaults
 import androidx.tv.material3.Text
 import com.wtv.app.R
-import com.wtv.app.ui.components.RailItem
-import com.wtv.app.ui.components.SideRail
 import com.wtv.app.data.CastMember
 import com.wtv.app.data.Category
 import com.wtv.app.data.Kind
 import com.wtv.app.data.Title
+import com.wtv.app.player.PlayerScreen
+import com.wtv.app.player.ProviderLogin
+import com.wtv.app.player.StreamKind
+import com.wtv.app.player.streamUrl
+import com.wtv.app.ui.browse.BrowseScreen
+import com.wtv.app.ui.browse.BrowseSource
+import com.wtv.app.ui.browse.isHebrew
+import com.wtv.app.ui.components.RailItem
+import com.wtv.app.ui.components.SideRail
+import com.wtv.app.ui.grid.GridScreen
 import com.wtv.app.ui.person.PersonScreen
 import com.wtv.app.ui.search.SearchScreen
 import com.wtv.app.ui.settings.SettingsScreen
-import com.wtv.app.ui.title.TitleScreen
-import com.wtv.app.ui.browse.BrowseScreen
-import com.wtv.app.ui.browse.BrowseSource
-import com.wtv.app.ui.grid.GridScreen
 import com.wtv.app.ui.theme.WtvColors
+import com.wtv.app.ui.title.TitleScreen
 
 /** The four sections in the top tabs. */
 enum class Section(@StringRes val label: Int) {
@@ -79,8 +86,13 @@ private sealed interface Page {
         override val id get() = "search"
     }
 
-    data object Settings : Page {
+    /** `providerFirst`: opened from Play without a provider login, focused on the login. */
+    data class Settings(val providerFirst: Boolean = false) : Page {
         override val id get() = "settings"
+    }
+
+    data class Player(val url: String, val title: String) : Page {
+        override val id get() = "player"
     }
 }
 
@@ -132,6 +144,21 @@ fun WtvApp() {
         val existing = stack.indexOfFirst { it.page.id == page.id }
         if (existing < 0) stack += Entry(page)
         else if (existing < stack.lastIndex) close { stack.removeRange(existing + 1, stack.size) }
+    }
+
+    val context = LocalContext.current
+    val hebrew = isHebrew()
+    val seasonEpisode = stringResource(R.string.season_episode)
+    val noLogin = stringResource(R.string.provider_missing)
+    // Play: the stream needs the provider login; without one, Settings opens on it.
+    fun play(kind: StreamKind, extId: Long, containerExt: String?, title: String) {
+        val login = ProviderLogin.load(context)
+        if (login == null || !login.isComplete) {
+            Toast.makeText(context, noLogin, Toast.LENGTH_LONG).show()
+            open(Page.Settings(providerFirst = true))
+        } else {
+            open(Page.Player(streamUrl(login, kind, extId, containerExt), title))
+        }
     }
 
     // Where the focus goes when the stack or the rail page changes. Going back,
@@ -215,23 +242,26 @@ fun WtvApp() {
                 Layer(blocked = railOpen || i != stack.lastIndex, memory = entry.memory, opaque = true) {
                     when (val p = entry.page) {
                         is Page.Grid -> GridScreen(p.category, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
-                        // TODO(P3-1): play the chosen copy or episode.
                         is Page.TitlePage -> TitleScreen(
                             p.title,
                             play = entry.first,
-                            onPlay = {},
-                            onPlayEpisode = {},
+                            onPlay = { copy -> play(StreamKind.Movie, copy.extId, copy.containerExt, p.title.displayName(hebrew)) },
+                            onPlayEpisode = { e ->
+                                play(StreamKind.Episode, e.extId, e.containerExt, "${p.title.displayName(hebrew)} · ${seasonEpisode.format(e.season, e.number)}")
+                            },
                             onPerson = { open(Page.Person(it)) },
                         )
                         is Page.Person -> PersonScreen(p.person, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
                         Page.Search -> SearchScreen(field = entry.first, onOpen = { open(Page.TitlePage(it)) })
-                        Page.Settings -> SettingsScreen(firstFocus = entry.first)
+                        is Page.Settings -> SettingsScreen(firstFocus = entry.first, providerFirst = p.providerFirst)
+                        is Page.Player -> PlayerScreen(p.url, p.title, firstFocus = entry.first, onClose = { close { stack.removeAt(stack.lastIndex) } })
                     }
                 }
             }
         }
         railPage?.let { Placeholder(stringResource(it.label), remember { FocusRequester() }) }
-        SideRail(
+        // Not over the video: the player is the whole screen.
+        if (stack.lastOrNull()?.page !is Page.Player) SideRail(
             onSelect = {
                 // The tabs' focus flag would go stale under the page.
                 tabsHaveFocus = false
@@ -243,7 +273,7 @@ fun WtvApp() {
                     }
                     RailItem.Settings -> {
                         railPage = null
-                        open(Page.Settings)
+                        open(Page.Settings())
                     }
                     else -> railPage = it
                 }
