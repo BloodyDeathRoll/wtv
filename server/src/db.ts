@@ -1,11 +1,12 @@
 /**
- * The few calls the sync needs against the WTV database, over Supabase's REST
- * API with the secret key (which bypasses row level security).
+ * The few calls the jobs need against a Supabase database, over its REST API.
+ * For the WTV database the key is the secret key (which bypasses row level
+ * security); for WTW it is WTW's public key, and only reads are made.
  */
 
 export interface DbConfig {
   url: string
-  secretKey: string
+  key: string
 }
 
 export type Row = Record<string, unknown>
@@ -19,8 +20,8 @@ export function createDb(config: DbConfig, fetchFn: typeof fetch = fetch) {
     const res = await fetchFn(new URL(`rest/v1/${path}`, base), {
       method,
       headers: {
-        apikey: config.secretKey,
-        Authorization: `Bearer ${config.secretKey}`,
+        apikey: config.key,
+        Authorization: `Bearer ${config.key}`,
         'Content-Type': 'application/json',
         ...(prefer ? { Prefer: prefer } : {}),
       },
@@ -59,6 +60,21 @@ export function createDb(config: DbConfig, fetchFn: typeof fetch = fetch) {
     /** `filter` is a PostgREST query string, e.g. `name=eq.prov1&select=id`. */
     async select<T>(table: string, filter: string): Promise<T[]> {
       return (await (await request('GET', `${table}?${filter}`)).json()) as T[]
+    },
+
+    /**
+     * Every row matching `filter`, read 1,000 at a time in id order (the REST
+     * API returns at most 1,000 rows per call). `columns` must include `id`.
+     */
+    async selectAll<T extends { id: number }>(table: string, columns: string, filter = ''): Promise<T[]> {
+      const all: T[] = []
+      for (let after = -1; ; ) {
+        const page = (await (await request('GET', `${table}?select=${columns}&id=gt.${after}&order=id&limit=1000${filter ? `&${filter}` : ''}`)).json()) as T[]
+        all.push(...page)
+        const last = page.at(-1)
+        if (page.length < 1000 || !last) return all
+        after = last.id
+      }
     },
 
     /** Calls a database function and returns its rows. */

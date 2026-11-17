@@ -224,7 +224,7 @@ if (import.meta.main) {
     user: env('XTREAM_PROV1_USER'),
     password: env('XTREAM_PROV1_PASSWORD'),
   })
-  const db = createDb({ url: env('SUPABASE_URL'), secretKey: env('SUPABASE_SECRET_KEY') })
+  const db = createDb({ url: env('SUPABASE_URL'), key: env('SUPABASE_SECRET_KEY') })
   const budgetMin = Number(process.env.DETAILS_BUDGET_MIN ?? '8')
   const report = await fetchDetails(xtream, createTmdb(env('TMDB_API_KEY')), db, 'prov1', budgetMin * 60_000)
   console.log(JSON.stringify(report))
