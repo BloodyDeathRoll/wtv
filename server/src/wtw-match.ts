@@ -41,8 +41,9 @@ export interface Coverage {
 const VECTOR_SIZE = 25
 
 /**
- * A run that would clear more than this share of the current matches is taken
- * for a bad read of WTW, not a real change, and writes nothing.
+ * A run that would clear more than this share of the current matches, or of
+ * the current vectors, is taken for a bad read of WTW, not a real change, and
+ * writes nothing.
  */
 const MAX_CLEARED_SHARE = 0.5
 
@@ -108,6 +109,8 @@ export async function matchWtw(wtv: Db, wtw: Db, providerName: string): Promise<
   const rows: Row[] = []
   let matchedBefore = 0
   let cleared = 0
+  let vectorsBefore = 0
+  let vectorsLost = 0
   for (const t of ours) {
     const match = t.tmdb_id === null ? undefined : byKey.get(key(t.kind === 'movie' ? 'movie' : 'tv', t.tmdb_id))
     const vec = match ? parseVector(match.taste_vec) : null
@@ -117,6 +120,10 @@ export async function matchWtw(wtv: Db, wtw: Db, providerName: string): Promise<
     if (t.wtw_title_id !== null) {
       matchedBefore++
       if (!match) cleared++
+    }
+    if (t.wtw_taste_vec !== null) {
+      vectorsBefore++
+      if (!vec) vectorsLost++
     }
     const next = {
       wtw_title_id: match?.id ?? null,
@@ -140,8 +147,12 @@ export async function matchWtw(wtv: Db, wtw: Db, providerName: string): Promise<
       sameVector(t.wtw_taste_vec, next.wtw_taste_vec)
     if (!same) rows.push({ provider_id: provider.id, kind: t.kind, ext_id: t.ext_id, name: t.name, ...next })
   }
-  if (matchedBefore > 0 && cleared > matchedBefore * MAX_CLEARED_SHARE) {
-    throw new Error(`WTW match would clear ${cleared} of ${matchedBefore} matches: nothing is written`)
+  const tooMany = (lost: number, before: number) => before > 0 && lost > before * MAX_CLEARED_SHARE
+  if (tooMany(cleared, matchedBefore)) {
+    throw new Error(`WTW match would clear ${cleared} of ${matchedBefore} matches (limit: half): nothing is written`)
+  }
+  if (tooMany(vectorsLost, vectorsBefore)) {
+    throw new Error(`WTW match would clear ${vectorsLost} of ${vectorsBefore} taste vectors (limit: half): nothing is written`)
   }
   await wtv.upsert('titles', 'provider_id,kind,ext_id', rows)
   report.updated = rows.length

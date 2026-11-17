@@ -125,7 +125,15 @@ test('a run that would clear more than half the matches writes nothing', async (
   const wtw = fakeDb({ titles: [{ id: 9, tmdb_id: '999', type: 'movie', taste_vec: null, taste_version: null }] })
   const matched = (ext_id: number) => ({ id: ext_id, kind: 'movie', ext_id, name: 'x', tmdb_id: ext_id, wtw_title_id: ext_id, wtw_taste_vec: null, wtw_taste_version: null })
   const wtv = fakeDb({ titles: [matched(1), matched(2), matched(3)] })
-  await assert.rejects(matchWtw(wtv.db, wtw.db, 'prov1'), /would clear 3 of 3 matches/)
+  await assert.rejects(matchWtw(wtv.db, wtw.db, 'prov1'), /would clear 3 of 3 matches \(limit: half\)/)
+  assert.deepEqual(wtv.upserts, [])
+})
+
+test('a run where WTW still has the titles but most vectors are gone writes nothing', async () => {
+  const wtw = fakeDb({ titles: [1, 2, 3].map(id => ({ id, tmdb_id: String(id), type: 'movie', taste_vec: null, taste_version: null })) })
+  const scored = (ext_id: number) => ({ id: ext_id, kind: 'movie', ext_id, name: 'x', tmdb_id: ext_id, wtw_title_id: ext_id, wtw_taste_vec: vec(0.5), wtw_taste_version: 1 })
+  const wtv = fakeDb({ titles: [scored(1), scored(2), scored(3)] })
+  await assert.rejects(matchWtw(wtv.db, wtw.db, 'prov1'), /would clear 3 of 3 taste vectors/)
   assert.deepEqual(wtv.upserts, [])
 })
 
