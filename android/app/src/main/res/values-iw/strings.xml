@@ -16,4 +16,10 @@
     <string name="tab_movies">סרטים</string>
     <string name="tab_series">סדרות</string>
     <string name="tab_live">שידור חי</string>
+    <string name="row_recent_movies">סרטים שנוספו לאחרונה</string>
+    <string name="row_recent_series">סדרות שנוספו לאחרונה</string>
+    <string name="more">עוד</string>
+    <string name="loading">טוען…</string>
+    <string name="load_failed">הטעינה נכשלה: %1$s</string>
+    <string name="nothing_here">אין כאן עדיין כלום</string>
 </resources>

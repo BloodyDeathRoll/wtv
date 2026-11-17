@@ -30,7 +30,11 @@ import androidx.tv.material3.Text
 import com.wtv.app.R
 import com.wtv.app.ui.components.RailItem
 import com.wtv.app.ui.components.SideRail
-import com.wtv.app.ui.showcase.Showcase
+import com.wtv.app.data.Category
+import com.wtv.app.data.Kind
+import com.wtv.app.ui.browse.BrowseScreen
+import com.wtv.app.ui.browse.BrowseSource
+import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.theme.WtvColors
 
 /** The four sections in the top tabs. */
@@ -53,6 +57,8 @@ enum class Section(@StringRes val label: Int) {
 fun WtvApp() {
     var section by rememberSaveable { mutableStateOf(Section.Home) }
     var railPage by rememberSaveable { mutableStateOf<RailItem?>(null) }
+    // A category's full grid (P2-5); a placeholder for now.
+    var more by remember { mutableStateOf<Category?>(null) }
     var tabsHaveFocus by remember { mutableStateOf(false) }
     // One per tab: Back focuses the selected tab, not the first one (which would switch section).
     val tabs = remember { Section.entries.associateWith { FocusRequester() } }
@@ -63,20 +69,31 @@ fun WtvApp() {
     // On start and whenever a rail page closes, focus the selected tab. Not
     // while a rail page is open (also after the activity is recreated with one
     // open): the tabs are not composed then, and their requesters are unattached.
-    LaunchedEffect(railPage) { if (railPage == null) selectedTab.requestFocus() }
+    LaunchedEffect(railPage, more) { if (railPage == null && more == null) selectedTab.requestFocus() }
+    // The card that opened a category is gone: focus the page that replaced it, not whatever is nearest.
+    LaunchedEffect(more) { if (more != null && railPage == null) page.requestFocus() }
 
-    BackHandler(enabled = railPage == null && !tabsHaveFocus) { selectedTab.requestFocus() }
+    BackHandler(enabled = railPage == null && more == null && !tabsHaveFocus) { selectedTab.requestFocus() }
+    BackHandler(enabled = more != null && railPage == null) { more = null }
     BackHandler(enabled = railPage != null) { railPage = null }
 
     Box(Modifier.fillMaxSize()) {
         val open = railPage
+        val grid = more
         if (open != null) {
             Placeholder(stringResource(open.label), page)
+        } else if (grid != null) {
+            Placeholder(grid.label(isHebrew()), page)
         } else {
-            when (section) {
-                Section.Home -> Showcase(firstFocus = page, up = selectedTab)
-                else -> Placeholder(stringResource(section.label), page)
+            val source = when (section) {
+                Section.Home -> BrowseSource.Home
+                Section.Movies -> BrowseSource.Section(Kind.Movie)
+                Section.Series -> BrowseSource.Section(Kind.Series)
+                Section.LiveTv -> null
             }
+            if (source == null) Placeholder(stringResource(section.label), page)
+            // Opening a title comes with the title pages (P2-6, P2-7).
+            else BrowseScreen(source, firstFocus = page, up = selectedTab, onMore = { more = it }, onOpen = {})
             TabRow(
                 selectedTabIndex = section.ordinal,
                 modifier = Modifier

@@ -1,7 +1,15 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+/** From local.properties (developer machines) or the environment (CI); empty if neither. */
+val localProperties = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+fun setting(name: String): String = localProperties.getProperty(name) ?: System.getenv(name) ?: ""
 
 android {
     namespace = "com.wtv.app"
@@ -14,6 +22,11 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+
+        // The WTV database's public URL and publishable key (meant for apps;
+        // row level security guards the data).
+        buildConfigField("String", "SUPABASE_URL", "\"${setting("SUPABASE_URL")}\"")
+        buildConfigField("String", "SUPABASE_KEY", "\"${setting("SUPABASE_PUBLISHABLE_KEY")}\"")
     }
 
     buildTypes {
@@ -31,6 +44,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -43,4 +57,5 @@ dependencies {
     implementation(libs.androidx.material.icons)
     implementation(libs.coil.compose)
     implementation(libs.coil.network)
+    implementation(libs.okhttp)
 }
