@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -36,6 +38,7 @@ import com.wtv.app.R
 import com.wtv.app.WtvApplication
 import com.wtv.app.data.Catalog
 import com.wtv.app.data.Category
+import com.wtv.app.data.ContinueItem
 import com.wtv.app.data.Genre
 import com.wtv.app.data.Kind
 import com.wtv.app.data.Title
@@ -47,6 +50,7 @@ import com.wtv.app.ui.components.RowTitle
 import com.wtv.app.ui.components.RowsAtTop
 import com.wtv.app.ui.components.Sideways
 import com.wtv.app.ui.theme.WtvColors
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** What a browse page shows: one section's category rows, or Home's latest rows. */
 sealed interface BrowseSource {
@@ -54,8 +58,16 @@ sealed interface BrowseSource {
     data class Section(val kind: Kind) : BrowseSource
 }
 
-/** A row on the page; `category` is set when the row has a "More" card. */
-data class BrowseRow(val label: String, val category: Category?, val titles: List<Title>)
+/**
+ * A row on the page; `category` is set when the row has a "More" card.
+ * `progress` (Continue watching) gives a card its watched bar and label, by title id.
+ */
+data class BrowseRow(
+    val label: String,
+    val category: Category?,
+    val titles: List<Title>,
+    val progress: Map<Long, Pair<Float?, String?>> = emptyMap(),
+)
 
 private sealed interface Load {
     data object Loading : Load
@@ -70,18 +82,32 @@ fun isHebrew(): Boolean = LocalConfiguration.current.locales[0].language.let { i
 /**
  * Rows of titles under a header that follows the focus, as in the reference.
  * `firstFocus` is where Down from the tabs lands; `up` is where Up from the
- * first row goes.
+ * first row goes. Home starts with Continue watching, reloaded when
+ * `progressVersion` changes (a player closed) without reloading the rest.
+ * When `tabsFocused`, the page is back at its top: Down from the tabs needs
+ * the first row, which the list releases once it has scrolled away.
  */
 @Composable
 fun BrowseScreen(
     source: BrowseSource,
     firstFocus: FocusRequester,
     up: FocusRequester,
+    progressVersion: Int,
+    tabsFocused: Boolean,
     onMore: (Category) -> Unit,
     onOpen: (Title) -> Unit,
 ) {
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
     val hebrew = isHebrew()
+    val continueLabel = stringResource(R.string.row_continue)
+    val seasonEpisode = stringResource(R.string.season_episode)
+    // Null until loaded: Home shows its rows once this is in too, so the row does not
+    // appear above the rows after the user has started moving. A nicety: when it
+    // fails, Home just has no Continue watching row.
+    // Bounded: Home waits for it, and it is not worth a long wait.
+    val watching by produceState<List<ContinueItem>?>(null, progressVersion) {
+        value = runCatching { withTimeoutOrNull(CONTINUE_WAIT_MS) { catalog.continueWatching() } }.getOrNull() ?: value.orEmpty()
+    }
     val recentMovies = stringResource(R.string.row_recent_movies)
     val recentSeries = stringResource(R.string.row_recent_series)
     var attempt by remember { mutableIntStateOf(0) }
@@ -97,11 +123,40 @@ fun BrowseScreen(
     when (val state = load) {
         Load.Loading -> Message(stringResource(R.string.loading), firstFocus)
         is Load.Failed -> Message(stringResource(R.string.load_failed, state.message), firstFocus, onRetry = { attempt++ })
-        is Load.Ready ->
-            if (state.rows.isEmpty()) Message(stringResource(R.string.nothing_here), firstFocus)
-            else Rows(state.rows, state.genres, hebrew, firstFocus, up, onMore, onOpen)
+        is Load.Ready -> {
+            val home = source == BrowseSource.Home
+            val w = watching
+            val rows = remember(state.rows, w, home) {
+                (if (home && w != null) listOfNotNull(continueRow(w, continueLabel, seasonEpisode)) else emptyList()) + state.rows
+            }
+            when {
+                home && w == null -> Message(stringResource(R.string.loading), firstFocus)
+                rows.isEmpty() -> Message(stringResource(R.string.nothing_here), firstFocus)
+                else -> Rows(rows, state.genres, hebrew, firstFocus, up, tabsFocused, onMore, onOpen)
+            }
+        }
     }
 }
+
+private const val CONTINUE_WAIT_MS = 5_000L
+
+/**
+ * Continue watching as a row: a series' card names the episode to resume.
+ * After a finished episode the card shows neither label nor bar: the next
+ * episode is known only on the series page. Null when empty.
+ */
+private fun continueRow(items: List<ContinueItem>, label: String, seasonEpisode: String): BrowseRow? =
+    items.takeIf { it.isNotEmpty() }?.let { list ->
+        BrowseRow(
+            label,
+            category = null,
+            titles = list.map { it.title },
+            progress = list.associate { (t, p) ->
+                val episode = if (p.isEpisode && !p.finished) seasonEpisode.format(p.season, p.episode) else null
+                t.id to ((if (p.finished) null else p.fraction) to episode)
+            },
+        )
+    }
 
 private suspend fun loadRows(catalog: Catalog, source: BrowseSource, hebrew: Boolean, recentMovies: String, recentSeries: String): List<BrowseRow> =
     when (source) {
@@ -119,11 +174,24 @@ private fun Rows(
     hebrew: Boolean,
     firstFocus: FocusRequester,
     up: FocusRequester,
+    tabsFocused: Boolean,
     onMore: (Category) -> Unit,
     onOpen: (Title) -> Unit,
 ) {
-    // Safe: loadRows leaves out empty rows, and an empty page never gets here.
-    var focused by remember(rows) { mutableStateOf(rows.first().titles.first()) }
+    // Safe: empty rows are left out, and an empty page never gets here.
+    // Kept when only Continue watching changes: the header stays on the focused card.
+    var focused by remember { mutableStateOf(rows.first().titles.first()) }
+    // A reload (retry, language) brings new title objects: the header moves to the first card.
+    LaunchedEffect(rows) {
+        if (rows.none { r -> r.titles.any { it.id == focused.id } }) focused = rows.first().titles.first()
+    }
+    val list = rememberLazyListState()
+    LaunchedEffect(tabsFocused) {
+        if (tabsFocused) {
+            list.scrollToItem(0)
+            focused = rows.first().titles.first()
+        }
+    }
     Box(Modifier.fillMaxSize()) {
         Backdrop(focused.heroImage)
         Column(Modifier.padding(start = 88.dp, top = 76.dp)) {
@@ -139,6 +207,7 @@ private fun Rows(
             }
             RowsAtTop {
                 LazyColumn(
+                    state = list,
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                     contentPadding = PaddingValues(top = 8.dp, bottom = 400.dp),
                 ) {
@@ -154,9 +223,12 @@ private fun Rows(
                                     contentPadding = PaddingValues(end = 48.dp, top = 6.dp, bottom = 6.dp),
                                 ) {
                                     itemsIndexed(row.titles, key = { _, t -> t.id }) { i, t ->
+                                        val (watched, episode) = row.progress[t.id] ?: (null to null)
                                         LandscapeCard(
                                             imageUrl = t.cardImage,
                                             title = t.displayName(hebrew),
+                                            label = episode,
+                                            progress = watched,
                                             onClick = { onOpen(t) },
                                             onFocused = { focused = t },
                                             modifier = rowModifier.then(if (rowIndex == 0 && i == 0) Modifier.focusRequester(firstFocus) else Modifier),

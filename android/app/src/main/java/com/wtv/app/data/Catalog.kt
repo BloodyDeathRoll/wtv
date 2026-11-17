@@ -87,6 +87,8 @@ data class Episode(
     val durationSecs: Int?,
     val tmdbStill: String?,
     val providerImage: String?,
+    /** The provider's own name, "Series - S01E01 - …"; tells this series' episodes from others filed under it. */
+    val providerName: String? = null,
 ) {
     /**
      * Null when there is no real name: the page writes "Episode 3" in the
@@ -140,15 +142,16 @@ class Catalog(private val api: Api) {
         api.get(pagePath(category, sort, hebrew, offset, limit)).objects().map(::title)
 
     /**
-     * A series' episodes in order. Read 1,000 at a time: the REST API returns
-     * no more per call, and daily shows have up to 1,500.
+     * A series' episodes in order, one per season and number (see [oneEach]).
+     * Read 1,000 at a time: the REST API returns no more per call, and daily
+     * shows have up to 1,500.
      */
-    suspend fun episodes(seriesId: Long): List<Episode> {
+    suspend fun episodes(series: Title): List<Episode> {
         val all = mutableListOf<Episode>()
         while (true) {
-            val page = api.get(episodesPath(seriesId, offset = all.size)).objects().map(::episode)
+            val page = api.get(episodesPath(series.id, offset = all.size)).objects().map(::episode)
             all += page
-            if (page.size < EPISODES_PAGE) return all
+            if (page.size < EPISODES_PAGE) return oneEach(all, series.name)
         }
     }
 
@@ -192,6 +195,26 @@ class Catalog(private val api: Api) {
         val rows = api.get("titles?select=id,ext_id,container_ext,category_ids&group_id=eq.${title.groupId ?: title.id}&available=is.true&order=id").objects()
         return copiesFrom(title, rows, fourK)
     }
+
+    /** Saves where playback stopped: one row per movie, or per episode, and user. */
+    suspend fun saveProgress(titleId: Long, episodeId: Long?, positionSecs: Int, durationSecs: Int?) =
+        api.post(
+            "progress?on_conflict=user_id,title_id,episode_id",
+            progressBody(titleId, episodeId, positionSecs, durationSecs),
+            prefer = "resolution=merge-duplicates,return=minimal",
+        )
+
+    /** A title's saved positions over all its copies, newest first. */
+    suspend fun progress(title: Title): List<Progress> =
+        api.get("progress?select=$PROGRESS_COLUMNS,titles!inner(group_id)&titles.group_id=eq.${title.groupId ?: title.id}&order=updated_at.desc")
+            .objects().map(::progress)
+
+    /** The Continue watching row: titles with a saved position, last watched first. */
+    suspend fun continueWatching(): List<ContinueItem> =
+        continueItems(
+            api.get("progress?select=$PROGRESS_COLUMNS,titles!inner($TITLE_COLUMNS)&titles.available=is.true&order=updated_at.desc&limit=$CONTINUE_ROWS")
+                .objects(),
+        ).take(CONTINUE_CARDS)
 
     /** One row per provider category, newest first; empty categories left out. */
     suspend fun rows(kind: Kind, perRow: Int = 10): List<Pair<Category, List<Title>>> = coroutineScope {
@@ -286,6 +309,10 @@ internal fun searchPath(query: String, hebrew: Boolean, prefix: Boolean): String
 
 internal const val SEARCH_LIMIT = 60
 
+/** Rows read for Continue watching: a series has a row per episode watched. */
+private const val CONTINUE_ROWS = 200
+private const val CONTINUE_CARDS = 20
+
 /** Names that start with the query first (each fetched on its own, so the limit cannot cut them), then the rest. */
 internal fun mergeSearch(startsWith: List<Title>, contains: List<Title>): List<Title> =
     (startsWith + contains).distinctBy { it.id }.take(SEARCH_LIMIT)
@@ -293,8 +320,8 @@ internal fun mergeSearch(startsWith: List<Title>, contains: List<Title>): List<T
 internal const val EPISODES_PAGE = 1000
 
 internal fun episodesPath(seriesId: Long, offset: Int): String =
-    "episodes?select=id,ext_id,container_ext,season,episode,name_en,name_he,overview_en,overview_he,plot,duration_secs,tmdb_still,image_url" +
-        "&title_id=eq.$seriesId&order=season,episode,id&offset=$offset&limit=$EPISODES_PAGE"
+    "episodes?select=id,ext_id,container_ext,season,episode,name,name_en,name_he,overview_en,overview_he,plot,duration_secs,tmdb_still,image_url" +
+        "&title_id=eq.$seriesId&available=is.true&order=season,episode,id&offset=$offset&limit=$EPISODES_PAGE"
 
 internal fun episode(o: JSONObject) = Episode(
     id = o.getLong("id"),
@@ -310,7 +337,19 @@ internal fun episode(o: JSONObject) = Episode(
     durationSecs = o.int("duration_secs"),
     tmdbStill = o.text("tmdb_still"),
     providerImage = o.text("image_url"),
+    providerName = o.text("name"),
 )
+
+/**
+ * One episode per season and number, in order. The provider lists some
+ * several times: an older upload of the same file, or another series'
+ * episode filed under this one. The copy named after the series wins, then
+ * the newest (the provider's ids grow).
+ */
+internal fun oneEach(episodes: List<Episode>, seriesName: String): List<Episode> =
+    episodes.groupBy { it.season to it.number }.values.map { copies ->
+        copies.maxWith(compareBy<Episode>({ it.providerName?.startsWith(seriesName) == true }, { it.extId }))
+    }
 
 /**
  * A title as its only copy: what Play uses when the copies are not known.

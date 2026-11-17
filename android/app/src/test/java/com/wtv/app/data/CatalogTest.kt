@@ -64,7 +64,7 @@ class CatalogTest {
 
     @Test fun `episodes are read in pages of 1000 in a stable order`() {
         val path = episodesPath(15791, offset = 1000)
-        for (part in listOf("&title_id=eq.15791", "&order=season,episode,id", "&offset=1000", "&limit=1000")) assertTrue(part, path.contains(part))
+        for (part in listOf("&title_id=eq.15791", "&available=is.true", "&order=season,episode,id", "&offset=1000", "&limit=1000")) assertTrue(part, path.contains(part))
     }
 
     @Test fun `a person's titles are available cards only, each once, newest first`() {

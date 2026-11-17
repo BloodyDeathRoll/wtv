@@ -49,6 +49,8 @@ const CAST_SHOWS = 6
 const MOVIE_PARALLEL = 6
 const SERIES_PARALLEL = 4
 const CHUNK = 100
+/** Series per request when marking dropped episodes: keeps the URL short. */
+const STALE_BATCH = 100
 
 /**
  * Provider season ids below this are dummies (seen: 1, 2). Real TMDB season
@@ -173,14 +175,23 @@ export async function fetchDetails(
             image_url: e.imageUrl,
             container_ext: e.containerExt,
             added_at: e.addedAt?.toISOString() ?? null,
+            available: true,
+            seen_at: detailsAt,
           })
         }
       }))
 
     // Episodes first: a title is marked done only once its episodes are stored.
-    // Episodes the provider drops are kept (progress may point at them).
     // `upsert` sends batches of 500.
     await db.upsert('episodes', 'title_id,ext_id', episodeRows)
+    // Episodes the provider no longer lists (re-added under new ids) are kept,
+    // since progress may point at them, but marked unavailable. Only for series
+    // that listed episodes now: an empty answer is not taken as "all gone".
+    const listed = [...new Set(episodeRows.map(r => r.title_id as number))]
+    for (let i = 0; i < listed.length; i += STALE_BATCH) {
+      const ids = listed.slice(i, i + STALE_BATCH).join(',')
+      await db.update('episodes', `title_id=in.(${ids})&available=is.true&or=(seen_at.is.null,seen_at.lt.${encodeURIComponent(detailsAt)})`, { available: false })
+    }
     await db.upsert('titles', 'provider_id,kind,ext_id', titleRows)
     report.done += titleRows.length
     report.withTmdbId += titleRows.filter(r => r.tmdb_id !== null).length
