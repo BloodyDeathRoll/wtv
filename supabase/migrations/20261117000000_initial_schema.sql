@@ -28,7 +28,7 @@ create table public.categories (
 create table public.titles (
   id            bigint generated always as identity primary key,
   provider_id   smallint    not null references public.providers (id) on delete cascade,
-  kind          text        not null check (kind in ('movie', 'series')),
+  kind          text        not null check (kind in ('movie', 'series')), -- live items are channels
   ext_id        integer     not null,      -- stream_id (movie) or series_id
   name          text        not null,
   year          integer,
