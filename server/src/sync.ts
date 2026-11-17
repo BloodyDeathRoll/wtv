@@ -9,6 +9,7 @@
  * Run: node --env-file=<env file> src/sync.ts
  */
 
+import { categoryNames } from './category-names.ts'
 import { createDb, type Db, type Row } from './db.ts'
 import { createXtream, type Category, type Channel, type Title, type Xtream } from './xtream.ts'
 
@@ -33,6 +34,8 @@ export interface SyncReport {
   channels: number
   /** Lists that came back too short to trust; their missing rows were left as they were. */
   distrusted: Distrusted[]
+  /** Category names with no English name: add them to `category-names.ts`. */
+  untranslated: string[]
 }
 
 const titleRow = (providerId: number, seenAt: string) => (t: Title): Row => ({
@@ -72,13 +75,18 @@ const channelRow = (providerId: number, seenAt: string) => (c: Channel): Row => 
   last_seen_at: seenAt,
 })
 
-const categoryRow = (providerId: number) => (c: Category): Row => ({
-  provider_id: providerId,
-  kind: c.kind,
-  ext_id: c.extId,
-  name: c.name,
-  position: c.position,
-})
+const categoryRow = (providerId: number) => (c: Category): Row => {
+  const { en, he } = categoryNames(c.name)
+  return {
+    provider_id: providerId,
+    kind: c.kind,
+    ext_id: c.extId,
+    name: c.name,
+    name_en: en,
+    name_he: he,
+    position: c.position,
+  }
+}
 
 export async function syncCatalog(xtream: Xtream, db: Db, providerName: string, now = new Date()): Promise<SyncReport> {
   await xtream.signIn()
@@ -132,7 +140,8 @@ export async function syncCatalog(xtream: Xtream, db: Db, providerName: string, 
   await replace('series', 'titles', 'provider_id,kind,ext_id', `${byProvider}&kind=eq.series`, series.map(titleRow(provider.id, seenAt)))
   await replace('channels', 'channels', 'provider_id,ext_id', byProvider, channels.map(channelRow(provider.id, seenAt)))
 
-  return { categories: categoryLists.flat().length, movies: movies.length, series: series.length, channels: channels.length, distrusted }
+  const untranslated = [...new Set(categoryLists.flat().map(c => c.name).filter(name => categoryNames(name).en === null))]
+  return { categories: categoryLists.flat().length, movies: movies.length, series: series.length, channels: channels.length, distrusted, untranslated }
 }
 
 function env(name: string): string {
