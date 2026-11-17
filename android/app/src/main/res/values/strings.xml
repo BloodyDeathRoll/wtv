@@ -56,4 +56,12 @@
     <!-- Each language named in itself, the same in every app language. -->
     <string name="language_english" translatable="false">English</string>
     <string name="language_hebrew" translatable="false">עברית</string>
+    <string name="setting_provider">Provider login</string>
+    <string name="provider_server">Server</string>
+    <string name="provider_user">User name</string>
+    <string name="provider_password">Password</string>
+    <string name="save">Save</string>
+    <string name="saved">Saved</string>
+    <string name="provider_missing">Add your provider login in Settings to play</string>
+    <string name="play_failed">This could not be played (%1$s)</string>
 </resources>

@@ -55,4 +55,12 @@
     <string name="searching">מחפש…</string>
     <string name="no_results">לא נמצא דבר עבור „%1$s”</string>
     <string name="setting_language">שפה</string>
+    <string name="setting_provider">פרטי הספק</string>
+    <string name="provider_server">שרת</string>
+    <string name="provider_user">שם משתמש</string>
+    <string name="provider_password">סיסמה</string>
+    <string name="save">שמירה</string>
+    <string name="saved">נשמר</string>
+    <string name="provider_missing">כדי לצפות יש להזין את פרטי הספק בהגדרות</string>
+    <string name="play_failed">לא ניתן להפעיל (%1$s)</string>
 </resources>
