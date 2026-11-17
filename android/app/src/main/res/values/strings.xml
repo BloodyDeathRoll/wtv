@@ -27,4 +27,14 @@
     <string name="sort_year">Year</string>
     <string name="sort_name">Name</string>
     <string name="sort_rating">Rating</string>
+    <string name="row_cast">Cast</string>
+    <string name="runtime_hours">%1$d h %2$d min</string>
+    <string name="runtime_minutes">%1$d min</string>
+    <string name="choose_copy">Play in</string>
+    <string name="info_director">Director</string>
+    <string name="info_cast">Cast</string>
+    <string name="info_language">Original language</string>
+    <string name="info_rating">Rating</string>
+    <string name="close">Close</string>
+    <string name="info_rating_value">%1$.1f / 10 (TMDB)</string>
 </resources>

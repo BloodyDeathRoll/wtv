@@ -27,4 +27,14 @@
     <string name="sort_year">שנה</string>
     <string name="sort_name">שם</string>
     <string name="sort_rating">דירוג</string>
+    <string name="row_cast">שחקנים</string>
+    <string name="runtime_hours">%1$d שע׳ %2$d דק׳</string>
+    <string name="runtime_minutes">%1$d דק׳</string>
+    <string name="choose_copy">צפייה ב־</string>
+    <string name="info_director">במאי</string>
+    <string name="info_cast">שחקנים</string>
+    <string name="info_language">שפת מקור</string>
+    <string name="info_rating">דירוג</string>
+    <string name="close">סגירה</string>
+    <string name="info_rating_value">%1$.1f / 10 (TMDB)</string>
 </resources>
