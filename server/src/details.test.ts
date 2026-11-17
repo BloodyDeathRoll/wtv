@@ -21,6 +21,10 @@ function fakeTmdb(data: {
     },
     searchPerson: async name => data.people?.[name] ?? null,
     personSeries: async id => data.credits?.[id] ?? [],
+    movieFull: async () => assert.fail('not used by details'),
+    seriesFull: async () => assert.fail('not used by details'),
+    season: async () => assert.fail('not used by details'),
+    genres: async () => assert.fail('not used by details'),
   }
   return { tmdb, looked }
 }
