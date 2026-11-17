@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
@@ -87,8 +88,13 @@ fun SearchScreen(field: FocusRequester, onOpen: (Title) -> Unit) {
             results = Results.Idle
             return@LaunchedEffect
         }
-        if (searchNow == seenSearchNow) delay(TYPING_PAUSE_MS)
+        val fromSearchKey = searchNow != seenSearchNow
         seenSearchNow = searchNow
+        // A typed key started this search: any earlier "move to the results" is void.
+        if (!fromSearchKey) {
+            focusResults = false
+            delay(TYPING_PAUSE_MS)
+        }
         // Earlier results stay on screen until the new ones arrive: no flicker while typing.
         if (results !is Results.Found) results = Results.Searching
         results = try {
@@ -98,13 +104,15 @@ fun SearchScreen(field: FocusRequester, onOpen: (Title) -> Unit) {
         } catch (e: Exception) {
             Results.Failed(e.message ?: e.toString())
         }
-    }
-
-    LaunchedEffect(results) {
-        val r = results
-        if (focusResults && r is Results.Found) {
+        // The Search key asked for the results: focus the first once the grid is drawn.
+        // Cleared whatever the outcome, so no later search steals the focus.
+        if (focusResults) {
             focusResults = false
-            if (r.titles.isNotEmpty()) runCatching { firstResult.requestFocus() }
+            val r = results
+            if (r is Results.Found && r.titles.isNotEmpty()) {
+                withFrameNanos { }
+                runCatching { firstResult.requestFocus() }
+            }
         }
     }
 
