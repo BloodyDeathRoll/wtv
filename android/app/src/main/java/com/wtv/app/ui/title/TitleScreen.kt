@@ -34,8 +34,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -54,9 +54,6 @@ import com.wtv.app.data.Kind
 import com.wtv.app.data.Title
 import com.wtv.app.data.asCopy
 import com.wtv.app.data.copyLabels
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.components.ActionIcon
 import com.wtv.app.ui.components.Backdrop
@@ -69,6 +66,9 @@ import com.wtv.app.ui.components.RowTitle
 import com.wtv.app.ui.components.RowsAtTop
 import com.wtv.app.ui.components.Sideways
 import com.wtv.app.ui.theme.WtvColors
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 private data class Extras(val cast: List<CastMember>, val copies: List<Copy>, val genres: Map<Pair<Kind, Int>, Genre>, val loaded: Boolean)
 
@@ -221,9 +221,9 @@ fun TitleScreen(
                                                     onClick = { onPlayEpisode(e) },
                                                     onFocused = { episode = e },
                                                 )
+                                            }
                                         }
                                     }
-                                }
                                 }
                             }
                         }
