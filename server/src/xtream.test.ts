@@ -243,6 +243,22 @@ test('requests carry the credentials, the action and the player user agent', asy
   assert.deepEqual(Object.fromEntries(second.url.searchParams), { username: 'u', password: 'p', action: 'get_short_epg', stream_id: '7', limit: '2' })
 })
 
+test('a server given without a scheme is called over https', async () => {
+  const { fetchFn, calls } = fakeFetch({ get_vod_info: { info: {} } })
+  await createXtream({ ...config, server: 'provider.example:8443' }, fetchFn).movieInfo(1)
+  assert.equal(calls[0]?.url.origin, 'https://provider.example:8443')
+})
+
+test('a path in the server is kept', async () => {
+  const { fetchFn, calls } = fakeFetch({ get_vod_info: { info: {} } })
+  for (const server of ['https://provider.example/panel', 'https://provider.example/panel/', 'https://provider.example/panel?x=1#y', 'https://a:b@provider.example']) {
+    await createXtream({ ...config, server }, fetchFn).movieInfo(1)
+  }
+  assert.deepEqual(calls.map(c => c.url.pathname), ['/panel/player_api.php', '/panel/player_api.php', '/panel/player_api.php', '/player_api.php'])
+  assert.equal(calls[2]?.url.searchParams.get('x'), null)
+  assert.equal(`${calls[3]?.url.username}${calls[3]?.url.password}`, '')
+})
+
 test('categories keep the provider order', async () => {
   const { fetchFn } = fakeFetch({
     get_live_categories: [
