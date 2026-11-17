@@ -45,4 +45,8 @@
         <item quantity="one">%1$d season</item>
         <item quantity="other">%1$d seasons</item>
     </plurals>
+    <plurals name="person_titles">
+        <item quantity="one">%1$d title on this service</item>
+        <item quantity="other">%1$d titles on this service</item>
+    </plurals>
 </resources>

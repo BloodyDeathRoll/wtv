@@ -46,4 +46,9 @@
         <item quantity="two">%1$d עונות</item>
         <item quantity="other">%1$d עונות</item>
     </plurals>
+    <plurals name="person_titles">
+        <item quantity="one">כותר אחד בשירות</item>
+        <item quantity="two">%1$d כותרים בשירות</item>
+        <item quantity="other">%1$d כותרים בשירות</item>
+    </plurals>
 </resources>

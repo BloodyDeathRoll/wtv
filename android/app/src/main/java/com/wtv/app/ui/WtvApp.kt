@@ -14,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -35,9 +37,11 @@ import androidx.tv.material3.Text
 import com.wtv.app.R
 import com.wtv.app.ui.components.RailItem
 import com.wtv.app.ui.components.SideRail
+import com.wtv.app.data.CastMember
 import com.wtv.app.data.Category
 import com.wtv.app.data.Kind
 import com.wtv.app.data.Title
+import com.wtv.app.ui.person.PersonScreen
 import com.wtv.app.ui.title.TitleScreen
 import com.wtv.app.ui.browse.BrowseScreen
 import com.wtv.app.ui.browse.BrowseSource
@@ -52,8 +56,30 @@ enum class Section(@StringRes val label: Int) {
     LiveTv(R.string.tab_live),
 }
 
-/** What is on top: the section, a category's grid, a title's page, or a rail page. */
-private enum class Top { Base, Grid, Title, Rail }
+/** A page opened over the section: a category's grid, a title, a person. */
+private sealed interface Page {
+    /** Which page this is: the same person from two casts (different characters) is one page. */
+    val id: String
+
+    data class Grid(val category: Category) : Page {
+        override val id get() = "grid:${category.kind}:${category.id}"
+    }
+
+    data class TitlePage(val title: Title) : Page {
+        override val id get() = "title:${title.id}"
+    }
+
+    data class Person(val person: CastMember) : Page {
+        override val id get() = "person:${person.personId}"
+    }
+}
+
+/** A page on the stack, with the focus it should return to when it is on top again. */
+private class Entry(val page: Page) {
+    val memory = FocusMemory()
+    /** The page's first item: where the focus goes when it opens. */
+    val first = FocusRequester()
+}
 
 /**
  * The app frame: top tabs, the left rail, and the page in between.
@@ -67,23 +93,16 @@ private enum class Top { Base, Grid, Title, Rail }
 fun WtvApp() {
     var section by rememberSaveable { mutableStateOf(Section.Home) }
     var railPage by rememberSaveable { mutableStateOf<RailItem?>(null) }
-    // A category's full grid, opened from a row's More card.
-    var more by remember { mutableStateOf<Category?>(null) }
-    // A title's page, over the section or the grid it was opened from.
-    var opened by remember { mutableStateOf<Title?>(null) }
+    // Pages opened over the section (grid, title, person), in order; Back pops one.
+    val stack = remember { mutableStateListOf<Entry>() }
     var tabsHaveFocus by remember { mutableStateOf(false) }
     // One per tab: Back focuses the selected tab, not the first one (which would switch section).
     val tabs = remember { Section.entries.associateWith { FocusRequester() } }
     val selectedTab = tabs.getValue(section)
     // Down from the tabs enters the page here, never the rail.
     val page = remember { FocusRequester() }
-    val gridFirst = remember { FocusRequester() }
-    // Each layer remembers its last focused card, to return to it.
+    // The section remembers its last focused card, to return to it.
     val baseMemory = remember { FocusMemory() }
-    val gridMemory = remember { FocusMemory() }
-    // Per title: a cast card of the previous title is no place to return to.
-    val titleMemory = remember(opened?.id) { FocusMemory() }
-    val titleFirst = remember { FocusRequester() }
 
     // Closing a page removes the focused item, and Android then gives the focus
     // to the first focusable item: the Home tab, which switches the section.
@@ -97,37 +116,42 @@ fun WtvApp() {
         change()
     }
 
-    val top = when {
-        railPage != null -> Top.Rail
-        opened != null -> Top.Title
-        more != null -> Top.Grid
-        else -> Top.Base
+    // Opening a page already on the stack goes back to it, rather than stacking a
+    // second copy (person → title → the same person …).
+    fun open(page: Page) {
+        val existing = stack.indexOfFirst { it.page.id == page.id }
+        if (existing < 0) stack += Entry(page)
+        else if (existing < stack.lastIndex) close { stack.removeRange(existing + 1, stack.size) }
     }
 
-    // Where the focus goes when the top changes. Going back, a layer gets the
-    // focus it had (the card a title was opened from); going forward, the new
-    // layer's first item. The title page focuses its Play button itself.
-    var shown by remember { mutableStateOf<Top?>(null) }
-    LaunchedEffect(top) {
-        val from = shown
-        shown = top
-        when (top) {
-            Top.Base -> if (from == null || from == Top.Rail) selectedTab.requestFocus() else baseMemory.restore(fallback = page)
-            Top.Grid -> if (from == Top.Base) gridFirst.requestFocus() else gridMemory.restore(fallback = gridFirst)
-            Top.Title -> if (from == Top.Rail) titleMemory.restore(fallback = titleFirst)
-            Top.Rail -> Unit
+    // Where the focus goes when the stack or the rail page changes. Going back,
+    // the page now on top gets the focus it had (the card a title was opened
+    // from); going forward, the new page's first item.
+    val depth = stack.size
+    val railOpen = railPage != null
+    var shown by remember { mutableStateOf<Pair<Int, Boolean>?>(null) }
+    LaunchedEffect(depth, railOpen) {
+        val (fromDepth, fromRail) = shown ?: (-1 to false)
+        shown = depth to railOpen
+        if (!railOpen) {
+            val top = stack.lastOrNull()
+            when {
+                top == null && (fromDepth < 0 || fromRail) -> selectedTab.requestFocus()
+                top == null -> baseMemory.restore(fallback = page)
+                depth > fromDepth && !fromRail -> runCatching { top.first.requestFocus() }
+                else -> top.memory.restore(fallback = top.first)
+            }
         }
         parking = false
     }
 
-    BackHandler(enabled = top == Top.Base && !tabsHaveFocus) { selectedTab.requestFocus() }
-    BackHandler(enabled = top == Top.Grid) { close { more = null } }
-    BackHandler(enabled = top == Top.Title) { close { opened = null } }
-    BackHandler(enabled = top == Top.Rail) { close { railPage = null } }
+    BackHandler(enabled = !railOpen && stack.isEmpty() && !tabsHaveFocus) { selectedTab.requestFocus() }
+    BackHandler(enabled = !railOpen && stack.isNotEmpty()) { close { stack.removeAt(stack.lastIndex) } }
+    BackHandler(enabled = railOpen) { close { railPage = null } }
 
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.size(1.dp).focusRequester(parked).focusProperties { canFocus = parking }.focusable())
-        Layer(blocked = top != Top.Base, memory = baseMemory) {
+        Layer(blocked = railOpen || stack.isNotEmpty(), memory = baseMemory) {
             val source = when (section) {
                 Section.Home -> BrowseSource.Home
                 Section.Movies -> BrowseSource.Section(Kind.Movie)
@@ -135,7 +159,7 @@ fun WtvApp() {
                 Section.LiveTv -> null
             }
             if (source == null) Placeholder(stringResource(section.label), page)
-            else BrowseScreen(source, firstFocus = page, up = selectedTab, onMore = { more = it }, onOpen = { opened = it })
+            else BrowseScreen(source, firstFocus = page, up = selectedTab, onMore = { open(Page.Grid(it)) }, onOpen = { open(Page.TitlePage(it)) })
             TabRow(
                 selectedTabIndex = section.ordinal,
                 modifier = Modifier
@@ -175,15 +199,23 @@ fun WtvApp() {
                 }
             }
         }
-        more?.let { grid ->
-            Layer(blocked = top != Top.Grid, memory = gridMemory, opaque = true) {
-                GridScreen(grid, firstFocus = gridFirst, onOpen = { opened = it })
-            }
-        }
-        opened?.let { title ->
-            Layer(blocked = top != Top.Title, memory = titleMemory, opaque = true) {
-                // TODO(P3-1): play the chosen copy or episode. TODO(P2-8): the person page.
-                TitleScreen(title, play = titleFirst, onPlay = {}, onPlayEpisode = {}, onPerson = {})
+        stack.forEachIndexed { i, entry ->
+            // Keyed by the entry, so a page keeps its state while pages open over it.
+            key(entry) {
+                Layer(blocked = railOpen || i != stack.lastIndex, memory = entry.memory, opaque = true) {
+                    when (val p = entry.page) {
+                        is Page.Grid -> GridScreen(p.category, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
+                        // TODO(P3-1): play the chosen copy or episode.
+                        is Page.TitlePage -> TitleScreen(
+                            p.title,
+                            play = entry.first,
+                            onPlay = {},
+                            onPlayEpisode = {},
+                            onPerson = { open(Page.Person(it)) },
+                        )
+                        is Page.Person -> PersonScreen(p.person, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
+                    }
+                }
             }
         }
         railPage?.let { Placeholder(stringResource(it.label), remember { FocusRequester() }) }

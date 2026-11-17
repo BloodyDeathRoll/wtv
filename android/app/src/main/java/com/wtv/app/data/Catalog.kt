@@ -152,6 +152,22 @@ class Catalog(private val api: Api) {
         }
     }
 
+    /**
+     * The provider's titles a person is billed in (top 15 billing, from TMDB),
+     * as cards, newest first. Read from the cast side: the person's index makes
+     * it fast, where filtering titles by cast is not.
+     */
+    suspend fun personTitles(personId: Int): List<Title> {
+        val rows = api.get("title_cast?select=titles($TITLE_COLUMNS,is_primary,available)&person_id=eq.$personId").objects()
+            .mapNotNull { it.optJSONObject("titles") }
+        // Cast is stored for every copy, so the card is normally among the rows.
+        // A copy whose card is not (its enrichment still pending) is resolved to it.
+        val missing = cardsMissingFor(rows)
+        val cards = if (missing.isEmpty()) emptyList()
+        else api.get("titles?select=$TITLE_COLUMNS,is_primary,available&id=in.(${missing.joinToString(",")})").objects()
+        return personCards(rows + cards)
+    }
+
     /** Billed cast of a title, in order. */
     suspend fun cast(titleId: Long): List<CastMember> =
         api.get("title_cast?select=position,character,people(tmdb_id,name,profile)&title_id=eq.$titleId&order=position").objects().map {
@@ -219,6 +235,22 @@ internal fun title(o: JSONObject) = Title(
     originalLanguage = o.text("original_language"),
     groupId = if (o.isNull("group_id") || !o.has("group_id")) null else o.getLong("group_id"),
 )
+
+/** Ids of the cards of copies in `rows` whose card is not in `rows` itself. */
+internal fun cardsMissingFor(rows: List<JSONObject>): Set<Long> {
+    val present = rows.filter { it.optBoolean("is_primary") }.map { it.getLong("id") }.toSet()
+    return rows.filter { !it.optBoolean("is_primary") && !it.isNull("group_id") }
+        .map { it.getLong("group_id") }
+        .filterNot { it in present }
+        .toSet()
+}
+
+/** Cards from a person's title rows: available cards only, newest first, each once. */
+internal fun personCards(rows: List<JSONObject>): List<Title> =
+    rows.filter { it.optBoolean("is_primary") && it.optBoolean("available") }
+        .map(::title)
+        .distinctBy { it.id }
+        .sortedWith(compareByDescending<Title> { it.year ?: Int.MIN_VALUE }.thenBy { it.id })
 
 internal const val EPISODES_PAGE = 1000
 
