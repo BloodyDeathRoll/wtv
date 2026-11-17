@@ -14,9 +14,17 @@ import { createXtream, type Category, type Channel, type Title, type Xtream } fr
 
 /**
  * A list that shrank to under this share of what the database holds is taken
- * for a broken answer, not a real removal: nothing is marked unavailable.
+ * for a broken answer, not a real removal: nothing is removed or marked
+ * unavailable. A real removal that big keeps failing every run until someone
+ * checks it and marks the rows by hand; that is on purpose.
  */
 const MIN_SHARE_TO_TRUST = 0.5
+
+export interface Distrusted {
+  list: string
+  stored: number
+  listed: number
+}
 
 export interface SyncReport {
   categories: number
@@ -24,7 +32,7 @@ export interface SyncReport {
   series: number
   channels: number
   /** Lists that came back too short to trust; their missing rows were left as they were. */
-  distrusted: string[]
+  distrusted: Distrusted[]
 }
 
 const titleRow = (providerId: number, seenAt: string) => (t: Title): Row => ({
@@ -74,38 +82,51 @@ const categoryRow = (providerId: number) => (c: Category): Row => ({
 
 export async function syncCatalog(xtream: Xtream, db: Db, providerName: string, now = new Date()): Promise<SyncReport> {
   await xtream.signIn()
+  // Everything is fetched before anything is written: a list that fails
+  // leaves the database as it was.
+  const kinds = ['movie', 'series', 'live'] as const
+  const categoryLists = await Promise.all(kinds.map(kind => xtream.categories(kind)))
+  const movies = await xtream.movies()
+  const series = await xtream.series()
+  const channels = await xtream.channels()
+
   const provider = await db.upsertOne<{ id: number }>('providers', 'name', { name: providerName, kind: 'xtream' })
+  const byProvider = `provider_id=eq.${provider.id}`
   const seenAt = now.toISOString()
-  const distrusted: string[] = []
+  const distrusted: Distrusted[] = []
+
+  /** False, and noted in the report, when the list is too short to trust. */
+  function trusted(list: string, stored: number, listed: number): boolean {
+    if (listed >= stored * MIN_SHARE_TO_TRUST) return true
+    distrusted.push({ list, stored, listed })
+    return false
+  }
 
   /** Writes one list, then marks what the provider no longer lists. */
-  async function replace(label: string, table: string, onConflict: string, scope: string, rows: Row[]): Promise<void> {
-    const before = await db.count(table, `${scope}&available=is.true`)
+  async function replace(list: string, table: string, onConflict: string, scope: string, rows: Row[]): Promise<void> {
+    const stored = await db.count(table, `${scope}&available=is.true`)
     await db.upsert(table, onConflict, rows)
-    if (rows.length < before * MIN_SHARE_TO_TRUST) distrusted.push(label)
-    else await db.update(table, `${scope}&available=is.true&last_seen_at=lt.${encodeURIComponent(seenAt)}`, { available: false })
+    if (trusted(list, stored, rows.length)) {
+      await db.update(table, `${scope}&available=is.true&last_seen_at=lt.${encodeURIComponent(seenAt)}`, { available: false })
+    }
   }
 
-  const byProvider = `provider_id=eq.${provider.id}`
-
-  const categories = (await Promise.all((['movie', 'series', 'live'] as const).map(kind => xtream.categories(kind)))).flat()
-  await db.upsert('categories', 'provider_id,kind,ext_id', categories.map(categoryRow(provider.id)))
-  // Categories hold no user data, so stale ones are deleted. An empty list is never trusted.
-  for (const kind of ['movie', 'series', 'live'] as const) {
-    const kept = categories.filter(c => c.kind === kind).map(c => c.extId)
-    if (kept.length > 0) await db.remove('categories', `${byProvider}&kind=eq.${kind}&ext_id=not.in.(${kept.join(',')})`)
+  // Categories hold no user data, so stale ones are deleted.
+  for (const [i, kind] of kinds.entries()) {
+    const list = categoryLists[i] ?? []
+    const scope = `${byProvider}&kind=eq.${kind}`
+    const stored = await db.count('categories', scope)
+    await db.upsert('categories', 'provider_id,kind,ext_id', list.map(categoryRow(provider.id)))
+    if (list.length > 0 && trusted(`${kind} categories`, stored, list.length)) {
+      await db.remove('categories', `${scope}&ext_id=not.in.(${list.map(c => c.extId).join(',')})`)
+    }
   }
 
-  const movies = await xtream.movies()
   await replace('movies', 'titles', 'provider_id,kind,ext_id', `${byProvider}&kind=eq.movie`, movies.map(titleRow(provider.id, seenAt)))
-
-  const series = await xtream.series()
   await replace('series', 'titles', 'provider_id,kind,ext_id', `${byProvider}&kind=eq.series`, series.map(titleRow(provider.id, seenAt)))
-
-  const channels = await xtream.channels()
   await replace('channels', 'channels', 'provider_id,ext_id', byProvider, channels.map(channelRow(provider.id, seenAt)))
 
-  return { categories: categories.length, movies: movies.length, series: series.length, channels: channels.length, distrusted }
+  return { categories: categoryLists.flat().length, movies: movies.length, series: series.length, channels: channels.length, distrusted }
 }
 
 function env(name: string): string {

@@ -249,6 +249,14 @@ test('a server given without a scheme is called over https', async () => {
   assert.equal(calls[0]?.url.origin, 'https://provider.example:8443')
 })
 
+test('a path in the server is kept', async () => {
+  const { fetchFn, calls } = fakeFetch({ get_vod_info: { info: {} } })
+  for (const server of ['https://provider.example/panel', 'https://provider.example/panel/']) {
+    await createXtream({ ...config, server }, fetchFn).movieInfo(1)
+  }
+  assert.deepEqual(calls.map(c => c.url.pathname), ['/panel/player_api.php', '/panel/player_api.php'])
+})
+
 test('categories keep the provider order', async () => {
   const { fetchFn } = fakeFetch({
     get_live_categories: [

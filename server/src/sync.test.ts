@@ -86,9 +86,16 @@ test('writes every list under the provider and reports the counts', async () => 
   assert.deepEqual(calls[0], { op: 'upsertOne', table: 'providers', rows: [{ name: 'prov1', kind: 'xtream' }] })
 
   const upserts = calls.filter(c => c.op === 'upsert')
-  assert.deepEqual(upserts.map(c => [c.table, c.rows?.length]), [['categories', 3], ['titles', 2], ['titles', 1], ['channels', 1]])
+  assert.deepEqual(upserts.map(c => [c.table, c.rows?.length]), [
+    ['categories', 1],
+    ['categories', 0],
+    ['categories', 2],
+    ['titles', 2],
+    ['titles', 1],
+    ['channels', 1],
+  ])
 
-  const movie = upserts[1]?.rows?.[0]
+  const movie = upserts[3]?.rows?.[0]
   assert.deepEqual(movie, {
     provider_id: 7,
     kind: 'movie',
@@ -111,8 +118,8 @@ test('writes every list under the provider and reports the counts', async () => 
   })
   // The movie list has no backdrop: the column is left out, so a stored one survives.
   assert.ok(!('backdrop_url' in movie))
-  assert.equal(upserts[2]?.rows?.[0]?.backdrop_url, 'https://img/b.jpg')
-  assert.equal(upserts[3]?.rows?.[0]?.is_radio, false)
+  assert.equal(upserts[4]?.rows?.[0]?.backdrop_url, 'https://img/b.jpg')
+  assert.equal(upserts[5]?.rows?.[0]?.is_radio, false)
 })
 
 test('rows the provider no longer lists are marked unavailable, per list', async () => {
@@ -133,7 +140,7 @@ test('a list under half its stored size is written but removes nothing', async (
   // 5 movies stored, 2 listed: a broken answer, not 3 removals.
   const { db, calls } = fakeDb({ titlesmovie: 5, titlesseries: 2 })
   const report = await syncCatalog(fakeXtream(lists), db, 'prov1', now)
-  assert.deepEqual(report.distrusted, ['movies'])
+  assert.deepEqual(report.distrusted, [{ list: 'movies', stored: 5, listed: 2 }])
   const updates = calls.filter(c => c.op === 'update').map(c => c.filter)
   assert.equal(updates.some(f => f?.includes('kind=eq.movie')), false)
   // Series: 1 listed of 2 stored is exactly half, which is still trusted.
@@ -148,6 +155,21 @@ test('stale categories are deleted, but never on an empty list', async () => {
     calls.filter(c => c.op === 'remove').map(c => c.filter),
     ['provider_id=eq.7&kind=eq.movie&ext_id=not.in.(118)', 'provider_id=eq.7&kind=eq.live&ext_id=not.in.(1,4)'],
   )
+})
+
+test('a category list under half its stored size deletes nothing', async () => {
+  // 6 live categories stored, 2 listed.
+  const { db, calls } = fakeDb({ categorieslive: 6 })
+  const report = await syncCatalog(fakeXtream(lists), db, 'prov1', now)
+  assert.deepEqual(report.distrusted, [{ list: 'live categories', stored: 6, listed: 2 }])
+  assert.deepEqual(calls.filter(c => c.op === 'remove').map(c => c.filter), ['provider_id=eq.7&kind=eq.movie&ext_id=not.in.(118)'])
+})
+
+test('a list that fails to load stops the sync before anything is written', async () => {
+  const { db, calls } = fakeDb()
+  const xtream = { ...fakeXtream(lists), channels: async () => Promise.reject(new Error('get_live_streams: HTTP 503')) }
+  await assert.rejects(syncCatalog(xtream, db, 'prov1', now), /503/)
+  assert.deepEqual(calls, [])
 })
 
 test('a failed sign-in stops the sync before anything is written', async () => {
