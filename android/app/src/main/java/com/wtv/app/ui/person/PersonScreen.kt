@@ -77,6 +77,11 @@ fun PersonScreen(person: CastMember, firstFocus: FocusRequester, onOpen: (Title)
         }
     }
 
+    // Each state's first item (loading message, Retry, empty message, first
+    // poster) holds `firstFocus`; replacing a state clears the focus, so it is
+    // requested again on every change, unless the user pressed a key meanwhile.
+    LaunchedEffect(load) { if (!moved) runCatching { firstFocus.requestFocus() } }
+
     Column(Modifier.fillMaxSize().padding(start = 88.dp, end = 48.dp, top = 48.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (person.photo != null) {
@@ -122,8 +127,6 @@ fun PersonScreen(person: CastMember, firstFocus: FocusRequester, onOpen: (Title)
                             )
                         }
                     }
-                    // The loading message held the focus; the first poster takes it, unless the user has moved on.
-                    LaunchedEffect(Unit) { if (!moved) runCatching { firstFocus.requestFocus() } }
                 }
         }
     }
