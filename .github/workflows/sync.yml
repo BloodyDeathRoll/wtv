@@ -1,0 +1,60 @@
+name: Catalog sync
+
+# Copies the provider's catalog into the WTV database (server/src/sync.ts).
+# A failed run opens an issue (or comments on the open one).
+# If this repo is ever made public: GitHub pauses scheduled workflows in public
+# repos after 60 days without activity (it emails first).
+on:
+  schedule:
+    - cron: '17 */4 * * *'
+  workflow_dispatch:
+
+# Never two syncs at once; a queued run waits for the running one.
+concurrency:
+  group: catalog-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: server/.nvmrc
+
+      # No install: the sync has no runtime dependencies.
+      # Shorter than the job limit: a step that times out counts as failed, so
+      # the report below still runs (a job timeout would skip it).
+      - name: Sync
+        timeout-minutes: 10
+        working-directory: server
+        run: node src/sync.ts
+        env:
+          XTREAM_PROV1_SERVER: ${{ secrets.XTREAM_PROV1_SERVER }}
+          XTREAM_PROV1_USER: ${{ secrets.XTREAM_PROV1_USER }}
+          XTREAM_PROV1_PASSWORD: ${{ secrets.XTREAM_PROV1_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+
+      - name: Report the failure as an issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Catalog sync failed"
+          open=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "Failed again: $RUN_URL"
+          else
+            gh issue create --title "$title" --body "The scheduled catalog sync failed: $RUN_URL"
+          fi
