@@ -68,7 +68,8 @@ class CatalogTest {
     }
 
     @Test fun `sort orders end on id and name follows the language`() {
-        assertEquals("added_at.desc.nullslast,id", Sort.Added.order(hebrew = false))
+        // Date added is the newest copy's.
+        assertEquals("group_added_at.desc.nullslast,id", Sort.Added.order(hebrew = false))
         assertEquals("sort_name_en.asc,id", Sort.Name.order(hebrew = false))
         assertEquals("sort_name_he.asc,id", Sort.Name.order(hebrew = true))
         for (s in Sort.entries) assertTrue(s.name, s.order(hebrew = false).endsWith(",id"))
@@ -77,9 +78,17 @@ class CatalogTest {
     @Test fun `a grid page asks for one category, available titles, the order, offset and limit`() {
         val path = pagePath(Category(185, Kind.Series, "Netflix", null, null), Sort.Rating, hebrew = false, offset = 120, limit = 60)
         assertTrue(path, path.startsWith("titles?select="))
-        for (part in listOf("&kind=eq.series", "&available=is.true", "&category_ids=cs.%7B185%7D", "&order=tmdb_rating.desc.nullslast,id", "&offset=120", "&limit=60")) {
+        for (part in listOf("&kind=eq.series", "&available=is.true", "&is_primary=is.true", "&group_category_ids=cs.%7B185%7D", "&order=tmdb_rating.desc.nullslast,id", "&offset=120", "&limit=60")) {
             assertTrue(part, path.contains(part))
         }
+    }
+
+    @Test fun `rows ask for cards, newest copy first, in a category or all`() {
+        val inCategory = latestPath(Kind.Movie, 99, 10)
+        for (part in listOf("&kind=eq.movie", "&is_primary=is.true", "&group_category_ids=cs.%7B99%7D", "&order=group_added_at.desc.nullslast,id", "&limit=10")) {
+            assertTrue(part, inCategory.contains(part))
+        }
+        assertFalse(latestPath(Kind.Series, null, 10).contains("category_ids"))
     }
 
     @Test fun `poster prefers TMDB, then the provider's`() {

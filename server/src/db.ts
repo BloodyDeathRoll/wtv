@@ -78,9 +78,10 @@ export function createDb(config: DbConfig, fetchFn: typeof fetch = fetch) {
       }
     },
 
-    /** Calls a database function and returns its rows. */
+    /** Calls a database function and returns its rows (a scalar result comes back as one). */
     async rpc<T>(name: string, args: Row): Promise<T[]> {
-      return (await (await request('POST', `rpc/${name}`, args)).json()) as T[]
+      const body: unknown = await (await request('POST', `rpc/${name}`, args)).json()
+      return (Array.isArray(body) ? body : [body]) as T[]
     },
 
     async update(table: string, filter: string, values: Row): Promise<void> {

@@ -12,6 +12,7 @@
  */
 
 import { createDb, type Db, type Row } from './db.ts'
+import { refreshGroupsOrNull } from './groups.ts'
 import { pool } from './pool.ts'
 import { createTmdb, type Tmdb } from './tmdb.ts'
 import { createXtream, type Xtream } from './xtream.ts'
@@ -221,7 +222,8 @@ if (import.meta.main) {
   const db = createDb({ url: env('SUPABASE_URL'), key: env('SUPABASE_SECRET_KEY') })
   const budgetMin = Number(process.env.DETAILS_BUDGET_MIN ?? '8')
   const report = await fetchDetails(xtream, createTmdb(env('TMDB_API_KEY')), db, 'prov1', budgetMin * 60_000)
-  console.log(JSON.stringify(report))
+  // New TMDB ids join copies of one title into one card.
+  console.log(JSON.stringify({ ...report, regrouped: await refreshGroupsOrNull(db, 'prov1') }))
   // A few unreachable titles are normal; many mean something is wrong.
   if (report.failed > Math.max(10, report.done * 0.05)) process.exitCode = 1
 }

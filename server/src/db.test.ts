@@ -108,3 +108,12 @@ test('an HTTP error names the table and the reason, without the query', async ()
     return true
   })
 })
+
+test('rpc returns a list for a set-returning function and wraps a scalar result', async () => {
+  const set = fakeFetch(() => Response.json([{ id: 1 }, { id: 2 }]))
+  assert.deepEqual(await createDb(config, set.fetchFn).rpc('titles_needing_details', { p_provider: 4 }), [{ id: 1 }, { id: 2 }])
+  assert.equal(set.calls[0]?.url.pathname, '/rest/v1/rpc/titles_needing_details')
+  assert.deepEqual(set.calls[0]?.body, { p_provider: 4 })
+  const scalar = fakeFetch(() => Response.json(21462))
+  assert.deepEqual(await createDb(config, scalar.fetchFn).rpc('refresh_title_groups', { p_provider: 4 }), [21462])
+})
