@@ -1,5 +1,6 @@
 package com.wtv.app.ui
 
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.annotation.StringRes
@@ -170,19 +171,27 @@ fun WtvApp() {
         }
     }
 
-    // Saved positions. One save at a time, in order, so an older position never lands after a newer one.
+    // Saved positions. One save at a time; reports that arrive meanwhile collapse
+    // into the latest, which carries the whole position (a held seek key sends many).
     // The pages showing positions reload when the player's last save is in.
     val catalog = (context.applicationContext as WtvApplication).catalog
     val scope = rememberCoroutineScope()
     val saving = remember { Mutex() }
+    var latest by remember { mutableStateOf<(suspend () -> Unit)?>(null) }
     var progressVersion by remember { mutableIntStateOf(0) }
     fun saveProgress(p: Page.Player, positionSecs: Int, durationSecs: Int?, final: Boolean) {
+        latest = {
+            // shortcut: a failed save is dropped; the next one (every 15 s) carries the position.
+            runCatching { catalog.saveProgress(p.titleId, p.episodeId, positionSecs, durationSecs) }
+                .onFailure { Log.w("WtvProgress", "Saving the position failed: ${it.message}") }
+            if (final) progressVersion++
+        }
         scope.launch {
             saving.withLock {
-                // shortcut: a failed save is dropped; the next one (every 15 s) carries the position.
-                runCatching { catalog.saveProgress(p.titleId, p.episodeId, positionSecs, durationSecs) }
+                val save = latest ?: return@withLock
+                latest = null
+                save()
             }
-            if (final) progressVersion++
         }
     }
 

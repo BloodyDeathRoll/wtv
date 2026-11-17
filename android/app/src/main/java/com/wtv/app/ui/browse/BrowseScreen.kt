@@ -50,6 +50,7 @@ import com.wtv.app.ui.components.RowTitle
 import com.wtv.app.ui.components.RowsAtTop
 import com.wtv.app.ui.components.Sideways
 import com.wtv.app.ui.theme.WtvColors
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** What a browse page shows: one section's category rows, or Home's latest rows. */
 sealed interface BrowseSource {
@@ -103,8 +104,9 @@ fun BrowseScreen(
     // Null until loaded: Home shows its rows once this is in too, so the row does not
     // appear above the rows after the user has started moving. A nicety: when it
     // fails, Home just has no Continue watching row.
+    // Bounded: Home waits for it, and it is not worth a long wait.
     val watching by produceState<List<ContinueItem>?>(null, progressVersion) {
-        value = runCatching { catalog.continueWatching() }.getOrDefault(value.orEmpty())
+        value = runCatching { withTimeoutOrNull(CONTINUE_WAIT_MS) { catalog.continueWatching() } }.getOrNull() ?: value.orEmpty()
     }
     val recentMovies = stringResource(R.string.row_recent_movies)
     val recentSeries = stringResource(R.string.row_recent_series)
@@ -136,7 +138,13 @@ fun BrowseScreen(
     }
 }
 
-/** Continue watching as a row: a series' card names its episode. Null when empty. */
+private const val CONTINUE_WAIT_MS = 5_000L
+
+/**
+ * Continue watching as a row: a series' card names the episode to resume.
+ * After a finished episode the card shows neither label nor bar: the next
+ * episode is known only on the series page. Null when empty.
+ */
 private fun continueRow(items: List<ContinueItem>, label: String, seasonEpisode: String): BrowseRow? =
     items.takeIf { it.isNotEmpty() }?.let { list ->
         BrowseRow(
@@ -173,6 +181,10 @@ private fun Rows(
     // Safe: empty rows are left out, and an empty page never gets here.
     // Kept when only Continue watching changes: the header stays on the focused card.
     var focused by remember { mutableStateOf(rows.first().titles.first()) }
+    // A reload (retry, language) brings new title objects: the header moves to the first card.
+    LaunchedEffect(rows) {
+        if (rows.none { r -> r.titles.any { it.id == focused.id } }) focused = rows.first().titles.first()
+    }
     val list = rememberLazyListState()
     LaunchedEffect(tabsFocused) {
         if (tabsFocused) {

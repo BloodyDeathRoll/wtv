@@ -106,7 +106,8 @@ fun PlayerScreen(
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (isPlaying) started = true else save(final = false)
+                // Paused, not buffering or seeking: those stop playing for a moment too.
+                if (isPlaying) started = true else if (player.playbackState == Player.STATE_READY) save(final = false)
             }
 
             override fun onPlaybackStateChanged(state: Int) {
