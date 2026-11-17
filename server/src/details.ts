@@ -12,6 +12,7 @@
  */
 
 import { createDb, type Db, type Row } from './db.ts'
+import { pool } from './pool.ts'
 import { createTmdb, type Tmdb } from './tmdb.ts'
 import { createXtream, type Xtream } from './xtream.ts'
 
@@ -96,13 +97,6 @@ export async function matchSeries(
     if (match !== null) return match
   }
   return null
-}
-
-async function pool<T>(items: T[], parallel: number, work: (item: T) => Promise<void>): Promise<void> {
-  let next = 0
-  await Promise.all(Array.from({ length: Math.min(parallel, items.length) }, async () => {
-    while (next < items.length) await work(items[next++]!)
-  }))
 }
 
 const describe = (err: unknown) => (err instanceof Error ? err.message : String(err))

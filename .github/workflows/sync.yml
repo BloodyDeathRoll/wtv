@@ -2,6 +2,7 @@ name: Catalog sync
 
 # Copies the provider's catalog into the WTV database (server/src/sync.ts),
 # then fetches details for new and changed titles (server/src/details.ts),
+# then TMDB metadata in English and Hebrew (server/src/enrich.ts),
 # then copies what WTW knows about them (server/src/wtw-match.ts, reads WTW only).
 # A failed run opens an issue (or comments on the open one).
 # If this repo is ever made public: GitHub pauses scheduled workflows in public
@@ -19,7 +20,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
       issues: write
@@ -57,6 +58,16 @@ jobs:
           XTREAM_PROV1_SERVER: ${{ secrets.XTREAM_PROV1_SERVER }}
           XTREAM_PROV1_USER: ${{ secrets.XTREAM_PROV1_USER }}
           XTREAM_PROV1_PASSWORD: ${{ secrets.XTREAM_PROV1_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+
+      - name: Enrich
+        timeout-minutes: 12
+        working-directory: server
+        run: node src/enrich.ts
+        env:
+          ENRICH_BUDGET_MIN: '9'
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}

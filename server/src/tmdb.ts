@@ -14,6 +14,51 @@ export interface TmdbCredit {
   first_air_date?: string
 }
 
+interface Translation {
+  iso_639_1: string
+  data: { title?: string; name?: string; overview?: string }
+}
+
+export interface TmdbCastMember {
+  id: number
+  name: string
+  profile_path: string | null
+  order: number
+  /** Movies. */
+  character?: string
+  /** Series (aggregate credits). */
+  roles?: { character: string }[]
+}
+
+interface Common {
+  id: number
+  overview: string
+  genres: { id: number; name: string }[]
+  vote_average: number
+  original_language: string
+  poster_path: string | null
+  backdrop_path: string | null
+  translations: { translations: Translation[] }
+}
+
+export interface TmdbMovieFull extends Common {
+  title: string
+  runtime: number | null
+  credits: { cast: TmdbCastMember[] }
+  release_dates: { results: { iso_3166_1: string; release_dates: { certification: string }[] }[] }
+}
+
+export interface TmdbSeriesFull extends Common {
+  name: string
+  episode_run_time: number[]
+  aggregate_credits: { cast: TmdbCastMember[] }
+  content_ratings: { results: { iso_3166_1: string; rating: string }[] }
+}
+
+export interface TmdbSeason {
+  episodes: { episode_number: number; name: string; overview: string; still_path: string | null }[]
+}
+
 type Query = Record<string, string>
 
 const BASE = 'https://api.themoviedb.org/3/'
@@ -27,6 +72,13 @@ const MAX_PAUSE_MS = 30_000
 
 export function createTmdb(apiKey: string, fetchFn: typeof fetch = fetch, sleep = (ms: number) => new Promise(r => setTimeout(r, ms))) {
   async function get<T>(path: string, query: Query = {}): Promise<T> {
+    const found = await getOrMissing<T>(path, query)
+    if (found === null) throw new TmdbError(`${path}: HTTP 404`)
+    return found
+  }
+
+  /** Null when TMDB answers 404. */
+  async function getOrMissing<T>(path: string, query: Query = {}): Promise<T | null> {
     const url = new URL(path, BASE)
     url.searchParams.set('api_key', apiKey)
     for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v)
@@ -53,6 +105,10 @@ export function createTmdb(apiKey: string, fetchFn: typeof fetch = fetch, sleep 
         await res.body?.cancel()
         await sleep(1000)
         continue
+      }
+      if (res.status === 404) {
+        await res.body?.cancel()
+        return null
       }
       if (!res.ok) {
         await res.body?.cancel()
@@ -82,6 +138,24 @@ export function createTmdb(apiKey: string, fetchFn: typeof fetch = fetch, sleep 
 
     async personSeries(personId: number): Promise<TmdbCredit[]> {
       return (await get<{ cast: TmdbCredit[] }>(`person/${personId}/tv_credits`)).cast
+    },
+
+    /** English details, cast, release certifications and translations; null if TMDB has no such movie. */
+    async movieFull(id: number): Promise<TmdbMovieFull | null> {
+      return getOrMissing<TmdbMovieFull>(`movie/${id}`, { append_to_response: 'credits,release_dates,translations' })
+    },
+
+    async seriesFull(id: number): Promise<TmdbSeriesFull | null> {
+      return getOrMissing<TmdbSeriesFull>(`tv/${id}`, { append_to_response: 'aggregate_credits,content_ratings,translations' })
+    },
+
+    /** One season's episodes in `language` (e.g. "en-US", "he-IL"); null if TMDB has no such season. */
+    async season(seriesId: number, season: number, language: string): Promise<TmdbSeason | null> {
+      return getOrMissing<TmdbSeason>(`tv/${seriesId}/season/${season}`, { language })
+    },
+
+    async genres(kind: 'movie' | 'tv', language: string): Promise<{ id: number; name: string }[]> {
+      return (await get<{ genres: { id: number; name: string }[] }>(`genre/${kind}/list`, { language })).genres
     },
   }
 }
