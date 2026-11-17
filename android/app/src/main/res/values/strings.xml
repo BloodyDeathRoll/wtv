@@ -23,4 +23,8 @@
     <string name="load_failed">Could not load: %1$s</string>
     <string name="nothing_here">Nothing here yet</string>
     <string name="retry">Retry</string>
+    <string name="sort_added">Date added</string>
+    <string name="sort_year">Year</string>
+    <string name="sort_name">Name</string>
+    <string name="sort_rating">Rating</string>
 </resources>

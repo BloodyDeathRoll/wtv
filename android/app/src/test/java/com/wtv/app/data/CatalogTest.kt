@@ -67,6 +67,26 @@ class CatalogTest {
         assertEquals("Drama", Genre("Drama", null).label(hebrew = true))
     }
 
+    @Test fun `sort orders end on id and name follows the language`() {
+        assertEquals("added_at.desc.nullslast,id", Sort.Added.order(hebrew = false))
+        assertEquals("sort_name_en.asc,id", Sort.Name.order(hebrew = false))
+        assertEquals("sort_name_he.asc,id", Sort.Name.order(hebrew = true))
+        for (s in Sort.entries) assertTrue(s.name, s.order(hebrew = false).endsWith(",id"))
+    }
+
+    @Test fun `a grid page asks for one category, available titles, the order, offset and limit`() {
+        val path = pagePath(Category(185, Kind.Series, "Netflix", null, null), Sort.Rating, hebrew = false, offset = 120, limit = 60)
+        assertTrue(path, path.startsWith("titles?select="))
+        for (part in listOf("&kind=eq.series", "&available=is.true", "&category_ids=cs.%7B185%7D", "&order=tmdb_rating.desc.nullslast,id", "&offset=120", "&limit=60")) {
+            assertTrue(part, path.contains(part))
+        }
+    }
+
+    @Test fun `poster prefers TMDB, then the provider's`() {
+        assertEquals("https://image.tmdb.org/t/p/w342/p.jpg", title(row("tmdb_poster" to "/p.jpg", "poster_url" to "https://p/p.jpg")).posterImage)
+        assertEquals("https://p/p.jpg", title(row("poster_url" to "https://p/p.jpg")).posterImage)
+    }
+
     @Test fun `only a real rejection of the refresh token counts, never a rate limit or a server error`() {
         for (code in listOf(400, 401, 403, 404, 422)) assertTrue("$code", isRejection(code))
         for (code in listOf(408, 429, 500, 502, 503)) assertFalse("$code", isRejection(code))
