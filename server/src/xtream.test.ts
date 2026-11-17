@@ -15,10 +15,10 @@ const b64 = (s: string) => Buffer.from(s, 'utf8').toString('base64')
 
 /** A fetch that answers each `action` from a table and records the calls. */
 function fakeFetch(answers: Record<string, unknown>) {
-  const calls: { url: URL; userAgent: string | null }[] = []
+  const calls: { url: URL; userAgent: string | null; init: RequestInit | undefined }[] = []
   const fetchFn = (async (input: URL | RequestInfo, init?: RequestInit) => {
     const url = new URL(String(input))
-    calls.push({ url, userAgent: new Headers(init?.headers).get('User-Agent') })
+    calls.push({ url, userAgent: new Headers(init?.headers).get('User-Agent'), init })
     const answer = answers[url.searchParams.get('action') ?? 'sign-in']
     if (answer instanceof Response) return answer
     return Response.json(answer)
@@ -194,6 +194,20 @@ test('programmes: base64 text is decoded', () => {
   assert.deepEqual(toProgrammes({ epg_listings: [] }), [])
 })
 
+test('programmes: text that is not base64 is kept as it is', () => {
+  const [programme] = toProgrammes({
+    epg_listings: [{ title: 'News at 9!', description: 'חדשות', start_timestamp: 1, stop_timestamp: 2 }],
+  })
+  assert.equal(programme?.title, 'News at 9!')
+  assert.equal(programme?.description, 'חדשות')
+})
+
+test('ids accept plain decimals only', () => {
+  assert.equal(toMovie({ stream_id: '12', name: 'x' })?.extId, 12)
+  assert.equal(toMovie({ stream_id: '0x10', name: 'x' }), null)
+  assert.equal(toMovie({ stream_id: '1e3', name: 'x' }), null)
+})
+
 test('lists: a title in two categories comes back once, with both', async () => {
   const { fetchFn } = fakeFetch({
     get_vod_streams: [
@@ -216,6 +230,9 @@ test('requests carry the credentials, the action and the player user agent', asy
   assert.equal(first.url.origin + first.url.pathname, 'https://provider.example/player_api.php')
   assert.deepEqual(Object.fromEntries(first.url.searchParams), { username: 'u', password: 'p', action: 'get_vod_info', vod_id: '42' })
   assert.equal(first.userAgent, 'okhttp/4.12.0')
+  // Credentials are in the URL: no redirect is followed, and every request has a time limit.
+  assert.equal(first.init?.redirect, 'error')
+  assert.ok(first.init?.signal instanceof AbortSignal)
   assert.deepEqual(Object.fromEntries(second.url.searchParams), { username: 'u', password: 'p', action: 'get_short_epg', stream_id: '7', limit: '2' })
 })
 
@@ -247,14 +264,28 @@ test('errors never contain the credentials', async () => {
     blocked: fakeFetch({ get_vod_streams: new Response('<html>blocked</html>', { status: 403 }) }).fetchFn,
     'not json': fakeFetch({ get_vod_streams: new Response('<html>ok</html>', { status: 200 }) }).fetchFn,
     'not a list': fakeFetch({ get_vod_streams: { error: 'x' } }).fetchFn,
-    network: (async () => {
-      throw new TypeError('fetch failed')
+    network: (async (input: URL | RequestInfo) => {
+      // Like undici: the real reason sits in `cause`, and may name the URL.
+      throw new TypeError('fetch failed', { cause: Object.assign(new Error(`connect failed ${String(input)}`), { code: 'ECONNRESET' }) })
     }) as typeof fetch,
+    timeout: (async () => {
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+    }) as typeof fetch,
+  }
+  const expected: Record<string, string> = {
+    blocked: 'get_vod_streams: HTTP 403',
+    'not json': 'get_vod_streams: the answer is not JSON',
+    'not a list': 'movies: expected a list',
+    network: 'get_vod_streams: request failed (ECONNRESET)',
+    timeout: 'get_vod_streams: request failed (TimeoutError)',
   }
   for (const [name, fetchFn] of Object.entries(cases)) {
     await assert.rejects(createXtream(secret, fetchFn).movies(), (err: unknown) => {
       assert.ok(err instanceof XtreamError, name)
-      assert.doesNotMatch(err.message, /SECRET/, name)
+      assert.equal(err.message, expected[name], name)
+      // Nothing attached that a logger could print the URL from.
+      assert.equal(err.cause, undefined, name)
+      assert.doesNotMatch(JSON.stringify(err, Object.getOwnPropertyNames(err)), /SECRET/, name)
       return true
     })
   }

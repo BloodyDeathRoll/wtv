@@ -42,7 +42,10 @@ export interface Title {
   /** Movies only. */
   containerExt: string | null
   categoryIds: number[]
-  /** When the provider added it (movies) or last changed it (series). */
+  /**
+   * Movies: when the provider added it. Series: when it last changed, which
+   * also moves when an episode is added.
+   */
   addedAt: Date | null
 }
 
@@ -117,12 +120,11 @@ function text(v: unknown): string | null {
   return t === '' ? null : t
 }
 
-/** A finite number from a number or a numeric string, else null. */
+/** A finite number from a number or a plain decimal string ("12", "5.3"), else null. */
 function num(v: unknown): number | null {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null
-  if (typeof v !== 'string' || v.trim() === '') return null
-  const n = Number(v)
-  return Number.isFinite(n) ? n : null
+  if (typeof v !== 'string' || !/^-?\d+(\.\d+)?$/.test(v.trim())) return null
+  return Number(v)
 }
 
 function int(v: unknown): number | null {
@@ -170,7 +172,11 @@ function categoryIds(r: Raw): number[] {
   return one === null ? [] : [one]
 }
 
-/** Keeps the first row per id and joins the category ids of its repeats. */
+/**
+ * Keeps the first row per id and joins the category ids of its repeats.
+ * Repeats differ only in category and list position (checked on the whole
+ * provider-1 catalog, 2026-11-17).
+ */
 function mergeRepeats<T extends { extId: number; categoryIds: number[] }>(items: T[]): T[] {
   const byId = new Map<number, T>()
   for (const item of items) {
@@ -308,9 +314,14 @@ export function toSeriesInfo(body: unknown): SeriesInfo {
 /** Programme titles and descriptions arrive base64-encoded. */
 export function toProgrammes(body: unknown): Programme[] {
   if (!isRaw(body) || !Array.isArray(body.epg_listings)) return []
+  const unpad = (s: string) => s.replace(/=+$/, '')
   const decode = (v: unknown) => {
     const s = text(v)
-    return s === null ? null : text(Buffer.from(s, 'base64').toString('utf8'))
+    if (s === null) return null
+    // Buffer never rejects bad base64; text that does not survive the round
+    // trip was sent plain.
+    const bytes = Buffer.from(s, 'base64')
+    return unpad(bytes.toString('base64')) === unpad(s) ? text(bytes.toString('utf8')) : s
   }
   const out: Programme[] = []
   for (const p of body.epg_listings.filter(isRaw)) {
@@ -327,26 +338,48 @@ export function toProgrammes(body: unknown): Programme[] {
 
 const LIST_ACTION = { movie: 'vod', series: 'series', live: 'live' } as const
 
+/** A stalled provider must not hang the sync. The full lists are tens of MB. */
+const TIMEOUT_MS = 30_000
+const LIST_TIMEOUT_MS = 180_000
+
+/** A short label such as `ECONNRESET` or `TimeoutError`; never the error itself, which may hold the URL. */
+function failureCode(err: unknown): string {
+  if (!(err instanceof Error)) return 'unknown'
+  const code = (err.cause as { code?: unknown } | undefined)?.code
+  return typeof code === 'string' ? code : err.name
+}
+
 export function createXtream(config: XtreamConfig, fetchFn: Fetch = fetch) {
-  async function call(action?: string, params: Record<string, string | number> = {}): Promise<unknown> {
+  async function call(
+    action?: string,
+    params: Record<string, string | number> = {},
+    timeoutMs = TIMEOUT_MS,
+  ): Promise<unknown> {
     const url = new URL('/player_api.php', config.server)
     url.searchParams.set('username', config.user)
     url.searchParams.set('password', config.password)
     if (action) url.searchParams.set('action', action)
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v))
 
-    // Never put the URL in an error: it carries the credentials.
+    // The URL carries the credentials. It never goes into an error (so no
+    // `cause` either), and a redirect is refused rather than followed.
     const what = action ?? 'sign-in'
     let res: Response
     try {
-      res = await fetchFn(url, { headers: { 'User-Agent': USER_AGENT } })
-    } catch (cause) {
-      throw new XtreamError(`${what}: request failed`, { cause })
+      res = await fetchFn(url, {
+        headers: { 'User-Agent': USER_AGENT },
+        redirect: 'error',
+        signal: AbortSignal.timeout(timeoutMs),
+      })
+    } catch (err) {
+      throw new XtreamError(`${what}: request failed (${failureCode(err)})`)
     }
     if (!res.ok) throw new XtreamError(`${what}: HTTP ${res.status}`)
     try {
       return await res.json()
-    } catch {
+    } catch (err) {
+      // The timeout also covers reading the body.
+      if (err instanceof Error && err.name === 'TimeoutError') throw new XtreamError(`${what}: request failed (TimeoutError)`)
       throw new XtreamError(`${what}: the answer is not JSON`)
     }
   }
@@ -368,15 +401,15 @@ export function createXtream(config: XtreamConfig, fetchFn: Fetch = fetch) {
     },
 
     async movies(): Promise<Title[]> {
-      return mergeRepeats(keep(rows(await call('get_vod_streams'), 'movies').map(toMovie)))
+      return mergeRepeats(keep(rows(await call('get_vod_streams', {}, LIST_TIMEOUT_MS), 'movies').map(toMovie)))
     },
 
     async series(): Promise<Title[]> {
-      return mergeRepeats(keep(rows(await call('get_series'), 'series').map(toSeries)))
+      return mergeRepeats(keep(rows(await call('get_series', {}, LIST_TIMEOUT_MS), 'series').map(toSeries)))
     },
 
     async channels(): Promise<Channel[]> {
-      return mergeRepeats(keep(rows(await call('get_live_streams'), 'channels').map(toChannel)))
+      return mergeRepeats(keep(rows(await call('get_live_streams', {}, LIST_TIMEOUT_MS), 'channels').map(toChannel)))
     },
 
     async movieInfo(extId: number): Promise<MovieInfo> {
