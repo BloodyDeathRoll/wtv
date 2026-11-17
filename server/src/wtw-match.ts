@@ -37,6 +37,15 @@ export interface Coverage {
   scored: number
 }
 
+/** Floats in a WTW taste vector (taste version 1); the column checks it too. */
+const VECTOR_SIZE = 25
+
+/**
+ * A run that would clear more than this share of the current matches is taken
+ * for a bad read of WTW, not a real change, and writes nothing.
+ */
+const MAX_CLEARED_SHARE = 0.5
+
 export interface WtwReport {
   wtwTitles: number
   /** WTW rows sharing a kind and TMDB id with another; the scored one is used. */
@@ -45,6 +54,8 @@ export interface WtwReport {
   series: Coverage
   /** Titles whose WTW fields changed and were written. */
   updated: number
+  /** Scored titles per WTW taste version. Vectors of different versions do not compare. */
+  versions: Record<string, number>
 }
 
 /** Same vector as stored, give or take float printing in the last digits. */
@@ -69,14 +80,19 @@ export async function matchWtw(wtv: Db, wtw: Db, providerName: string): Promise<
   if (!provider) throw new Error(`Unknown provider ${providerName}: run the sync first`)
 
   const wtwTitles = await wtw.selectAll<WtwTitle>('titles', 'id,tmdb_id,type,taste_vec,taste_version')
+  // Row level security or a wrong key answers with no rows, not an error.
+  if (wtwTitles.length === 0) throw new Error('WTW returned no titles: nothing is cleared')
+
+  /** "0123" and "123" are the same TMDB id. */
+  const key = (type: string, tmdbId: string | number) => `${type}:${String(tmdbId).trim().replace(/^0+(?=\d)/, '')}`
   const byKey = new Map<string, WtwTitle>()
   let wtwDuplicates = 0
   for (const t of wtwTitles) {
-    const key = `${t.type}:${String(t.tmdb_id).trim()}`
-    const seen = byKey.get(key)
+    const k = key(t.type, t.tmdb_id)
+    const seen = byKey.get(k)
     if (seen) wtwDuplicates++
     // A scored row wins over an unscored one; otherwise the first (lowest id) stays.
-    if (!seen || (!parseVector(seen.taste_vec) && parseVector(t.taste_vec))) byKey.set(key, t)
+    if (!seen || (!parseVector(seen.taste_vec) && parseVector(t.taste_vec))) byKey.set(k, t)
   }
 
   // Titles with a TMDB id, and titles that still carry WTW fields (a TMDB id
@@ -87,12 +103,21 @@ export async function matchWtw(wtv: Db, wtw: Db, providerName: string): Promise<
     `provider_id=eq.${provider.id}&or=(tmdb_id.not.is.null,wtw_title_id.not.is.null)`,
   )
   const empty = (): Coverage => ({ withTmdbId: 0, inWtw: 0, scored: 0 })
-  const report: WtwReport = { wtwTitles: wtwTitles.length, wtwDuplicates, movie: empty(), series: empty(), updated: 0 }
+  const report: WtwReport = { wtwTitles: wtwTitles.length, wtwDuplicates, movie: empty(), series: empty(), updated: 0, versions: {} }
 
   const rows: Row[] = []
+  let matchedBefore = 0
+  let cleared = 0
   for (const t of ours) {
-    const match = t.tmdb_id === null ? undefined : byKey.get(`${t.kind === 'movie' ? 'movie' : 'tv'}:${t.tmdb_id}`)
+    const match = t.tmdb_id === null ? undefined : byKey.get(key(t.kind === 'movie' ? 'movie' : 'tv', t.tmdb_id))
     const vec = match ? parseVector(match.taste_vec) : null
+    if (vec && vec.length !== VECTOR_SIZE) {
+      throw new Error(`WTW title ${match?.id} has a taste vector of ${vec.length} values, not ${VECTOR_SIZE}: nothing is written`)
+    }
+    if (t.wtw_title_id !== null) {
+      matchedBefore++
+      if (!match) cleared++
+    }
     const next = {
       wtw_title_id: match?.id ?? null,
       wtw_taste_vec: vec,
@@ -102,7 +127,11 @@ export async function matchWtw(wtv: Db, wtw: Db, providerName: string): Promise<
       const coverage = report[t.kind]
       coverage.withTmdbId++
       if (match) coverage.inWtw++
-      if (vec) coverage.scored++
+      if (vec) {
+        coverage.scored++
+        const version = String(next.wtw_taste_version)
+        report.versions[version] = (report.versions[version] ?? 0) + 1
+      }
     }
     // Unchanged rows are not written: every write moves `updated_at`.
     const same =
@@ -110,6 +139,9 @@ export async function matchWtw(wtv: Db, wtw: Db, providerName: string): Promise<
       t.wtw_taste_version === next.wtw_taste_version &&
       sameVector(t.wtw_taste_vec, next.wtw_taste_vec)
     if (!same) rows.push({ provider_id: provider.id, kind: t.kind, ext_id: t.ext_id, name: t.name, ...next })
+  }
+  if (matchedBefore > 0 && cleared > matchedBefore * MAX_CLEARED_SHARE) {
+    throw new Error(`WTW match would clear ${cleared} of ${matchedBefore} matches: nothing is written`)
   }
   await wtv.upsert('titles', 'provider_id,kind,ext_id', rows)
   report.updated = rows.length

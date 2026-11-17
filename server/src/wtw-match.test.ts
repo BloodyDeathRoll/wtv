@@ -41,15 +41,19 @@ function fakeDb(tables: Record<string, Row[]>) {
   return { db, upserts, calls }
 }
 
+/** A 25-value vector as WTW sends it, and as WTV stores it. */
+const vecText = (first: number) => `[${[first, ...Array(24).fill(0)].join(',')}]`
+const vec = (first: number) => [first, ...Array(24).fill(0)]
+
 const none = { wtw_title_id: null, wtw_taste_vec: null, wtw_taste_version: null }
 
 test('titles are matched by kind and TMDB id; coverage is counted per kind', async () => {
   const wtw = fakeDb({
     titles: [
-      { id: 1, tmdb_id: '1185344', type: 'movie', taste_vec: '[0.5,-1]', taste_version: 1 },
+      { id: 1, tmdb_id: '1185344', type: 'movie', taste_vec: vecText(0.5), taste_version: 1 },
       { id: 2, tmdb_id: '22', type: 'tv', taste_vec: null, taste_version: null },
       // Same TMDB id as the movie, but a series: must not match the movie.
-      { id: 3, tmdb_id: '1185344', type: 'tv', taste_vec: '[1,1]', taste_version: 1 },
+      { id: 3, tmdb_id: '1185344', type: 'tv', taste_vec: vecText(1), taste_version: 1 },
     ],
   })
   const wtv = fakeDb({
@@ -66,10 +70,11 @@ test('titles are matched by kind and TMDB id; coverage is counted per kind', asy
     movie: { withTmdbId: 2, inWtw: 1, scored: 1 },
     series: { withTmdbId: 1, inWtw: 1, scored: 0 },
     updated: 2,
+    versions: { 1: 1 },
   })
   // The unknown movie had nothing and still has nothing: not written.
   assert.deepEqual(wtv.upserts, [[
-    { provider_id: 7, kind: 'movie', ext_id: 387982, name: 'החיה', wtw_title_id: 1, wtw_taste_vec: [0.5, -1], wtw_taste_version: 1 },
+    { provider_id: 7, kind: 'movie', ext_id: 387982, name: 'החיה', wtw_title_id: 1, wtw_taste_vec: vec(0.5), wtw_taste_version: 1 },
     { provider_id: 7, kind: 'series', ext_id: 5829, name: 'דוקטור X', wtw_title_id: 2, wtw_taste_vec: null, wtw_taste_version: null },
   ]])
   // WTW is only read.
@@ -80,17 +85,19 @@ test('titles are matched by kind and TMDB id; coverage is counted per kind', asy
 })
 
 test('unchanged titles are not written; a lost TMDB id clears the match', async () => {
-  const wtw = fakeDb({ titles: [{ id: 1, tmdb_id: '100', type: 'movie', taste_vec: '[0.5,-1]', taste_version: 1 }] })
+  const wtw = fakeDb({ titles: [{ id: 1, tmdb_id: '100', type: 'movie', taste_vec: vecText(0.5), taste_version: 1 }] })
+  const kept = { tmdb_id: 100, wtw_title_id: 1, wtw_taste_vec: vec(0.5), wtw_taste_version: 1 }
   const wtv = fakeDb({
     titles: [
-      { id: 10, kind: 'movie', ext_id: 1, name: 'same', tmdb_id: 100, wtw_title_id: 1, wtw_taste_vec: [0.5, -1], wtw_taste_version: 1 },
-      { id: 11, kind: 'movie', ext_id: 2, name: 'lost id', tmdb_id: null, wtw_title_id: 1, wtw_taste_vec: [0.5, -1], wtw_taste_version: 1 },
+      { id: 10, kind: 'movie', ext_id: 1, name: 'same', ...kept },
+      { id: 12, kind: 'movie', ext_id: 3, name: 'same too', ...kept },
+      { id: 11, kind: 'movie', ext_id: 2, name: 'lost id', ...kept, tmdb_id: null },
     ],
   })
   const report = await matchWtw(wtv.db, wtw.db, 'prov1')
   assert.equal(report.updated, 1)
   // The title without a TMDB id is not counted in coverage.
-  assert.deepEqual(report.movie, { withTmdbId: 1, inWtw: 1, scored: 1 })
+  assert.deepEqual(report.movie, { withTmdbId: 2, inWtw: 2, scored: 2 })
   assert.deepEqual(wtv.upserts, [[{ provider_id: 7, kind: 'movie', ext_id: 2, name: 'lost id', ...none }]])
 })
 
@@ -98,12 +105,41 @@ test('of two WTW rows for one title, the scored one is used and the duplicate co
   const wtw = fakeDb({
     titles: [
       { id: 1, tmdb_id: '100', type: 'movie', taste_vec: null, taste_version: null },
-      { id: 2, tmdb_id: '100', type: 'movie', taste_vec: '[1,2]', taste_version: 1 },
-      { id: 3, tmdb_id: '100', type: 'movie', taste_vec: '[3,4]', taste_version: 1 },
+      { id: 2, tmdb_id: '100', type: 'movie', taste_vec: vecText(1), taste_version: 1 },
+      { id: 3, tmdb_id: '100', type: 'movie', taste_vec: vecText(3), taste_version: 1 },
     ],
   })
   const wtv = fakeDb({ titles: [{ id: 10, kind: 'movie', ext_id: 1, name: 'x', tmdb_id: 100, ...none }] })
   const report = await matchWtw(wtv.db, wtw.db, 'prov1')
   assert.equal(report.wtwDuplicates, 2)
   assert.equal(wtv.upserts[0]?.[0]?.wtw_title_id, 2)
+})
+
+test('an empty answer from WTW clears nothing', async () => {
+  const wtv = fakeDb({ titles: [{ id: 10, kind: 'movie', ext_id: 1, name: 'x', tmdb_id: 100, wtw_title_id: 1, wtw_taste_vec: [1], wtw_taste_version: 1 }] })
+  await assert.rejects(matchWtw(wtv.db, fakeDb({ titles: [] }).db, 'prov1'), /WTW returned no titles/)
+  assert.deepEqual(wtv.upserts, [])
+})
+
+test('a run that would clear more than half the matches writes nothing', async () => {
+  const wtw = fakeDb({ titles: [{ id: 9, tmdb_id: '999', type: 'movie', taste_vec: null, taste_version: null }] })
+  const matched = (ext_id: number) => ({ id: ext_id, kind: 'movie', ext_id, name: 'x', tmdb_id: ext_id, wtw_title_id: ext_id, wtw_taste_vec: null, wtw_taste_version: null })
+  const wtv = fakeDb({ titles: [matched(1), matched(2), matched(3)] })
+  await assert.rejects(matchWtw(wtv.db, wtw.db, 'prov1'), /would clear 3 of 3 matches/)
+  assert.deepEqual(wtv.upserts, [])
+})
+
+test('a vector of the wrong size stops the run before any write', async () => {
+  const wtw = fakeDb({ titles: [{ id: 1, tmdb_id: '100', type: 'movie', taste_vec: `[${Array(30).fill(0.1).join(',')}]`, taste_version: 2 }] })
+  const wtv = fakeDb({ titles: [{ id: 10, kind: 'movie', ext_id: 1, name: 'x', tmdb_id: 100, ...none }] })
+  await assert.rejects(matchWtw(wtv.db, wtw.db, 'prov1'), /30 values, not 25/)
+  assert.deepEqual(wtv.upserts, [])
+})
+
+test('TMDB ids with leading zeros match', async () => {
+  const vec = `[${Array(25).fill(0.5).join(',')}]`
+  const wtw = fakeDb({ titles: [{ id: 1, tmdb_id: ' 0100 ', type: 'movie', taste_vec: vec, taste_version: 1 }] })
+  const wtv = fakeDb({ titles: [{ id: 10, kind: 'movie', ext_id: 1, name: 'x', tmdb_id: 100, ...none }] })
+  const report = await matchWtw(wtv.db, wtw.db, 'prov1')
+  assert.deepEqual(report.movie, { withTmdbId: 1, inWtw: 1, scored: 1 })
 })
