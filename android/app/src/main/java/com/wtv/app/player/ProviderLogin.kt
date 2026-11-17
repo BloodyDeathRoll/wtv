@@ -81,6 +81,7 @@ enum class StreamKind(val path: String) { Movie("movie"), Episode("series"), Liv
 fun streamUrl(login: ProviderLogin, kind: StreamKind, extId: Long, containerExt: String?): String {
     val server = login.server.trim().trimEnd('/').let { if (Regex("^https?://", RegexOption.IGNORE_CASE).containsMatchIn(it)) it else "https://$it" }
     val ext = containerExt?.takeIf { it.isNotBlank() } ?: if (kind == StreamKind.Live) "ts" else "mp4"
-    fun seg(s: String) = URLEncoder.encode(s.trim(), "UTF-8").replace("+", "%20")
-    return "$server/${kind.path}/${seg(login.user)}/${seg(login.password)}/$extId.$ext"
+    fun seg(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+    // The password is sent exactly as saved; the user name is trimmed, as on save.
+    return "$server/${kind.path}/${seg(login.user.trim())}/${seg(login.password)}/$extId.$ext"
 }

@@ -22,6 +22,10 @@ class StreamUrlTest {
         assertEquals("HTTP://p.example/live/u/p/2.ts", streamUrl(ProviderLogin("HTTP://p.example", "u", "p"), StreamKind.Live, 2, null))
     }
 
+    @Test fun `the password is sent exactly as saved, spaces included`() {
+        assertEquals("https://p.example/movie/u/%20pw%20/1.mp4", streamUrl(ProviderLogin("p.example", " u ", " pw "), StreamKind.Movie, 1, null))
+    }
+
     @Test fun `a login with an empty field is not complete`() {
         assertFalse(ProviderLogin("p.example", "u", " ").isComplete)
     }
