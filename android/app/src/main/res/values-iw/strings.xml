@@ -12,4 +12,8 @@
     <string name="rail_categories">קטגוריות</string>
     <string name="rail_watchlist">רשימת צפייה</string>
     <string name="rail_settings">הגדרות</string>
+    <string name="tab_home">בית</string>
+    <string name="tab_movies">סרטים</string>
+    <string name="tab_series">סדרות</string>
+    <string name="tab_live">שידור חי</string>
 </resources>

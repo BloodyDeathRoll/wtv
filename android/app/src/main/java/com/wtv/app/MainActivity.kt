@@ -3,7 +3,7 @@ package com.wtv.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import com.wtv.app.ui.showcase.Showcase
+import com.wtv.app.ui.WtvApp
 import com.wtv.app.ui.theme.WtvTheme
 
 class MainActivity : ComponentActivity() {
@@ -11,7 +11,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             WtvTheme {
-                Showcase()
+                WtvApp()
             }
         }
     }
