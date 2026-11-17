@@ -34,7 +34,7 @@ import com.wtv.app.data.Category
 import com.wtv.app.data.Kind
 import com.wtv.app.ui.browse.BrowseScreen
 import com.wtv.app.ui.browse.BrowseSource
-import com.wtv.app.ui.browse.isHebrew
+import com.wtv.app.ui.grid.GridScreen
 import com.wtv.app.ui.theme.WtvColors
 
 /** The four sections in the top tabs. */
@@ -57,7 +57,7 @@ enum class Section(@StringRes val label: Int) {
 fun WtvApp() {
     var section by rememberSaveable { mutableStateOf(Section.Home) }
     var railPage by rememberSaveable { mutableStateOf<RailItem?>(null) }
-    // A category's full grid (P2-5); a placeholder for now.
+    // A category's full grid, opened from a row's More card.
     var more by remember { mutableStateOf<Category?>(null) }
     var tabsHaveFocus by remember { mutableStateOf(false) }
     // One per tab: Back focuses the selected tab, not the first one (which would switch section).
@@ -83,7 +83,7 @@ fun WtvApp() {
         if (open != null) {
             Placeholder(stringResource(open.label), page)
         } else if (grid != null) {
-            Placeholder(grid.label(isHebrew()), page)
+            GridScreen(grid, firstFocus = page, onOpen = {})
         } else {
             val source = when (section) {
                 Section.Home -> BrowseSource.Home

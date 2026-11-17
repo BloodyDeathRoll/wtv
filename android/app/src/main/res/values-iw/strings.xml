@@ -23,4 +23,8 @@
     <string name="load_failed">הטעינה נכשלה: %1$s</string>
     <string name="nothing_here">אין כאן עדיין כלום</string>
     <string name="retry">ניסיון חוזר</string>
+    <string name="sort_added">תאריך הוספה</string>
+    <string name="sort_year">שנה</string>
+    <string name="sort_name">שם</string>
+    <string name="sort_rating">דירוג</string>
 </resources>

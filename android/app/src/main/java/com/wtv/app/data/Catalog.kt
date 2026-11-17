@@ -43,6 +43,18 @@ data class Title(
     fun synopsis(hebrew: Boolean): String? = if (hebrew) overviewHe ?: plot ?: overviewEn else overviewEn ?: plot
     val cardImage: String? get() = tmdbImage(tmdbBackdrop, TmdbSize.Card) ?: providerBackdrop ?: tmdbImage(tmdbPoster, TmdbSize.Card) ?: providerPoster
     val heroImage: String? get() = tmdbImage(tmdbBackdrop, TmdbSize.Backdrop) ?: providerBackdrop
+    val posterImage: String? get() = tmdbImage(tmdbPoster, TmdbSize.Poster) ?: providerPoster
+}
+
+/** Orders of a category grid. Name follows the app's language. */
+enum class Sort { Added, Year, Name, Rating }
+
+/** The REST `order` value for a sort; every order ends on `id`, so paging is stable. */
+internal fun Sort.order(hebrew: Boolean): String = when (this) {
+    Sort.Added -> "added_at.desc.nullslast,id"
+    Sort.Year -> "year.desc.nullslast,id"
+    Sort.Name -> "${if (hebrew) "sort_name_he" else "sort_name_en"}.asc,id"
+    Sort.Rating -> "tmdb_rating.desc.nullslast,id"
 }
 
 data class Genre(val nameEn: String, val nameHe: String?) {
@@ -79,6 +91,13 @@ class Catalog(private val api: Api) {
         return api.get("titles?select=$TITLE_COLUMNS&kind=eq.${kind.db}&available=is.true$inCategory&order=added_at.desc.nullslast,id&limit=$limit")
             .objects().map(::title)
     }
+
+    /** One page of a category in the given order. */
+    suspend fun page(category: Category, sort: Sort, hebrew: Boolean, offset: Int, limit: Int): List<Title> =
+        api.get(
+            "titles?select=$TITLE_COLUMNS&kind=eq.${category.kind.db}&available=is.true&category_ids=cs.%7B${category.id}%7D" +
+                "&order=${sort.order(hebrew)}&offset=$offset&limit=$limit",
+        ).objects().map(::title)
 
     /** One row per provider category, newest first; empty categories left out. */
     suspend fun rows(kind: Kind, perRow: Int = 10): List<Pair<Category, List<Title>>> = coroutineScope {
