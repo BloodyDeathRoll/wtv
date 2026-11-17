@@ -315,13 +315,20 @@ export function toSeriesInfo(body: unknown): SeriesInfo {
 export function toProgrammes(body: unknown): Programme[] {
   if (!isRaw(body) || !Array.isArray(body.epg_listings)) return []
   const unpad = (s: string) => s.replace(/=+$/, '')
+  const utf8 = new TextDecoder('utf-8', { fatal: true })
   const decode = (v: unknown) => {
     const s = text(v)
     if (s === null) return null
-    // Buffer never rejects bad base64; text that does not survive the round
-    // trip was sent plain.
+    // Buffer never rejects bad base64. Text that does not survive the round
+    // trip, or does not decode to valid UTF-8 ("News" passes the round trip),
+    // was sent plain.
     const bytes = Buffer.from(s, 'base64')
-    return unpad(bytes.toString('base64')) === unpad(s) ? text(bytes.toString('utf8')) : s
+    if (unpad(bytes.toString('base64')) !== unpad(s)) return s
+    try {
+      return text(utf8.decode(bytes))
+    } catch {
+      return s
+    }
   }
   const out: Programme[] = []
   for (const p of body.epg_listings.filter(isRaw)) {
@@ -374,7 +381,11 @@ export function createXtream(config: XtreamConfig, fetchFn: Fetch = fetch) {
     } catch (err) {
       throw new XtreamError(`${what}: request failed (${failureCode(err)})`)
     }
-    if (!res.ok) throw new XtreamError(`${what}: HTTP ${res.status}`)
+    if (!res.ok) {
+      // Free the connection: the sync makes thousands of calls.
+      await res.body?.cancel()
+      throw new XtreamError(`${what}: HTTP ${res.status}`)
+    }
     try {
       return await res.json()
     } catch (err) {

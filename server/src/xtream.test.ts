@@ -202,6 +202,13 @@ test('programmes: text that is not base64 is kept as it is', () => {
   assert.equal(programme?.description, 'חדשות')
 })
 
+test('programmes: a short plain word made of base64 letters is not decoded to junk', () => {
+  for (const title of ['News', 'Lost', 'Sport1']) {
+    const [programme] = toProgrammes({ epg_listings: [{ title, start_timestamp: 1, stop_timestamp: 2 }] })
+    assert.equal(programme?.title, title)
+  }
+})
+
 test('ids accept plain decimals only', () => {
   assert.equal(toMovie({ stream_id: '12', name: 'x' })?.extId, 12)
   assert.equal(toMovie({ stream_id: '0x10', name: 'x' }), null)
