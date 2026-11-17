@@ -23,6 +23,8 @@ export interface Pending {
   year: number | null
   cast_names: string | null
   tmdb_id: number | null
+  /** Null when never fetched. */
+  details_at: string | null
 }
 
 export interface DetailsReport {
@@ -46,6 +48,12 @@ const MOVIE_PARALLEL = 6
 const SERIES_PARALLEL = 4
 const CHUNK = 100
 
+/**
+ * Provider season ids below this are dummies (seen: 1, 2). Real TMDB season
+ * ids are in the tens of thousands and up.
+ */
+const MIN_SEASON_ID = 1000
+
 /** This many failures in a row means the provider or TMDB is down: stop. */
 const MAX_FAILURES_IN_A_ROW = 25
 
@@ -59,7 +67,8 @@ export async function matchSeries(
   title: { name: string; year: number | null; castNames: string | null },
   seasonIds: number[],
 ): Promise<number | null> {
-  const want = new Set(seasonIds)
+  // Any one real season id is enough: the provider may list seasons TMDB lacks (and back).
+  const want = new Set(seasonIds.filter(id => id >= MIN_SEASON_ID))
   if (want.size === 0) return null
   const tried = new Set<number>()
 
@@ -135,15 +144,26 @@ export async function fetchDetails(
     const detailsAt = new Date(now()).toISOString()
     const titleRows: Row[] = []
     const episodeRows: Row[] = []
+    // Titles not started by the deadline are left for the next run; the chunk's
+    // finished ones are still written.
+    const outOfTime = () => {
+      if (now() < deadline) return false
+      report.outOfTime = true
+      return true
+    }
     await pool(titles, kind === 'movie' ? MOVIE_PARALLEL : SERIES_PARALLEL, t =>
-      halted() ? Promise.resolve() : attempt(async () => {
+      halted() || outOfTime() ? Promise.resolve() : attempt(async () => {
         if (t.kind === 'movie') {
           const info = await xtream.movieInfo(t.ext_id)
           titleRows.push({ ...base(t), tmdb_id: info.tmdbId, backdrop_url: info.backdropUrl, details_at: detailsAt })
           return
         }
         const info = await xtream.seriesInfo(t.ext_id)
-        const tmdbId = t.tmdb_id ?? (await matchSeries(tmdb, { name: t.name, year: t.year, castNames: t.cast_names }, Object.values(info.tmdbSeasonIds)))
+        // Searched on the first fetch only: a series TMDB does not know is not
+        // searched again on every new episode.
+        const tmdbId = t.details_at !== null
+          ? t.tmdb_id
+          : await matchSeries(tmdb, { name: t.name, year: t.year, castNames: t.cast_names }, Object.values(info.tmdbSeasonIds))
         titleRows.push({ ...base(t), tmdb_id: tmdbId, details_at: detailsAt })
         for (const e of info.episodes) {
           episodeRows.push({
@@ -162,6 +182,8 @@ export async function fetchDetails(
       }))
 
     // Episodes first: a title is marked done only once its episodes are stored.
+    // Episodes the provider drops are kept (progress may point at them).
+    // `upsert` sends batches of 500.
     await db.upsert('episodes', 'title_id,ext_id', episodeRows)
     await db.upsert('titles', 'provider_id,kind,ext_id', titleRows)
     report.done += titleRows.length
@@ -179,8 +201,8 @@ export async function fetchDetails(
       for (let i = 0; i < titles.length; i += CHUNK) {
         if (now() >= deadline) {
           report.outOfTime = true
-          return report
         }
+        if (report.outOfTime) return report
         const chunk = titles.slice(i, i + CHUNK)
         tried.push(...chunk.map(t => t.id))
         await runChunk(chunk, kind)

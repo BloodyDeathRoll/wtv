@@ -46,6 +46,12 @@ test('match: falls back to any year, then to the cast, nearest year first', asyn
   assert.deepEqual(byCast.looked, [71])
 })
 
+test('match: dummy season ids are ignored', async () => {
+  const { tmdb, looked } = fakeTmdb({ search: { 'דוקטור X|2026': [11] }, seasons: { 11: [1, 2] } })
+  assert.equal(await matchSeries(tmdb, doctorX, [1, 2]), null)
+  assert.deepEqual(looked, [])
+})
+
 test('match: no season ids or no confirmed hit gives null; a candidate is looked up once', async () => {
   const { tmdb, looked } = fakeTmdb({ search: { 'דוקטור X|2026': [11], 'דוקטור X|': [11] }, seasons: { 11: [1] } })
   assert.equal(await matchSeries(tmdb, doctorX, []), null)
@@ -53,11 +59,21 @@ test('match: no season ids or no confirmed hit gives null; a candidate is looked
   assert.deepEqual(looked, [11])
 })
 
-const movie = (ext_id: number): Pending => ({ id: ext_id, kind: 'movie', ext_id, name: `m${ext_id}`, year: 2020, cast_names: null, tmdb_id: null })
-const series = (ext_id: number, tmdb_id: number | null = null): Pending => ({ id: 1000 + ext_id, kind: 'series', ext_id, name: 'דוקטור X', year: 2026, cast_names: null, tmdb_id })
+const movie = (ext_id: number): Pending => ({ id: ext_id, kind: 'movie', ext_id, name: `m${ext_id}`, year: 2020, cast_names: null, tmdb_id: null, details_at: null })
+const series = (ext_id: number, tmdb_id: number | null = null, details_at: string | null = null): Pending => ({
+  id: 1000 + ext_id,
+  kind: 'series',
+  ext_id,
+  name: 'דוקטור X',
+  year: 2026,
+  cast_names: null,
+  tmdb_id,
+  details_at,
+})
 
-function fakeXtream(failing: number[] = []): Xtream {
+function fakeXtream(failing: number[] = [], onCall: () => void = () => {}): Xtream {
   const fail = (id: number) => {
+    onCall()
     if (failing.includes(id)) throw new Error(`get info ${id}: HTTP 503`)
   }
   return {
@@ -103,15 +119,16 @@ function fakeDb(pending: Pending[], pageSize = 1000) {
   return { db, upserts, rpcCalls }
 }
 
-const clock = (start = 0, step = 0) => {
-  let t = start
-  return () => (t += step)
+/** A clock that moves one tick per provider call. */
+function ticking() {
+  let t = 0
+  return { now: () => t, tick: () => void t++ }
 }
 
 test('details: movies get their TMDB id and backdrop; series their episodes and a matched id', async () => {
   const { db, upserts } = fakeDb([movie(1), movie(2), series(5)])
   const { tmdb } = fakeTmdb({ search: { 'דוקטור X|2026': [22] }, seasons: { 22: [460408] } })
-  const report = await fetchDetails(fakeXtream(), tmdb, db, 'prov1', 60_000, clock(1_794_900_000_000))
+  const report = await fetchDetails(fakeXtream(), tmdb, db, 'prov1', 60_000, () => 1_794_900_000_000)
   assert.deepEqual(report, { pending: 3, done: 3, withTmdbId: 2, episodes: 1, failed: 0, outOfTime: false })
 
   const titles = upserts.filter(u => u.table === 'titles').flatMap(u => u.rows)
@@ -129,12 +146,23 @@ test('details: movies get their TMDB id and backdrop; series their episodes and 
   assert.ok(upserts.findIndex(u => u.table === 'episodes' && u.rows.length > 0) < upserts.findLastIndex(u => u.table === 'titles'))
 })
 
-test('details: a series that already has a TMDB id is not searched again', async () => {
-  const { db, upserts } = fakeDb([series(5, 77)])
-  const { tmdb, looked } = fakeTmdb({})
+test('details: a series fetched before is not searched again, matched or not', async () => {
+  const { db, upserts } = fakeDb([series(5, 77, '2026-11-01T00:00:00Z'), series(6, null, '2026-11-01T00:00:00Z')])
+  const { tmdb, looked } = fakeTmdb({ search: { 'דוקטור X|2026': [22] }, seasons: { 22: [460408] } })
   await fetchDetails(fakeXtream(), tmdb, db, 'prov1', 60_000)
   assert.deepEqual(looked, [])
-  assert.equal(upserts.find(u => u.table === 'titles')?.rows[0]?.tmdb_id, 77)
+  assert.deepEqual(upserts.filter(u => u.table === 'titles').flatMap(u => u.rows.map(r => r.tmdb_id)), [77, null])
+  // Its episodes are still refreshed.
+  assert.equal(upserts.filter(u => u.table === 'episodes').flatMap(u => u.rows).length, 2)
+})
+
+test('details: titles not started by the deadline are left; finished ones in the chunk are written', async () => {
+  const { db, upserts } = fakeDb([movie(1), movie(2), movie(3)])
+  const clock = ticking()
+  const report = await fetchDetails(fakeXtream([], clock.tick), fakeTmdb({}).tmdb, db, 'prov1', 2, clock.now)
+  assert.equal(report.done, 2)
+  assert.equal(report.outOfTime, true)
+  assert.deepEqual(upserts.filter(u => u.table === 'titles').flatMap(u => u.rows.map(r => r.ext_id)), [1, 2])
 })
 
 test('details: a failing title is skipped and left for the next run', async () => {
@@ -147,11 +175,12 @@ test('details: a failing title is skipped and left for the next run', async () =
 test('details: stops at the time budget, keeping what was written', async () => {
   const pending = Array.from({ length: 250 }, (_, i) => movie(i + 10))
   const { db, upserts } = fakeDb(pending)
-  // Every clock read moves 100 s against a 150 s budget: the first chunk runs, the second does not start.
-  const report = await fetchDetails(fakeXtream(), fakeTmdb({}).tmdb, db, 'prov1', 150_000, clock(0, 100_000))
+  const clock = ticking()
+  // 150 ticks of budget: chunk 1 (100 titles) finishes, chunk 2 stops after 50.
+  const report = await fetchDetails(fakeXtream([], clock.tick), fakeTmdb({}).tmdb, db, 'prov1', 150, clock.now)
   assert.equal(report.outOfTime, true)
-  assert.equal(report.done, 100)
-  assert.equal(upserts.filter(u => u.table === 'titles').length, 1)
+  assert.equal(report.done, 150)
+  assert.deepEqual(upserts.filter(u => u.table === 'titles').map(u => u.rows.length), [100, 50])
 })
 
 test('details: many failures in a row stop the run', async () => {

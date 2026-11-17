@@ -41,6 +41,30 @@ test('429 is retried after the pause TMDB asks for', async () => {
   assert.deepEqual(pauses, [3000, 2000])
 })
 
+test('a pause asked for is capped at 30 s', async () => {
+  const pauses: number[] = []
+  const { fetchFn } = fakeFetch([new Response(null, { status: 429, headers: { 'retry-after': '3600' } }), Response.json({ results: [] })])
+  await createTmdb('KEY', fetchFn, async ms => void pauses.push(ms)).searchPerson('x')
+  assert.deepEqual(pauses, [30_000])
+})
+
+test('a 5xx or a dropped connection is retried once', async () => {
+  const ok = Response.json({ id: 1, seasons: [] })
+  assert.equal((await createTmdb('KEY', fakeFetch([new Response(null, { status: 502 }), ok]).fetchFn, noSleep).series(1)).id, 1)
+
+  let calls = 0
+  const dropOnce = (async () => {
+    if (calls++ === 0) throw new TypeError('fetch failed')
+    return Response.json({ id: 2, seasons: [] })
+  }) as typeof fetch
+  assert.equal((await createTmdb('KEY', dropOnce, noSleep).series(2)).id, 2)
+
+  await assert.rejects(
+    createTmdb('KEY', fakeFetch([new Response(null, { status: 503 }), new Response(null, { status: 503 })]).fetchFn, noSleep).series(3),
+    /tv\/3: HTTP 503/,
+  )
+})
+
 test('errors never contain the key', async () => {
   const cases = [
     fakeFetch([new Response(null, { status: 401 })]).fetchFn,
