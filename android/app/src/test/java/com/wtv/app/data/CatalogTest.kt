@@ -74,6 +74,11 @@ class CatalogTest {
         assertEquals(listOf(2L, 1L, 5L), cards.map { it.id })
     }
 
+    @Test fun `a copy whose card is missing is resolved to its card`() {
+        fun t(id: Int, primary: Boolean, group: Int?) = row("is_primary" to primary, "group_id" to group, "available" to true).put("id", id)
+        assertEquals(setOf(9L), cardsMissingFor(listOf(t(1, true, 1), t(2, false, 1), t(3, false, 9), t(4, false, null))))
+    }
+
     @Test fun `copy labels number several HD copies only`() {
         val k = Copy(1, 1, null, true)
         val hd = Copy(2, 2, null, false)

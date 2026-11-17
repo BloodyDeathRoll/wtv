@@ -58,9 +58,20 @@ enum class Section(@StringRes val label: Int) {
 
 /** A page opened over the section: a category's grid, a title, a person. */
 private sealed interface Page {
-    data class Grid(val category: Category) : Page
-    data class TitlePage(val title: Title) : Page
-    data class Person(val person: CastMember) : Page
+    /** Which page this is: the same person from two casts (different characters) is one page. */
+    val id: String
+
+    data class Grid(val category: Category) : Page {
+        override val id get() = "grid:${category.kind}:${category.id}"
+    }
+
+    data class TitlePage(val title: Title) : Page {
+        override val id get() = "title:${title.id}"
+    }
+
+    data class Person(val person: CastMember) : Page {
+        override val id get() = "person:${person.personId}"
+    }
 }
 
 /** A page on the stack, with the focus it should return to when it is on top again. */
@@ -84,9 +95,6 @@ fun WtvApp() {
     var railPage by rememberSaveable { mutableStateOf<RailItem?>(null) }
     // Pages opened over the section (grid, title, person), in order; Back pops one.
     val stack = remember { mutableStateListOf<Entry>() }
-    fun open(page: Page) {
-        stack += Entry(page)
-    }
     var tabsHaveFocus by remember { mutableStateOf(false) }
     // One per tab: Back focuses the selected tab, not the first one (which would switch section).
     val tabs = remember { Section.entries.associateWith { FocusRequester() } }
@@ -106,6 +114,14 @@ fun WtvApp() {
         parking = true
         runCatching { parked.requestFocus() }
         change()
+    }
+
+    // Opening a page already on the stack goes back to it, rather than stacking a
+    // second copy (person → title → the same person …).
+    fun open(page: Page) {
+        val existing = stack.indexOfFirst { it.page.id == page.id }
+        if (existing < 0) stack += Entry(page)
+        else if (existing < stack.lastIndex) close { stack.removeRange(existing + 1, stack.size) }
     }
 
     // Where the focus goes when the stack or the rail page changes. Going back,

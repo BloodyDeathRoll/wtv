@@ -19,17 +19,25 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
@@ -53,7 +61,13 @@ private sealed interface Load {
 fun PersonScreen(person: CastMember, firstFocus: FocusRequester, onOpen: (Title) -> Unit) {
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
     val hebrew = isHebrew()
-    val load by produceState<Load>(Load.Loading, person.personId) {
+    var attempt by remember { mutableIntStateOf(0) }
+    // The loading message holds the focus until the posters arrive. They take it
+    // unless the user pressed a key meanwhile (moved to the rail, say). Removing the
+    // message clears the focus, so "had the focus" cannot tell; a key press can.
+    var moved by remember { mutableStateOf(false) }
+    val load by produceState<Load>(Load.Loading, person.personId, attempt) {
+        value = Load.Loading
         value = try {
             Load.Ready(catalog.personTitles(person.personId))
         } catch (e: CancellationException) {
@@ -88,10 +102,10 @@ fun PersonScreen(person: CastMember, firstFocus: FocusRequester, onOpen: (Title)
         }
         Spacer(Modifier.height(24.dp))
         when (val state = load) {
-            Load.Loading -> Message(stringResource(R.string.loading), firstFocus)
-            is Load.Failed -> Message(stringResource(R.string.load_failed, state.message), firstFocus)
+            Load.Loading -> Message(stringResource(R.string.loading), firstFocus, onKey = { moved = true })
+            is Load.Failed -> Message(stringResource(R.string.load_failed, state.message), firstFocus, onKey = { moved = true }, onRetry = { moved = false; attempt++ })
             is Load.Ready ->
-                if (state.titles.isEmpty()) Message(stringResource(R.string.nothing_here), firstFocus)
+                if (state.titles.isEmpty()) Message(stringResource(R.string.nothing_here), firstFocus, onKey = { moved = true })
                 else {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(6),
@@ -108,16 +122,25 @@ fun PersonScreen(person: CastMember, firstFocus: FocusRequester, onOpen: (Title)
                             )
                         }
                     }
-                    // The loading message held the focus; the first poster takes it.
-                    LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
+                    // The loading message held the focus; the first poster takes it, unless the user has moved on.
+                    LaunchedEffect(Unit) { if (!moved) runCatching { firstFocus.requestFocus() } }
                 }
         }
     }
 }
 
+/** Loading, empty or error message; with `onRetry`, a Retry button holds the focus. */
 @Composable
-private fun Message(text: String, focus: FocusRequester) {
-    Box(Modifier.fillMaxSize().focusRequester(focus).focusable()) {
+private fun Message(text: String, focus: FocusRequester, onKey: () -> Unit, onRetry: (() -> Unit)? = null) {
+    val holder = Modifier.focusRequester(focus).onPreviewKeyEvent {
+        if (it.type == KeyEventType.KeyDown) onKey()
+        false
+    }
+    Column(Modifier.fillMaxSize().then(if (onRetry == null) holder.focusable() else Modifier)) {
         Text(text, style = MaterialTheme.typography.titleMedium, color = WtvColors.TextMuted)
+        if (onRetry != null) {
+            Spacer(Modifier.height(16.dp))
+            Button(onClick = onRetry, modifier = holder) { Text(stringResource(R.string.retry)) }
+        }
     }
 }
