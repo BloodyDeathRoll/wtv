@@ -11,7 +11,7 @@
 
 import { categoryNames } from './category-names.ts'
 import { createDb, type Db, type Row } from './db.ts'
-import { refreshGroups } from './groups.ts'
+import { refreshGroupsOrNull } from './groups.ts'
 import { createXtream, type Category, type Channel, type Title, type Xtream } from './xtream.ts'
 
 /**
@@ -160,6 +160,6 @@ if (import.meta.main) {
   const db = createDb({ url: env('SUPABASE_URL'), key: env('SUPABASE_SECRET_KEY') })
   const report = await syncCatalog(xtream, db, 'prov1')
   // New titles and category changes reach the cards.
-  console.log(JSON.stringify({ ...report, regrouped: await refreshGroups(db, 'prov1') }))
+  console.log(JSON.stringify({ ...report, regrouped: await refreshGroupsOrNull(db, 'prov1') }))
   if (report.distrusted.length > 0) process.exitCode = 1
 }

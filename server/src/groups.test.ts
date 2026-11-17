@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Db, Row } from './db.ts'
-import { refreshGroups } from './groups.ts'
+import { refreshGroups, refreshGroupsOrNull } from './groups.ts'
 
 function fakeDb(providers: Row[], answer: unknown) {
   const calls: [string, Row][] = []
@@ -21,6 +21,22 @@ test('calls the database function for the provider and returns the count', async
   const { db, calls } = fakeDb([{ id: 4 }], [21462])
   assert.equal(await refreshGroups(db, 'prov1'), 21462)
   assert.deepEqual(calls, [['refresh_title_groups', { p_provider: 4 }]])
+})
+
+test('the command-line form logs a failure, marks the run failed and returns null', async () => {
+  const { db } = fakeDb([], [0])
+  const before = process.exitCode
+  const errors: string[] = []
+  const log = console.error
+  console.error = (m: string) => void errors.push(m)
+  try {
+    assert.equal(await refreshGroupsOrNull(db, 'nope'), null)
+    assert.equal(process.exitCode, 1)
+    assert.deepEqual(errors, ['Regrouping failed: Unknown provider nope: run the sync first'])
+  } finally {
+    console.error = log
+    process.exitCode = before
+  }
 })
 
 test('an unknown provider is an error', async () => {
