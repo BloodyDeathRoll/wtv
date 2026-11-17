@@ -84,7 +84,8 @@ fun SearchScreen(field: FocusRequester, onOpen: (Title) -> Unit) {
             return@LaunchedEffect
         }
         delay(TYPING_PAUSE_MS)
-        results = Results.Searching
+        // Earlier results stay on screen until the new ones arrive: no flicker while typing.
+        if (results !is Results.Found) results = Results.Searching
         results = try {
             Results.Found(catalog.search(query, hebrew))
         } catch (e: CancellationException) {

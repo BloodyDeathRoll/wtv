@@ -168,11 +168,15 @@ class Catalog(private val api: Api) {
         return personCards(rows + cards)
     }
 
-    /** Cards whose name contains `query`, in English, Hebrew or the provider's own; best matches first. */
+    /** Cards whose name contains `query`, in English, Hebrew or the provider's own; names starting with it first. */
     suspend fun search(query: String, hebrew: Boolean): List<Title> {
-        val q = query.trim()
+        val q = query.replace("*", "").trim()
         if (q.isEmpty()) return emptyList()
-        return rankSearch(api.get(searchPath(q, hebrew)).objects().map(::title), q, hebrew)
+        return coroutineScope {
+            val startsWith = async { api.get(searchPath(q, hebrew, prefix = true)).objects().map(::title) }
+            val contains = async { api.get(searchPath(q, hebrew, prefix = false)).objects().map(::title) }
+            mergeSearch(startsWith.await(), contains.await())
+        }
     }
 
     /** Billed cast of a title, in order. */
@@ -260,13 +264,21 @@ internal fun personCards(rows: List<JSONObject>): List<Title> =
         .sortedWith(compareByDescending<Title> { it.year ?: Int.MIN_VALUE }.thenBy { it.id })
 
 /**
- * A substring search over the three names. The value is quoted for PostgREST's
- * `or=(…)` syntax (commas and parentheses in a query are text, not syntax) and
- * then URL-encoded. `*` is PostgREST's wildcard in `ilike`.
+ * Cards whose names start with (`prefix`) or contain `query`, over the three
+ * names. The value is quoted for PostgREST's `or=(…)` syntax (commas,
+ * parentheses and quotes are text) and URL-encoded. `*` is PostgREST's ilike
+ * wildcard; `%` and `_` in the query are escaped so they match themselves.
  */
-internal fun searchPath(query: String, hebrew: Boolean): String {
-    val quoted = "\"*" + query.replace("\\", "\\\\").replace("\"", "\\\"").replace("*", "") + "*\""
-    val or = "(sort_name_en.ilike.$quoted,sort_name_he.ilike.$quoted,name.ilike.$quoted)"
+internal fun searchPath(query: String, hebrew: Boolean, prefix: Boolean): String {
+    val literal = query
+        .replace("*", "")
+        .replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    // Inside a quoted PostgREST value, backslashes and quotes are escaped once more.
+    val quotedBody = literal.replace("\\", "\\\\").replace("\"", "\\\"")
+    val pattern = "\"" + (if (prefix) "" else "*") + quotedBody + "*\""
+    val or = "(sort_name_en.ilike.$pattern,sort_name_he.ilike.$pattern,name.ilike.$pattern)"
     return "titles?select=$TITLE_COLUMNS&is_primary=is.true&available=is.true" +
         "&or=${java.net.URLEncoder.encode(or, "UTF-8").replace("+", "%20")}" +
         "&order=${Sort.Name.order(hebrew)}&limit=$SEARCH_LIMIT"
@@ -274,14 +286,9 @@ internal fun searchPath(query: String, hebrew: Boolean): String {
 
 internal const val SEARCH_LIMIT = 60
 
-/** Names that start with the query first, then the rest; each group by name. */
-internal fun rankSearch(titles: List<Title>, query: String, hebrew: Boolean): List<Title> {
-    val q = query.trim().lowercase()
-    return titles.sortedWith(
-        compareBy<Title> { t -> if (t.displayName(hebrew).lowercase().startsWith(q) || t.name.lowercase().startsWith(q)) 0 else 1 }
-            .thenBy { it.displayName(hebrew).lowercase() },
-    )
-}
+/** Names that start with the query first (each fetched on its own, so the limit cannot cut them), then the rest. */
+internal fun mergeSearch(startsWith: List<Title>, contains: List<Title>): List<Title> =
+    (startsWith + contains).distinctBy { it.id }.take(SEARCH_LIMIT)
 
 internal const val EPISODES_PAGE = 1000
 

@@ -79,22 +79,32 @@ class CatalogTest {
         assertEquals(setOf(9L), cardsMissingFor(listOf(t(1, true, 1), t(2, false, 1), t(3, false, 9), t(4, false, null))))
     }
 
+    private fun decodedOr(path: String) = java.net.URLDecoder.decode(path.substringAfter("&or=").substringBefore("&"), "UTF-8")
+
     @Test fun `search quotes the query for the or filter and encodes it`() {
-        val path = searchPath("bad, (boys) \"x\"*", hebrew = false)
-        val or = java.net.URLDecoder.decode(path.substringAfter("&or=").substringBefore("&"), "UTF-8")
-        assertEquals(
-            "(sort_name_en.ilike.\"*bad, (boys) \\\"x\\\"*\",sort_name_he.ilike.\"*bad, (boys) \\\"x\\\"*\",name.ilike.\"*bad, (boys) \\\"x\\\"*\")",
-            or,
-        )
+        val or = decodedOr(searchPath("bad, (boys) \"x\"", hebrew = false, prefix = false))
+        val p = "\"*bad, (boys) \\\"x\\\"*\""
+        assertEquals("(sort_name_en.ilike.$p,sort_name_he.ilike.$p,name.ilike.$p)", or)
+        val path = searchPath("x", hebrew = false, prefix = false)
         assertTrue(path.contains("&is_primary=is.true"))
         assertTrue(path.contains("&order=sort_name_en.asc,id"))
-        assertTrue(searchPath("שוטר", hebrew = true).contains("&order=sort_name_he.asc,id"))
+        assertTrue(searchPath("שוטר", hebrew = true, prefix = false).contains("&order=sort_name_he.asc,id"))
     }
 
-    @Test fun `search ranks names starting with the query first`() {
-        fun t(id: Int, en: String) = title(row("title_en" to en).put("id", id))
-        val ranked = rankSearch(listOf(t(1, "The Bad Guys"), t(2, "Bad Boys II"), t(3, "Bad Boys")), "bad", hebrew = false)
-        assertEquals(listOf(3L, 2L, 1L), ranked.map { it.id })
+    @Test fun `a prefix search has no leading wildcard`() {
+        assertTrue(decodedOr(searchPath("bad", hebrew = false, prefix = true)).startsWith("(sort_name_en.ilike.\"bad*\","))
+    }
+
+    @Test fun `percent, underscore and backslash in a query match themselves`() {
+        // SQL LIKE escapes are \% \_ \; inside a quoted PostgREST value each backslash is doubled.
+        val or = decodedOr(searchPath("100%_a\\b", hebrew = false, prefix = false))
+        assertTrue(or, or.startsWith("(sort_name_en.ilike.\"*100\\\\%\\\\_a\\\\\\\\b*\","))
+    }
+
+    @Test fun `names starting with the query come first, each once, within the limit`() {
+        fun t(id: Int) = title(row().put("id", id))
+        assertEquals(listOf(3L, 4L, 1L, 2L), mergeSearch(listOf(t(3), t(4)), listOf(t(1), t(3), t(2), t(4))).map { it.id })
+        assertEquals(SEARCH_LIMIT, mergeSearch(List(50) { t(it) }, List(50) { t(100 + it) }).size)
     }
 
     @Test fun `copy labels number several HD copies only`() {
