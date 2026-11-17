@@ -97,6 +97,8 @@ test('writes every list under the provider and reports the counts', async () => 
     ['channels', 1],
   ])
 
+  assert.deepEqual(upserts[0]?.rows?.[0], { provider_id: 7, kind: 'movie', ext_id: 118, name: 'סרטים', name_en: 'Movies', name_he: 'סרטים', position: 0 })
+
   const movie = upserts[3]?.rows?.[0]
   assert.deepEqual(movie, {
     provider_id: 7,

@@ -9,6 +9,7 @@
  * Run: node --env-file=<env file> src/sync.ts
  */
 
+import { categoryNames } from './category-names.ts'
 import { createDb, type Db, type Row } from './db.ts'
 import { createXtream, type Category, type Channel, type Title, type Xtream } from './xtream.ts'
 
@@ -72,13 +73,18 @@ const channelRow = (providerId: number, seenAt: string) => (c: Channel): Row => 
   last_seen_at: seenAt,
 })
 
-const categoryRow = (providerId: number) => (c: Category): Row => ({
-  provider_id: providerId,
-  kind: c.kind,
-  ext_id: c.extId,
-  name: c.name,
-  position: c.position,
-})
+const categoryRow = (providerId: number) => (c: Category): Row => {
+  const { en, he } = categoryNames(c.name)
+  return {
+    provider_id: providerId,
+    kind: c.kind,
+    ext_id: c.extId,
+    name: c.name,
+    name_en: en,
+    name_he: he,
+    position: c.position,
+  }
+}
 
 export async function syncCatalog(xtream: Xtream, db: Db, providerName: string, now = new Date()): Promise<SyncReport> {
   await xtream.signIn()
