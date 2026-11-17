@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder launcher banner (320x180dp). Replaced by real artwork in P6-4. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <size android:width="320dp" android:height="180dp" />
+            <solid android:color="@color/background" />
+        </shape>
+    </item>
+    <item android:gravity="center" android:width="120dp" android:height="8dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#1A98FF" />
+        </shape>
+    </item>
+</layer-list>
