@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Replay
 import androidx.compose.material.icons.outlined.ThumbDown
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.runtime.Composable
@@ -51,9 +52,11 @@ import com.wtv.app.data.Copy
 import com.wtv.app.data.Episode
 import com.wtv.app.data.Genre
 import com.wtv.app.data.Kind
+import com.wtv.app.data.Progress
 import com.wtv.app.data.Title
 import com.wtv.app.data.asCopy
 import com.wtv.app.data.copyLabels
+import com.wtv.app.data.nextEpisode
 import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.components.ActionIcon
 import com.wtv.app.ui.components.Backdrop
@@ -76,13 +79,18 @@ private data class Extras(val cast: List<CastMember>, val copies: List<Copy>, va
  * A title's page: the header with Play and the title's actions; for a series
  * its seasons and episodes, the header following the focused episode; then the
  * cast. "Customers also liked" comes with P4-5.
+ *
+ * Play resumes: a movie where it stopped, a series at its next episode. The
+ * saved positions reload when `progressVersion` changes (a player closed).
+ * `onPlay` and `onPlayEpisode` take the second to start at.
  */
 @Composable
 fun TitleScreen(
     title: Title,
     play: FocusRequester,
-    onPlay: (Copy) -> Unit,
-    onPlayEpisode: (Episode) -> Unit,
+    progressVersion: Int,
+    onPlay: (Copy, Int) -> Unit,
+    onPlayEpisode: (Episode, Int) -> Unit,
     onPerson: (CastMember) -> Unit,
 ) {
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
@@ -96,17 +104,27 @@ fun TitleScreen(
             Extras(cast.await(), copies.await(), genres.await(), loaded = true)
         }
     }
-    var choosing by remember { mutableStateOf(false) }
-    // Play pressed before the copies arrived: answered once they do, so a 4K copy is not skipped.
-    var playPending by remember(title.id) { mutableStateOf(false) }
-    fun play() {
-        // Copies failed to load: play this copy.
-        if (extras.copies.size > 1) choosing = true else onPlay(extras.copies.firstOrNull() ?: title.asCopy())
+    // Saved positions, newest first; null until first loaded. A failed load counts as none.
+    val progress by produceState<List<Progress>?>(null, title.id, progressVersion) {
+        value = orDefault(emptyList()) { catalog.progress(title) }
     }
-    LaunchedEffect(extras.loaded, playPending) {
-        if (extras.loaded && playPending) {
-            playPending = false
-            play()
+    val movieStart = progress.orEmpty().firstOrNull { !it.isEpisode }?.resumeSecs ?: 0
+    // The second Play starts at: chosen with Play or Start over, used by the copy chooser.
+    var start by remember { mutableStateOf(0) }
+    var choosing by remember { mutableStateOf(false) }
+    // Play pressed before the copies (or positions) arrived: answered once they do, so a 4K copy is not skipped.
+    var playPending by remember(title.id) { mutableStateOf<Int?>(null) }
+    fun play(from: Int) {
+        start = from
+        // Copies failed to load: play this copy.
+        if (extras.copies.size > 1) choosing = true else onPlay(extras.copies.firstOrNull() ?: title.asCopy(), from)
+    }
+    LaunchedEffect(extras.loaded, progress, playPending) {
+        val pending = playPending
+        if (extras.loaded && progress != null && pending != null) {
+            playPending = null
+            // -1: Play pressed, start where the movie stopped.
+            play(if (pending < 0) movieStart else pending)
         }
     }
     var info by remember { mutableStateOf(false) }
@@ -115,20 +133,31 @@ fun TitleScreen(
     // Series: the episodes, a season at a time; the header shows the focused episode.
     // Null until loaded.
     val episodes by produceState<List<Episode>?>(if (title.kind == Kind.Series) null else emptyList(), title.id) {
-        if (title.kind == Kind.Series) value = orDefault(emptyList()) { catalog.episodes(title.id) }
+        if (title.kind == Kind.Series) value = orDefault(emptyList()) { catalog.episodes(title) }
     }
     val allEpisodes = episodes.orEmpty()
     val seasons = remember(allEpisodes) { allEpisodes.map { it.season }.distinct() }
     var season by remember(title.id) { mutableStateOf<Int?>(null) }
     val shownSeason = season ?: seasons.firstOrNull()
     val seasonEpisodes = remember(allEpisodes, shownSeason) { allEpisodes.filter { it.season == shownSeason } }
-    // Play on a series pressed before the episodes arrived: answered once they do.
+    val next = remember(allEpisodes, progress) { nextEpisode(allEpisodes, progress.orEmpty()) }
+    // Episode positions by season and number: the bar on each card, and where it starts.
+    val watched = remember(progress) { progress.orEmpty().filter { it.isEpisode }.distinctBy { it.season to it.episode }.associateBy { it.season to it.episode } }
+    // Play on a series pressed before the episodes (or positions) arrived: answered once they do.
     var episodePending by remember(title.id) { mutableStateOf(false) }
-    LaunchedEffect(episodes, episodePending) {
-        if (episodes != null && episodePending) {
+    LaunchedEffect(episodes, progress, episodePending) {
+        if (episodes != null && progress != null && episodePending) {
             episodePending = false
-            seasonEpisodes.firstOrNull()?.let(onPlayEpisode)
+            next?.let { onPlayEpisode(it.episode, it.startSecs) }
         }
+    }
+    // What the Play button says: Resume, "Play S1 E4" for the next episode, or Play.
+    val resuming = if (title.kind == Kind.Series) (next?.startSecs ?: 0) > 0 else movieStart > 0
+    val playLabel = when {
+        resuming -> stringResource(R.string.resume)
+        next != null && next.episode != allEpisodes.firstOrNull() ->
+            stringResource(R.string.play_episode, stringResource(R.string.season_episode, next.episode.season, next.episode.number))
+        else -> stringResource(R.string.play)
     }
     var episode by remember(title.id) { mutableStateOf<Episode?>(null) }
     // Focus outside the episodes row: the header is the title's again.
@@ -167,18 +196,27 @@ fun TitleScreen(
                     actions = {
                         Row(showsTitle, verticalAlignment = Alignment.CenterVertically) {
                             PlayButton(
-                                stringResource(R.string.play),
+                                playLabel,
                                 onClick = {
-                                    // TODO(P3-2): series resume at the next episode to watch.
                                     when {
-                                        title.kind != Kind.Series -> if (extras.loaded) play() else playPending = true
-                                        episodes == null -> episodePending = true
-                                        else -> seasonEpisodes.firstOrNull()?.let(onPlayEpisode)
+                                        title.kind != Kind.Series -> if (extras.loaded && progress != null) play(movieStart) else playPending = -1
+                                        episodes == null || progress == null -> episodePending = true
+                                        else -> next?.let { onPlayEpisode(it.episode, it.startSecs) }
                                     }
                                 },
                                 modifier = Modifier.focusRequester(play),
                             )
                             Spacer(Modifier.width(12.dp))
+                            if (resuming) {
+                                ActionIcon(
+                                    Icons.Outlined.Replay,
+                                    stringResource(R.string.start_over),
+                                    onClick = {
+                                        if (title.kind == Kind.Series) next?.let { onPlayEpisode(it.episode, 0) }
+                                        else if (extras.loaded) play(0) else playPending = 0
+                                    },
+                                )
+                            }
                             // TODO(P4-2): watchlist and ratings are stored with the ratings work.
                             ActionIcon(Icons.Outlined.Add, stringResource(R.string.add_to_watchlist), onClick = {})
                             ActionIcon(Icons.Outlined.FavoriteBorder, stringResource(R.string.rate_love), onClick = {})
@@ -195,7 +233,10 @@ fun TitleScreen(
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                     contentPadding = PaddingValues(top = 8.dp, bottom = 400.dp),
                 ) {
-                    if (seasonEpisodes.isNotEmpty()) {
+                    // A series' row is there from the start, empty while loading: the list keeps
+                    // its place by the first item, so a row inserted later above the cast
+                    // would land off screen.
+                    if (seasonEpisodes.isNotEmpty() || (title.kind == Kind.Series && episodes == null)) {
                         item(key = "episodes") {
                             Column {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -214,11 +255,13 @@ fun TitleScreen(
                                             contentPadding = PaddingValues(end = 48.dp, top = 6.dp, bottom = 6.dp),
                                         ) {
                                             items(seasonEpisodes, key = { it.id }) { e ->
+                                                val saved = watched[e.season to e.number]
                                                 LandscapeCard(
                                                     imageUrl = e.image ?: title.cardImage,
                                                     title = e.displayName(hebrew) ?: stringResource(R.string.episode_number, e.number),
                                                     label = stringResource(R.string.episode_number, e.number),
-                                                    onClick = { onPlayEpisode(e) },
+                                                    progress = saved?.fraction,
+                                                    onClick = { onPlayEpisode(e, saved?.resumeSecs ?: 0) },
                                                     onFocused = { episode = e },
                                                 )
                                             }
@@ -251,7 +294,7 @@ fun TitleScreen(
     }
 
     if (choosing) {
-        CopyChooser(extras.copies, onChoose = { choosing = false; onPlay(it) }, onDismiss = { choosing = false })
+        CopyChooser(extras.copies, onChoose = { choosing = false; onPlay(it, start) }, onDismiss = { choosing = false })
     }
     if (info) {
         MoreInfo(title, extras.cast, hebrew, onDismiss = { info = false })

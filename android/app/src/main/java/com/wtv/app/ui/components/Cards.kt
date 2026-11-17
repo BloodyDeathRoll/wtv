@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,7 +37,8 @@ private val CardShape = RoundedCornerShape(8.dp)
 /**
  * A focusable image card. Focus gives a white ring and a slight lift.
  * `label` is drawn on the image (episode cards: "Episode 2"); `onFocused`
- * lets the page header follow the focus.
+ * lets the page header follow the focus; `progress` (0–1) draws a watched
+ * bar along the bottom.
  */
 @Composable
 fun ImageCard(
@@ -47,6 +50,7 @@ fun ImageCard(
     modifier: Modifier = Modifier,
     label: String? = null,
     onFocused: () -> Unit = {},
+    progress: Float? = null,
 ) {
     Card(
         onClick = onClick,
@@ -94,6 +98,11 @@ fun ImageCard(
                     modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
                 )
             }
+            if (progress != null) {
+                Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color(0x66000000))) {
+                    Box(Modifier.fillMaxWidth(progress).height(4.dp).background(WtvColors.Accent))
+                }
+            }
         }
     }
 }
@@ -107,7 +116,8 @@ fun LandscapeCard(
     modifier: Modifier = Modifier,
     label: String? = null,
     onFocused: () -> Unit = {},
-) = ImageCard(imageUrl, title, onClick, width = 200.dp, aspectRatio = 16f / 9f, modifier, label, onFocused)
+    progress: Float? = null,
+) = ImageCard(imageUrl, title, onClick, width = 200.dp, aspectRatio = 16f / 9f, modifier, label, onFocused, progress)
 
 /** 2:3 card for the full category grid and posters. */
 @Composable

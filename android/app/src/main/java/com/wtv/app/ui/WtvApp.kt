@@ -16,9 +16,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,6 +39,7 @@ import androidx.tv.material3.TabRow
 import androidx.tv.material3.TabRowDefaults
 import androidx.tv.material3.Text
 import com.wtv.app.R
+import com.wtv.app.WtvApplication
 import com.wtv.app.data.CastMember
 import com.wtv.app.data.Category
 import com.wtv.app.data.Kind
@@ -56,6 +59,9 @@ import com.wtv.app.ui.search.SearchScreen
 import com.wtv.app.ui.settings.SettingsScreen
 import com.wtv.app.ui.theme.WtvColors
 import com.wtv.app.ui.title.TitleScreen
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** The four sections in the top tabs. */
 enum class Section(@StringRes val label: Int) {
@@ -91,7 +97,8 @@ private sealed interface Page {
         override val id get() = "settings"
     }
 
-    data class Player(val url: String, val title: String) : Page {
+    /** `titleId` is the copy played; `episodeId` set for an episode. */
+    data class Player(val url: String, val title: String, val titleId: Long, val episodeId: Long?, val startSecs: Int) : Page {
         override val id get() = "player"
     }
 }
@@ -153,13 +160,29 @@ fun WtvApp() {
     val seasonEpisode = stringResource(R.string.season_episode)
     val noLogin = stringResource(R.string.provider_missing)
     // Play: the stream needs the provider login; without one, Settings opens on it.
-    fun play(kind: StreamKind, extId: Long, containerExt: String?, title: String) {
+    fun play(kind: StreamKind, titleId: Long, episodeId: Long?, extId: Long, containerExt: String?, title: String, startSecs: Int) {
         val login = ProviderLogin.load(context)
         if (login == null || !login.isComplete) {
             Toast.makeText(context, noLogin, Toast.LENGTH_LONG).show()
             open(Page.Settings(providerFirst = true))
         } else {
-            open(Page.Player(streamUrl(login, kind, extId, containerExt), title))
+            open(Page.Player(streamUrl(login, kind, extId, containerExt), title, titleId, episodeId, startSecs))
+        }
+    }
+
+    // Saved positions. One save at a time, in order, so an older position never lands after a newer one.
+    // The pages showing positions reload when the player's last save is in.
+    val catalog = (context.applicationContext as WtvApplication).catalog
+    val scope = rememberCoroutineScope()
+    val saving = remember { Mutex() }
+    var progressVersion by remember { mutableIntStateOf(0) }
+    fun saveProgress(p: Page.Player, positionSecs: Int, durationSecs: Int?, final: Boolean) {
+        scope.launch {
+            saving.withLock {
+                // shortcut: a failed save is dropped; the next one (every 15 s) carries the position.
+                runCatching { catalog.saveProgress(p.titleId, p.episodeId, positionSecs, durationSecs) }
+            }
+            if (final) progressVersion++
         }
     }
 
@@ -199,7 +222,15 @@ fun WtvApp() {
             }
             Box(Modifier.onFocusChanged { if (it.hasFocus) lastOnTabs = false }) {
                 if (source == null) Placeholder(stringResource(section.label), page)
-                else BrowseScreen(source, firstFocus = page, up = selectedTab, onMore = { open(Page.Grid(it)) }, onOpen = { open(Page.TitlePage(it)) })
+                else BrowseScreen(
+                    source,
+                    firstFocus = page,
+                    up = selectedTab,
+                    progressVersion = progressVersion,
+                    tabsFocused = tabsHaveFocus,
+                    onMore = { open(Page.Grid(it)) },
+                    onOpen = { open(Page.TitlePage(it)) },
+                )
             }
             TabRow(
                 selectedTabIndex = section.ordinal,
@@ -252,16 +283,25 @@ fun WtvApp() {
                         is Page.TitlePage -> TitleScreen(
                             p.title,
                             play = entry.first,
-                            onPlay = { copy -> play(StreamKind.Movie, copy.extId, copy.containerExt, p.title.displayName(hebrew)) },
-                            onPlayEpisode = { e ->
-                                play(StreamKind.Episode, e.extId, e.containerExt, "${p.title.displayName(hebrew)} · ${seasonEpisode.format(e.season, e.number)}")
+                            progressVersion = progressVersion,
+                            onPlay = { copy, start -> play(StreamKind.Movie, copy.id, null, copy.extId, copy.containerExt, p.title.displayName(hebrew), start) },
+                            onPlayEpisode = { e, start ->
+                                val name = "${p.title.displayName(hebrew)} · ${seasonEpisode.format(e.season, e.number)}"
+                                play(StreamKind.Episode, p.title.id, e.id, e.extId, e.containerExt, name, start)
                             },
                             onPerson = { open(Page.Person(it)) },
                         )
                         is Page.Person -> PersonScreen(p.person, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
                         Page.Search -> SearchScreen(field = entry.first, onOpen = { open(Page.TitlePage(it)) })
                         is Page.Settings -> SettingsScreen(firstFocus = entry.first, providerFirst = p.providerFirst)
-                        is Page.Player -> PlayerScreen(p.url, p.title, firstFocus = entry.first, onClose = { close { stack.removeAt(stack.lastIndex) } })
+                        is Page.Player -> PlayerScreen(
+                            p.url,
+                            p.title,
+                            startSecs = p.startSecs,
+                            firstFocus = entry.first,
+                            onProgress = { position, duration, final -> saveProgress(p, position, duration, final) },
+                            onClose = { close { stack.removeAt(stack.lastIndex) } },
+                        )
                     }
                 }
             }

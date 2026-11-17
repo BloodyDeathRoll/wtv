@@ -66,4 +66,8 @@
     <string name="play_failed">This could not be played (%1$s)</string>
     <string name="provider_incomplete">Fill in all three fields</string>
     <string name="provider_save_failed">Could not save on this device</string>
+    <string name="row_continue">Continue watching</string>
+    <string name="resume">Resume</string>
+    <string name="start_over">Start over</string>
+    <string name="play_episode">Play %1$s</string>
 </resources>
