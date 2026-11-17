@@ -84,12 +84,14 @@ fun SearchScreen(field: FocusRequester, onOpen: (Title) -> Unit) {
 
     // A new query cancels the search of the previous one.
     LaunchedEffect(query, hebrew, searchNow) {
+        val fromSearchKey = searchNow != seenSearchNow
+        seenSearchNow = searchNow
         if (query.isBlank()) {
+            // Search on an empty field asks for nothing: no pending focus move either.
+            focusResults = false
             results = Results.Idle
             return@LaunchedEffect
         }
-        val fromSearchKey = searchNow != seenSearchNow
-        seenSearchNow = searchNow
         // A typed key started this search: any earlier "move to the results" is void.
         if (!fromSearchKey) {
             focusResults = false
