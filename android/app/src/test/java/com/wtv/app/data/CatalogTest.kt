@@ -67,6 +67,11 @@ class CatalogTest {
         assertEquals("Drama", Genre("Drama", null).label(hebrew = true))
     }
 
+    @Test fun `only a real rejection of the refresh token counts, never a rate limit or a server error`() {
+        for (code in listOf(400, 401, 403, 404, 422)) assertTrue("$code", isRejection(code))
+        for (code in listOf(408, 429, 500, 502, 503)) assertFalse("$code", isRejection(code))
+    }
+
     @Test fun `an access token is used until a minute before it expires`() {
         assertTrue(isFresh(expiresAtSeconds = 1000, nowSeconds = 939))
         assertFalse(isFresh(expiresAtSeconds = 1000, nowSeconds = 940))

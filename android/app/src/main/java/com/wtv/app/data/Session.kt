@@ -28,9 +28,13 @@ class Session(context: Context, private val http: OkHttpClient) {
         current() ?: refresh() ?: signUpAnonymously()
     }
 
-    /** Forget the access token (the server refused it); the next call refreshes. */
-    fun invalidate() {
-        prefs.edit().remove(ACCESS).apply()
+    /**
+     * The server refused `rejected`: forget it, so the next call refreshes. A
+     * token another request has stored meanwhile is kept, so parallel 401s
+     * cause one refresh, not one each.
+     */
+    suspend fun invalidate(rejected: String) = lock.withLock {
+        if (prefs.getString(ACCESS, null) == rejected) prefs.edit().remove(ACCESS).apply()
     }
 
     private fun current(): String? {
@@ -67,7 +71,7 @@ class Session(context: Context, private val http: OkHttpClient) {
         } catch (e: IOException) {
             throw ApiException("No connection to the server")
         }
-        if (code in REJECTED) throw AuthRejected(code)
+        if (isRejection(code)) throw AuthRejected(code)
         // Anything else, 429 and 5xx included, is passing trouble: never a reason to make a new user.
         if (code !in 200..299) throw ApiException("Sign-in failed (HTTP $code)")
         val session = runCatching { JSONObject(text) }.getOrNull()
@@ -89,12 +93,16 @@ class Session(context: Context, private val http: OkHttpClient) {
         const val ACCESS = "access_token"
         const val REFRESH = "refresh_token"
         const val EXPIRES_AT = "expires_at"
-
-        /** The answers that mean "this refresh token is no good" (Supabase uses 400 for an invalid one). */
-        val REJECTED = setOf(400, 401, 403, 404, 422)
         val JSON = "application/json".toMediaType()
     }
 }
+
+/**
+ * The auth answers that mean "this refresh token is no good" (Supabase uses
+ * 400 for an invalid one). Anything else, 429 and 5xx included, is passing
+ * trouble and never a reason to make a new user.
+ */
+internal fun isRejection(code: Int): Boolean = code in setOf(400, 401, 403, 404, 422)
 
 /** An access token is used until a minute before it expires. */
 internal fun isFresh(expiresAtSeconds: Long, nowSeconds: Long): Boolean = nowSeconds < expiresAtSeconds - 60

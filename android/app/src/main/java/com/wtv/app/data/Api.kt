@@ -15,10 +15,11 @@ class Api(private val session: Session, private val http: OkHttpClient) {
     /** `path` is a PostgREST path and query, e.g. `titles?select=id&limit=10`. */
     suspend fun get(path: String): JSONArray = withContext(Dispatchers.IO) {
         val what = path.substringBefore('?')
-        var result = call(path, session.token(), what)
+        val token = session.token()
+        var result = call(path, token, what)
         if (result.first == 401) {
             // Expired or revoked: one retry with a fresh token.
-            session.invalidate()
+            session.invalidate(token)
             result = call(path, session.token(), what)
         }
         val (code, body) = result
