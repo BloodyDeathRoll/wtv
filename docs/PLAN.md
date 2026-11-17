@@ -137,7 +137,7 @@ Credentials stay in `.env.local` (`XTREAM_PROV1_USER`, `XTREAM_PROV1_PASSWORD`,
 | # | Point | Decide by |
 |---|---|---|
 | O1 | How many provider titles WTW can score. Measured in P1-5. | End of phase 1 |
-| O2 | Where the sync job runs (GitHub Actions schedule, or a small host). | P0-3 |
+| O2 | ~~Where the sync job runs.~~ Decided 2026-11-17: GitHub Actions, every 4 hours (`.github/workflows/sync.yml`). | P0-3 |
 | O3 | Subtitle source. The provider lists none, so embedded tracks only, or an outside source as well. | P3-4 |
 | O4 | Exact sign-in flow on a TV (Google on the device, or a code entered on a phone). Tested in P4-1. | P4-1 |
 | O5 | How the app gets provider credentials in version 1 (typed in settings, or delivered after sign-in). | P6-1 |

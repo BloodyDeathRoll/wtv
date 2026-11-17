@@ -1,0 +1,39 @@
+name: Catalog sync
+
+# Copies the provider's catalog into the WTV database (server/src/sync.ts).
+# GitHub emails the repo owner when a scheduled run fails.
+on:
+  schedule:
+    - cron: '17 */4 * * *'
+  workflow_dispatch:
+
+# Never two syncs at once; a queued run waits for the running one.
+concurrency:
+  group: catalog-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: server/.nvmrc
+
+      # No install: the sync has no runtime dependencies.
+      - name: Sync
+        working-directory: server
+        run: node src/sync.ts
+        env:
+          XTREAM_PROV1_SERVER: ${{ secrets.XTREAM_PROV1_SERVER }}
+          XTREAM_PROV1_USER: ${{ secrets.XTREAM_PROV1_USER }}
+          XTREAM_PROV1_PASSWORD: ${{ secrets.XTREAM_PROV1_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
