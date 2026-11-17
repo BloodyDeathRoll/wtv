@@ -63,6 +63,8 @@ jobs:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
 
       - name: Enrich
+        # Independent of the provider: runs even when an earlier step failed.
+        if: ${{ !cancelled() }}
         timeout-minutes: 12
         working-directory: server
         run: node src/enrich.ts
@@ -73,6 +75,8 @@ jobs:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
 
       - name: WTW match
+        # Independent of the provider: runs even when an earlier step failed.
+        if: ${{ !cancelled() }}
         timeout-minutes: 3
         working-directory: server
         run: node src/wtw-match.ts

@@ -44,6 +44,8 @@ const MAX_FAILURES_IN_A_ROW = 25
 
 const blank = (s: string | null | undefined) => (s && s.trim() !== '' ? s.trim() : null)
 
+const notSame = (he: string | null, en: string | null) => (he !== null && he === en ? null : he)
+
 /** TMDB's stand-in for an episode with no name ("Episode 3", "פרק 3"): the app writes its own. */
 export function episodeName(name: string | null | undefined): string | null {
   const n = blank(name)
@@ -128,9 +130,9 @@ export async function enrich(tmdb: Tmdb, db: Db, providerName: string, budgetMs:
       if (halted() || outOfTime()) return
       try {
         const full = kind === 'movie' ? await tmdb.movieFull(t.tmdb_id) : await tmdb.seriesFull(t.tmdb_id)
-        const base = { provider_id: providerId, kind: t.kind, ext_id: t.ext_id, name: t.name }
+        const base = { provider_id: providerId, kind: t.kind, ext_id: t.ext_id, name: t.name, enriched_tmdb_id: t.tmdb_id }
         if (full === null) {
-          // TMDB dropped the id: mark it done so it is not asked again.
+          // TMDB has no such id: done with empty fields, until the TMDB id changes.
           titleRows.push({ ...base, ...emptyEnrichment, enriched_at: enrichedAt })
           failuresInARow = 0
           return
@@ -142,20 +144,26 @@ export async function enrich(tmdb: Tmdb, db: Db, providerName: string, budgetMs:
         if (series) {
           const mine = stored.filter(e => e.title_id === t.id)
           for (const number of [...new Set(mine.map(e => e.season))]) {
+            // A long series stops between seasons at the deadline; it is not
+            // written, not counted as failed, and is done whole next run.
+            if (outOfTime()) return
             const [en, heSeason] = await Promise.all([tmdb.season(t.tmdb_id, number, 'en-US'), tmdb.season(t.tmdb_id, number, 'he-IL')])
             for (const e of mine.filter(x => x.season === number)) {
               const enEp = en?.episodes.find(x => x.episode_number === e.episode)
               const heEp = heSeason?.episodes.find(x => x.episode_number === e.episode)
               if (!enEp && !heEp) continue
+              const nameEn = episodeName(enEp?.name)
+              const overviewEn = blank(enEp?.overview)
               seasonEpisodes.push({
                 title_id: t.id,
                 ext_id: e.ext_id,
                 season: e.season,
                 episode: e.episode,
-                name_en: episodeName(enEp?.name),
-                overview_en: blank(enEp?.overview),
-                name_he: episodeName(heEp?.name),
-                overview_he: blank(heEp?.overview),
+                name_en: nameEn,
+                overview_en: overviewEn,
+                // TMDB may answer he-IL with the English text; the app falls back to English anyway.
+                name_he: notSame(episodeName(heEp?.name), nameEn),
+                overview_he: notSame(blank(heEp?.overview), overviewEn),
                 tmdb_still: enEp?.still_path ?? heEp?.still_path ?? null,
               })
             }
@@ -178,7 +186,7 @@ export async function enrich(tmdb: Tmdb, db: Db, providerName: string, budgetMs:
         })
         topCast(movie ? movie.credits.cast : series!.aggregate_credits.cast).forEach((c, position) => {
           people.set(c.id, { tmdb_id: c.id, name: c.name, profile: c.profile_path })
-          castRows.push({ title_id: t.id, person_id: c.id, position, character: blank(c.character ?? c.roles?.[0]?.character) })
+          castRows.push({ title_id: t.id, person_id: c.id, position, character: blank(c.character) ?? blank(c.roles?.[0]?.character) })
         })
         episodeRows.push(...seasonEpisodes)
         failuresInARow = 0

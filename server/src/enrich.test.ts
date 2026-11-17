@@ -34,7 +34,8 @@ const seriesFull = (over: Partial<TmdbSeriesFull> = {}): TmdbSeriesFull => ({
   poster_path: '/hp.jpg',
   backdrop_path: null,
   episode_run_time: [44],
-  aggregate_credits: { cast: [{ id: 41419, name: 'Hugh Laurie', profile_path: '/hl.jpg', order: 0, roles: [{ character: 'Gregory House' }] }] },
+  // An empty `character` falls through to the series role.
+  aggregate_credits: { cast: [{ id: 41419, name: 'Hugh Laurie', profile_path: '/hl.jpg', order: 0, character: '', roles: [{ character: 'Gregory House' }] }] },
   content_ratings: { results: [{ iso_3166_1: 'US', rating: 'TV-14' }] },
   translations: translations({ name: 'האוס', overview: '' }),
   ...over,
@@ -137,7 +138,7 @@ test('a movie gets English and Hebrew text, genres, certification, images and ca
     { kind: 'series', id: 18, name_en: 'English', name_he: 'עברית' },
   ])
   assert.deepEqual(rows('titles'), [{
-    provider_id: 7, kind: 'movie', ext_id: 387982, name: 'החיה',
+    provider_id: 7, kind: 'movie', ext_id: 387982, name: 'החיה', enriched_tmdb_id: 1185344,
     title_en: 'The Beast', title_he: 'החיה', overview_en: 'A hostile army…', overview_he: 'כשצבא עוין…',
     tmdb_genre_ids: [28], certification: 'R', tmdb_rating: 5.1, original_language: 'en',
     tmdb_poster: '/p.jpg', tmdb_backdrop: '/b.jpg', tmdb_runtime_min: 99, enriched_at: when,
@@ -156,19 +157,22 @@ test('a series gets episode names in both languages for the seasons the provider
   const episodes = [
     { id: 1, title_id: 20, ext_id: 501, season: 1, episode: 1 },
     { id: 2, title_id: 20, ext_id: 502, season: 1, episode: 2 },
+    { id: 3, title_id: 20, ext_id: 503, season: 1, episode: 3 },
   ]
   const { tmdb, seasonCalls } = fakeTmdb({}, { 1408: seriesFull() }, {
-    '1408/1/en-US': { episodes: [{ episode_number: 1, name: 'Pilot', overview: 'A teacher collapses.', still_path: '/s1.jpg' }, { episode_number: 2, name: 'Episode 2', overview: '', still_path: null }] },
-    '1408/1/he-IL': { episodes: [{ episode_number: 1, name: 'פיילוט', overview: 'מורה מתמוטטת.', still_path: '/s1.jpg' }] },
+    '1408/1/en-US': { episodes: [{ episode_number: 1, name: 'Pilot', overview: 'A teacher collapses.', still_path: '/s1.jpg' }, { episode_number: 2, name: 'Episode 2', overview: '', still_path: null }, { episode_number: 3, name: '2112', overview: 'Same text.', still_path: null }] },
+    '1408/1/he-IL': { episodes: [{ episode_number: 1, name: 'פיילוט', overview: 'מורה מתמוטטת.', still_path: '/s1.jpg' }, { episode_number: 3, name: '2112', overview: 'Same text.', still_path: null }] },
   })
   const { db, rows } = fakeDb([series], episodes)
   const report = await enrich(tmdb, db, 'prov1', 60_000, () => at)
   assert.deepEqual(seasonCalls, ['1408/1/en-US', '1408/1/he-IL'])
-  assert.equal(report.episodes, 2)
+  assert.equal(report.episodes, 3)
   assert.equal(report.withHebrew, 0) // Hebrew name but an empty Hebrew synopsis
   assert.deepEqual(rows('episodes'), [
     { title_id: 20, ext_id: 501, season: 1, episode: 1, name_en: 'Pilot', overview_en: 'A teacher collapses.', name_he: 'פיילוט', overview_he: 'מורה מתמוטטת.', tmdb_still: '/s1.jpg' },
     { title_id: 20, ext_id: 502, season: 1, episode: 2, name_en: null, overview_en: null, name_he: null, overview_he: null, tmdb_still: null },
+    // The Hebrew answer repeats the English text: stored once, in English.
+    { title_id: 20, ext_id: 503, season: 1, episode: 3, name_en: '2112', overview_en: 'Same text.', name_he: null, overview_he: null, tmdb_still: null },
   ])
   const title = rows('titles')[0]
   assert.equal(title?.title_he, 'האוס')
@@ -180,10 +184,33 @@ test('a series gets episode names in both languages for the seasons the provider
 test('a TMDB id TMDB no longer has is marked done with empty fields; a failing one is left', async () => {
   const gone: Pending = { id: 30, kind: 'movie', ext_id: 1, name: 'gone', tmdb_id: 111 }
   const failing: Pending = { id: 31, kind: 'movie', ext_id: 2, name: 'failing', tmdb_id: 222 }
-  const { db, rows } = fakeDb([gone, failing])
+  const { db, rows, writes } = fakeDb([gone, failing])
   const report = await enrich(fakeTmdb({ 111: null }, {}).tmdb, db, 'prov1', 60_000, () => at)
   assert.equal(report.failed, 1)
-  assert.deepEqual(rows('titles').map(r => [r.ext_id, r.title_en, r.enriched_at]), [[1, null, when]])
+  assert.deepEqual(rows('titles').map(r => [r.ext_id, r.title_en, r.enriched_tmdb_id, r.enriched_at]), [[1, null, 111, when]])
+  // Its old cast is removed; the failing title's is not touched.
+  assert.deepEqual(writes.filter(w => w.op === 'remove').map(w => w.filter), ['title_id=in.(30)'])
+})
+
+test('many failures in a row stop the run', async () => {
+  const pending = Array.from({ length: 40 }, (_, i): Pending => ({ id: i, kind: 'movie', ext_id: i, name: 'x', tmdb_id: 1000 + i }))
+  const { db } = fakeDb(pending)
+  await assert.rejects(enrich(fakeTmdb({}, {}).tmdb, db, 'prov1', 60_000, () => at), /Stopped after 25 failures in a row; last: movie\/\d+: HTTP 500/)
+})
+
+test('a long series stops between seasons at the deadline, unwritten and not failed', async () => {
+  const series: Pending = { id: 20, kind: 'series', ext_id: 5, name: 'x', tmdb_id: 1408 }
+  const episodes = [1, 2, 3].map(season => ({ id: season, title_id: 20, ext_id: 500 + season, season, episode: 1 }))
+  const { tmdb, seasonCalls } = fakeTmdb({}, { 1408: seriesFull() })
+  const { db, rows } = fakeDb([series], episodes)
+  let t = 0
+  // Budget 10: deadline read, chunk check, enrichedAt, then the title check and season 1 pass; season 2 does not.
+  const clock = () => (t++ < 5 ? 0 : 100)
+  const report = await enrich(tmdb, db, 'prov1', 10, clock)
+  assert.equal(report.outOfTime, true)
+  assert.equal(report.failed, 0)
+  assert.deepEqual(seasonCalls, ['1408/1/en-US', '1408/1/he-IL'])
+  assert.deepEqual(rows('titles'), [])
 })
 
 test('stops at the time budget', async () => {
