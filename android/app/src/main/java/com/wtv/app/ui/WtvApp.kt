@@ -118,6 +118,8 @@ fun WtvApp() {
     // Pages opened over the section (grid, title, person), in order; Back pops one.
     val stack = remember { mutableStateListOf<Entry>() }
     var tabsHaveFocus by remember { mutableStateOf(false) }
+    // Whether the focus was on the tabs (rather than the page) before it went to the rail: the arrow back returns there.
+    var lastOnTabs by remember { mutableStateOf(false) }
     // One per tab: Back focuses the selected tab, not the first one (which would switch section).
     val tabs = remember { Section.entries.associateWith { FocusRequester() } }
     val selectedTab = tabs.getValue(section)
@@ -195,14 +197,19 @@ fun WtvApp() {
                 Section.Series -> BrowseSource.Section(Kind.Series)
                 Section.LiveTv -> null
             }
-            if (source == null) Placeholder(stringResource(section.label), page)
-            else BrowseScreen(source, firstFocus = page, up = selectedTab, onMore = { open(Page.Grid(it)) }, onOpen = { open(Page.TitlePage(it)) })
+            Box(Modifier.onFocusChanged { if (it.hasFocus) lastOnTabs = false }) {
+                if (source == null) Placeholder(stringResource(section.label), page)
+                else BrowseScreen(source, firstFocus = page, up = selectedTab, onMore = { open(Page.Grid(it)) }, onOpen = { open(Page.TitlePage(it)) })
+            }
             TabRow(
                 selectedTabIndex = section.ordinal,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(start = 88.dp, top = 18.dp)
-                    .onFocusChanged { tabsHaveFocus = it.hasFocus },
+                    .onFocusChanged {
+                        tabsHaveFocus = it.hasFocus
+                        if (it.hasFocus) lastOnTabs = true
+                    },
                 indicator = { positions, rowHasFocus ->
                     positions.getOrNull(section.ordinal)?.let {
                         TabRowDefaults.PillIndicator(
@@ -259,7 +266,8 @@ fun WtvApp() {
                 }
             }
         }
-        railPage?.let { Placeholder(stringResource(it.label), remember { FocusRequester() }) }
+        val railFocus = remember { FocusRequester() }
+        railPage?.let { Placeholder(stringResource(it.label), railFocus) }
         // Not over the video: the player is the whole screen.
         if (stack.lastOrNull()?.page !is Page.Player) SideRail(
             onSelect = {
@@ -276,6 +284,15 @@ fun WtvApp() {
                         open(Page.Settings())
                     }
                     else -> railPage = it
+                }
+            },
+            onLeave = {
+                val top = stack.lastOrNull()
+                when {
+                    railOpen -> runCatching { railFocus.requestFocus() }
+                    top != null -> top.memory.restore(fallback = top.first)
+                    lastOnTabs -> runCatching { selectedTab.requestFocus() }
+                    else -> baseMemory.restore(fallback = page)
                 }
             },
             modifier = Modifier.align(Alignment.CenterStart),
