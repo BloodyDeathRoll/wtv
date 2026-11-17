@@ -37,4 +37,13 @@
     <string name="info_rating">דירוג</string>
     <string name="close">סגירה</string>
     <string name="info_rating_value">%1$.1f / 10 (TMDB)</string>
+    <string name="row_episodes">עונות ופרקים</string>
+    <string name="season_number">עונה %1$d</string>
+    <string name="episode_number">פרק %1$d</string>
+    <string name="season_episode">ע%1$d פ%2$d</string>
+    <plurals name="seasons">
+        <item quantity="one">עונה אחת</item>
+        <item quantity="two">%1$d עונות</item>
+        <item quantity="other">%1$d עונות</item>
+    </plurals>
 </resources>

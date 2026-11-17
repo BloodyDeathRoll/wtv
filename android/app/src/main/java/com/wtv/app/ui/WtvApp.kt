@@ -182,8 +182,8 @@ fun WtvApp() {
         }
         opened?.let { title ->
             Layer(blocked = top != Top.Title, memory = titleMemory, opaque = true) {
-                // TODO(P3-1): play the chosen copy. TODO(P2-8): the person page.
-                TitleScreen(title, play = titleFirst, onPlay = {}, onPerson = {})
+                // TODO(P3-1): play the chosen copy or episode. TODO(P2-8): the person page.
+                TitleScreen(title, play = titleFirst, onPlay = {}, onPlayEpisode = {}, onPerson = {})
             }
         }
         railPage?.let { Placeholder(stringResource(it.label), remember { FocusRequester() }) }

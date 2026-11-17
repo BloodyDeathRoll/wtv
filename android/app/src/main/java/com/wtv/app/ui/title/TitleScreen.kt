@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -31,50 +33,66 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.Button
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.FilterChip
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.wtv.app.R
 import com.wtv.app.WtvApplication
 import com.wtv.app.data.CastMember
 import com.wtv.app.data.Copy
+import com.wtv.app.data.Episode
 import com.wtv.app.data.Genre
 import com.wtv.app.data.Kind
 import com.wtv.app.data.Title
 import com.wtv.app.data.asCopy
 import com.wtv.app.data.copyLabels
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.components.ActionIcon
 import com.wtv.app.ui.components.Backdrop
 import com.wtv.app.ui.components.HeroText
+import com.wtv.app.ui.components.LandscapeCard
 import com.wtv.app.ui.components.MetaRow
 import com.wtv.app.ui.components.PersonCard
 import com.wtv.app.ui.components.PlayButton
 import com.wtv.app.ui.components.RowTitle
+import com.wtv.app.ui.components.RowsAtTop
+import com.wtv.app.ui.components.Sideways
 import com.wtv.app.ui.theme.WtvColors
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 private data class Extras(val cast: List<CastMember>, val copies: List<Copy>, val genres: Map<Pair<Kind, Int>, Genre>, val loaded: Boolean)
 
 /**
- * A title's page: the header with Play and the title's actions, then its cast.
- * Episodes (series) and "Customers also liked" come with P2-7 and P4-5.
+ * A title's page: the header with Play and the title's actions; for a series
+ * its seasons and episodes, the header following the focused episode; then the
+ * cast. "Customers also liked" comes with P4-5.
  */
 @Composable
-fun TitleScreen(title: Title, play: FocusRequester, onPlay: (Copy) -> Unit, onPerson: (CastMember) -> Unit) {
+fun TitleScreen(
+    title: Title,
+    play: FocusRequester,
+    onPlay: (Copy) -> Unit,
+    onPlayEpisode: (Episode) -> Unit,
+    onPerson: (CastMember) -> Unit,
+) {
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
     val hebrew = isHebrew()
     // Cast, copies and genres are extras: the page shows without them.
     val extras by produceState(Extras(emptyList(), emptyList(), emptyMap(), loaded = false), title.id) {
         value = coroutineScope {
-            val cast = async { runCatching { catalog.cast(title.id) }.getOrDefault(emptyList()) }
-            val copies = async { runCatching { catalog.copies(title) }.getOrDefault(emptyList()) }
-            val genres = async { runCatching { catalog.genres() }.getOrDefault(emptyMap()) }
+            val cast = async { orDefault(emptyList()) { catalog.cast(title.id) } }
+            val copies = async { orDefault(emptyList()) { catalog.copies(title) } }
+            val genres = async { orDefault(emptyMap()) { catalog.genres() } }
             Extras(cast.await(), copies.await(), genres.await(), loaded = true)
         }
     }
@@ -94,49 +112,138 @@ fun TitleScreen(title: Title, play: FocusRequester, onPlay: (Copy) -> Unit, onPe
     var info by remember { mutableStateOf(false) }
     LaunchedEffect(title.id) { play.requestFocus() }
 
+    // Series: the episodes, a season at a time; the header shows the focused episode.
+    // Null until loaded.
+    val episodes by produceState<List<Episode>?>(if (title.kind == Kind.Series) null else emptyList(), title.id) {
+        if (title.kind == Kind.Series) value = orDefault(emptyList()) { catalog.episodes(title.id) }
+    }
+    val allEpisodes = episodes.orEmpty()
+    val seasons = remember(allEpisodes) { allEpisodes.map { it.season }.distinct() }
+    var season by remember(title.id) { mutableStateOf<Int?>(null) }
+    val shownSeason = season ?: seasons.firstOrNull()
+    val seasonEpisodes = remember(allEpisodes, shownSeason) { allEpisodes.filter { it.season == shownSeason } }
+    // Play on a series pressed before the episodes arrived: answered once they do.
+    var episodePending by remember(title.id) { mutableStateOf(false) }
+    LaunchedEffect(episodes, episodePending) {
+        if (episodes != null && episodePending) {
+            episodePending = false
+            seasonEpisodes.firstOrNull()?.let(onPlayEpisode)
+        }
+    }
+    var episode by remember(title.id) { mutableStateOf<Episode?>(null) }
+    // Focus outside the episodes row: the header is the title's again.
+    val showsTitle = Modifier.onFocusChanged { if (it.hasFocus) episode = null }
+
     Box(Modifier.fillMaxSize()) {
         Backdrop(title.heroImage)
-        Column(Modifier.padding(start = 88.dp, top = 76.dp)) {
-            HeroText(
-                modifier = Modifier.width(560.dp),
-                title = title.displayName(hebrew),
-                meta = {
-                    MetaRow(
-                        items = listOfNotNull(
-                            title.year?.toString(),
-                            title.runtimeMin?.let { runtimeLabel(it) },
-                            title.genreIds.mapNotNull { extras.genres[title.kind to it]?.label(hebrew) }.take(2).joinToString(" • ").ifEmpty { null },
-                        ),
-                        badges = listOfNotNull(title.certification, if (extras.copies.any { it.is4k }) "4K" else null),
-                    )
-                },
-                synopsis = title.synopsis(hebrew),
-                actions = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        PlayButton(
-                            stringResource(R.string.play),
-                            onClick = { if (extras.loaded) play() else playPending = true },
-                            modifier = Modifier.focusRequester(play),
+        Column(Modifier.padding(start = 88.dp, top = 64.dp)) {
+            // Fixed height: the rows do not jump when the header text changes.
+            Box(Modifier.height(300.dp)) {
+                val e = episode
+                HeroText(
+                    modifier = Modifier.width(560.dp),
+                    titleMaxLines = 1,
+                    title = e?.let { it.displayName(hebrew) ?: stringResource(R.string.episode_number, it.number) } ?: title.displayName(hebrew),
+                    meta = {
+                        MetaRow(
+                            items = if (e != null) {
+                                listOfNotNull(
+                                    stringResource(R.string.season_episode, e.season, e.number),
+                                    e.durationSecs?.let { runtimeLabel(it / 60) },
+                                    title.year?.toString(),
+                                )
+                            } else {
+                                listOfNotNull(
+                                    seasons.size.takeIf { it > 1 }?.let { pluralStringResource(R.plurals.seasons, it, it) },
+                                    title.year?.toString(),
+                                    title.runtimeMin?.let { runtimeLabel(it) }.takeIf { title.kind == Kind.Movie },
+                                    title.genreIds.mapNotNull { extras.genres[title.kind to it]?.label(hebrew) }.take(2).joinToString(" • ").ifEmpty { null },
+                                )
+                            },
+                            badges = listOfNotNull(title.certification, if (extras.copies.any { it.is4k }) "4K" else null),
                         )
-                        Spacer(Modifier.width(12.dp))
-                        // TODO(P4-2): watchlist and ratings are stored with the ratings work.
-                        ActionIcon(Icons.Outlined.Add, stringResource(R.string.add_to_watchlist), onClick = {})
-                        ActionIcon(Icons.Outlined.FavoriteBorder, stringResource(R.string.rate_love), onClick = {})
-                        ActionIcon(Icons.Outlined.ThumbUp, stringResource(R.string.rate_like), onClick = {})
-                        ActionIcon(Icons.Outlined.ThumbDown, stringResource(R.string.rate_dislike), onClick = {})
-                        ActionIcon(Icons.Outlined.Info, stringResource(R.string.more_info), onClick = { info = true })
-                    }
-                },
-            )
-            if (extras.cast.isNotEmpty()) {
-                Spacer(Modifier.height(32.dp))
-                RowTitle(stringResource(R.string.row_cast))
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    contentPadding = PaddingValues(end = 48.dp, top = 6.dp, bottom = 6.dp),
+                    },
+                    synopsis = e?.synopsis(hebrew) ?: title.synopsis(hebrew),
+                    actions = {
+                        Row(showsTitle, verticalAlignment = Alignment.CenterVertically) {
+                            PlayButton(
+                                stringResource(R.string.play),
+                                onClick = {
+                                    // TODO(P3-2): series resume at the next episode to watch.
+                                    when {
+                                        title.kind != Kind.Series -> if (extras.loaded) play() else playPending = true
+                                        episodes == null -> episodePending = true
+                                        else -> seasonEpisodes.firstOrNull()?.let(onPlayEpisode)
+                                    }
+                                },
+                                modifier = Modifier.focusRequester(play),
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            // TODO(P4-2): watchlist and ratings are stored with the ratings work.
+                            ActionIcon(Icons.Outlined.Add, stringResource(R.string.add_to_watchlist), onClick = {})
+                            ActionIcon(Icons.Outlined.FavoriteBorder, stringResource(R.string.rate_love), onClick = {})
+                            ActionIcon(Icons.Outlined.ThumbUp, stringResource(R.string.rate_like), onClick = {})
+                            ActionIcon(Icons.Outlined.ThumbDown, stringResource(R.string.rate_dislike), onClick = {})
+                            ActionIcon(Icons.Outlined.Info, stringResource(R.string.more_info), onClick = { info = true })
+                        }
+                    },
+                )
+            }
+            // The episodes row's title line holds the season chips: more room above its cards.
+            RowsAtTop(titleSpaceDp = 58.dp) {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 400.dp),
                 ) {
-                    items(extras.cast, key = { it.personId }) { c ->
-                        PersonCard(imageUrl = c.photo, name = c.name, onClick = { onPerson(c) })
+                    if (seasonEpisodes.isNotEmpty()) {
+                        item(key = "episodes") {
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    RowTitle(stringResource(R.string.row_episodes))
+                                    if (seasons.size > 1) {
+                                        Spacer(Modifier.width(20.dp))
+                                        // On the chips the header is the series' again.
+                                        Box(showsTitle) { SeasonChips(seasons, shownSeason, onSeason = { season = it }) }
+                                    }
+                                }
+                                // A new row per season: it starts at episode 1, not at the old scroll position.
+                                key(shownSeason) {
+                                    Sideways {
+                                        LazyRow(
+                                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                            contentPadding = PaddingValues(end = 48.dp, top = 6.dp, bottom = 6.dp),
+                                        ) {
+                                            items(seasonEpisodes, key = { it.id }) { e ->
+                                                LandscapeCard(
+                                                    imageUrl = e.image ?: title.cardImage,
+                                                    title = e.displayName(hebrew) ?: stringResource(R.string.episode_number, e.number),
+                                                    label = stringResource(R.string.episode_number, e.number),
+                                                    onClick = { onPlayEpisode(e) },
+                                                    onFocused = { episode = e },
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (extras.cast.isNotEmpty()) {
+                        item(key = "cast") {
+                            Column(showsTitle) {
+                                RowTitle(stringResource(R.string.row_cast))
+                                Sideways {
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                        contentPadding = PaddingValues(end = 48.dp, top = 6.dp, bottom = 6.dp),
+                                    ) {
+                                        items(extras.cast, key = { it.personId }) { c ->
+                                            PersonCard(imageUrl = c.photo, name = c.name, onClick = { onPerson(c) })
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -198,3 +305,30 @@ private fun MoreInfo(title: Title, cast: List<CastMember>, hebrew: Boolean, onDi
     }
     LaunchedEffect(Unit) { close.requestFocus() }
 }
+
+/** Season choices next to the episodes row title. Moving onto one shows that season. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SeasonChips(seasons: List<Int>, shown: Int?, onSeason: (Int) -> Unit) {
+    Sideways {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 10.dp)) {
+            items(seasons, key = { it }) { n ->
+                FilterChip(
+                    selected = n == shown,
+                    onClick = { onSeason(n) },
+                    modifier = Modifier.onFocusChanged { if (it.isFocused && n != shown) onSeason(n) },
+                ) { Text(stringResource(R.string.season_number, n)) }
+            }
+        }
+    }
+}
+
+/** The value of `block`, or `default` if it fails; cancellation is not a failure. */
+private suspend fun <T> orDefault(default: T, block: suspend () -> T): T =
+    try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        default
+    }

@@ -12,16 +12,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.gestures.BringIntoViewSpec
-import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
 import androidx.compose.runtime.Composable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -32,7 +28,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
@@ -49,6 +44,8 @@ import com.wtv.app.ui.components.HeroText
 import com.wtv.app.ui.components.LandscapeCard
 import com.wtv.app.ui.components.MetaRow
 import com.wtv.app.ui.components.RowTitle
+import com.wtv.app.ui.components.RowsAtTop
+import com.wtv.app.ui.components.Sideways
 import com.wtv.app.ui.theme.WtvColors
 
 /** What a browse page shows: one section's category rows, or Home's latest rows. */
@@ -115,10 +112,6 @@ private suspend fun loadRows(catalog: Catalog, source: BrowseSource, hebrew: Boo
         is BrowseSource.Section -> catalog.rows(source.kind).map { (c, titles) -> BrowseRow(c.label(hebrew), c, titles) }
     }
 
-/** Room above a focused card for its row title: the row lands at the top of the list with its title showing. */
-private val RowTitleSpace = 40.dp
-
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun Rows(
     rows: List<BrowseRow>,
@@ -131,15 +124,6 @@ private fun Rows(
 ) {
     // Safe: loadRows leaves out empty rows, and an empty page never gets here.
     var focused by remember(rows) { mutableStateOf(rows.first().titles.first()) }
-    // Vertically, the focused row always lands at the top of the list, under the
-    // header, as in the reference. Rows scroll sideways the default way.
-    val sideways = LocalBringIntoViewSpec.current
-    val titleSpace = with(LocalDensity.current) { RowTitleSpace.toPx() }
-    val rowAtTop = remember(titleSpace) {
-        object : BringIntoViewSpec {
-            override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float = offset - titleSpace
-        }
-    }
     Box(Modifier.fillMaxSize()) {
         Backdrop(focused.heroImage)
         Column(Modifier.padding(start = 88.dp, top = 76.dp)) {
@@ -153,7 +137,7 @@ private fun Rows(
                     synopsis = focused.synopsis(hebrew),
                 )
             }
-            CompositionLocalProvider(LocalBringIntoViewSpec provides rowAtTop) {
+            RowsAtTop {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                     contentPadding = PaddingValues(top = 8.dp, bottom = 400.dp),
@@ -164,7 +148,7 @@ private fun Rows(
                             RowTitle(row.label)
                             // Up from the first row goes to the tabs; spatially the rail is nearer.
                             val rowModifier = if (rowIndex == 0) Modifier.focusProperties { this.up = up } else Modifier
-                            CompositionLocalProvider(LocalBringIntoViewSpec provides sideways) {
+                            Sideways {
                                 LazyRow(
                                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                                     contentPadding = PaddingValues(end = 48.dp, top = 6.dp, bottom = 6.dp),
