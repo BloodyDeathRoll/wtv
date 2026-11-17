@@ -152,6 +152,16 @@ class Catalog(private val api: Api) {
         }
     }
 
+    /**
+     * The provider's titles a person is billed in (top 15 billing, from TMDB),
+     * as cards, newest first. Read from the cast side: the person's index makes
+     * it fast, where filtering titles by cast is not.
+     */
+    suspend fun personTitles(personId: Int): List<Title> =
+        api.get("title_cast?select=titles($TITLE_COLUMNS,is_primary,available)&person_id=eq.$personId").objects()
+            .mapNotNull { it.optJSONObject("titles") }
+            .let(::personCards)
+
     /** Billed cast of a title, in order. */
     suspend fun cast(titleId: Long): List<CastMember> =
         api.get("title_cast?select=position,character,people(tmdb_id,name,profile)&title_id=eq.$titleId&order=position").objects().map {
@@ -219,6 +229,13 @@ internal fun title(o: JSONObject) = Title(
     originalLanguage = o.text("original_language"),
     groupId = if (o.isNull("group_id") || !o.has("group_id")) null else o.getLong("group_id"),
 )
+
+/** Cards from a person's title rows: available cards only, newest first, each once. */
+internal fun personCards(rows: List<JSONObject>): List<Title> =
+    rows.filter { it.optBoolean("is_primary") && it.optBoolean("available") }
+        .map(::title)
+        .distinctBy { it.id }
+        .sortedWith(compareByDescending<Title> { it.year ?: Int.MIN_VALUE }.thenBy { it.id })
 
 internal const val EPISODES_PAGE = 1000
 

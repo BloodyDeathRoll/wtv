@@ -67,6 +67,13 @@ class CatalogTest {
         for (part in listOf("&title_id=eq.15791", "&order=season,episode,id", "&offset=1000", "&limit=1000")) assertTrue(part, path.contains(part))
     }
 
+    @Test fun `a person's titles are available cards only, each once, newest first`() {
+        fun t(id: Int, year: Int?, primary: Boolean = true, available: Boolean = true) =
+            row("year" to year, "is_primary" to primary, "available" to available).put("id", id)
+        val cards = personCards(listOf(t(1, 2019), t(2, 2025), t(3, 2025, primary = false), t(4, 2020, available = false), t(2, 2025), t(5, null)))
+        assertEquals(listOf(2L, 1L, 5L), cards.map { it.id })
+    }
+
     @Test fun `copy labels number several HD copies only`() {
         val k = Copy(1, 1, null, true)
         val hd = Copy(2, 2, null, false)
