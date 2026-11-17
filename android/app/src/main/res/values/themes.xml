@@ -1,0 +1,7 @@
+<resources>
+    <!-- Dark window from the first frame, whatever the device theme is. -->
+    <style name="Theme.Wtv" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+    </style>
+    <color name="background">#0F171E</color>
+</resources>

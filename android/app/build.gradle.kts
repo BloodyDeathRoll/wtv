@@ -10,6 +10,7 @@ android {
     defaultConfig {
         applicationId = "com.wtv.app"
         minSdk = 26
+        // Behind compileSdk on purpose: the app has only been run on API 36.
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
