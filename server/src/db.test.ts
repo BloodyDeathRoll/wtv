@@ -25,7 +25,7 @@ function fakeFetch(reply: (call: Call) => Response = () => new Response(null, { 
   return { fetchFn, calls }
 }
 
-const config = { url: 'https://abc.supabase.co', secretKey: 'sb_secret_x' }
+const config = { url: 'https://abc.supabase.co', key: 'sb_secret_x' }
 
 test('upsert sends batches of 500 with the conflict target and the secret key', async () => {
   const { fetchFn, calls } = fakeFetch()
@@ -48,6 +48,28 @@ test('a path in the database URL is kept', async () => {
   const { fetchFn, calls } = fakeFetch()
   await createDb({ ...config, url: 'https://proxy.example/supabase' }, fetchFn).upsert('titles', 'x', [{ id: 1 }])
   assert.equal(calls[0]?.url.pathname, '/supabase/rest/v1/titles')
+})
+
+test('selectAll reads 1,000 rows at a time after the last id, until a short page', async () => {
+  const rows = Array.from({ length: 2300 }, (_, i) => ({ id: i * 2 + 1 }))
+  const { fetchFn, calls } = fakeFetch(call => {
+    const after = Number(call.url.searchParams.get('id')?.slice(3))
+    return Response.json(rows.filter(r => r.id > after).slice(0, Number(call.url.searchParams.get('limit'))))
+  })
+  const got = await createDb(config, fetchFn).selectAll<{ id: number }>('titles', 'id,name', 'kind=eq.movie')
+  assert.equal(got.length, 2300)
+  assert.deepEqual(calls.map(c => c.url.searchParams.get('id')), ['gt.-1', 'gt.1999', 'gt.3999'])
+  assert.equal(calls[0]?.url.search, '?select=id,name&id=gt.-1&order=id&limit=1000&kind=eq.movie')
+})
+
+test('selectAll stops after an exactly full last page with one more call', async () => {
+  const rows = Array.from({ length: 1000 }, (_, i) => ({ id: i + 1 }))
+  const { fetchFn, calls } = fakeFetch(call => {
+    const after = Number(call.url.searchParams.get('id')?.slice(3))
+    return Response.json(rows.filter(r => r.id > after).slice(0, 1000))
+  })
+  assert.equal((await createDb(config, fetchFn).selectAll('titles', 'id')).length, 1000)
+  assert.equal(calls.length, 2)
 })
 
 test('upsert of nothing makes no call', async () => {

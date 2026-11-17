@@ -103,6 +103,7 @@ function fakeDb(pending: Pending[], pageSize = 1000) {
   const db: Db = {
     select: async <T,>() => [{ id: 7 }] as T[],
     // Like the database function: pages of `pageSize`, skipping the ids given.
+    selectAll: async () => assert.fail('not used'),
     rpc: async <T,>(name: string, args: Row) => {
       assert.equal(name, 'titles_needing_details')
       assert.equal(args.p_provider, 7)

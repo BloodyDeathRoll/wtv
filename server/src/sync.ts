@@ -156,7 +156,7 @@ if (import.meta.main) {
     user: env('XTREAM_PROV1_USER'),
     password: env('XTREAM_PROV1_PASSWORD'),
   })
-  const db = createDb({ url: env('SUPABASE_URL'), secretKey: env('SUPABASE_SECRET_KEY') })
+  const db = createDb({ url: env('SUPABASE_URL'), key: env('SUPABASE_SECRET_KEY') })
   const report = await syncCatalog(xtream, db, 'prov1')
   console.log(JSON.stringify(report))
   if (report.distrusted.length > 0) process.exitCode = 1
