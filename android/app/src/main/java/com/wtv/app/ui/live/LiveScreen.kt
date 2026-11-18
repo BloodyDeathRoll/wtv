@@ -193,16 +193,20 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
     // parks on a holder that is focusable only meanwhile, and then goes to the shown group's chip.
     LaunchedEffect(pendingHide) {
         val hide = pendingHide ?: return@LaunchedEffect
-        withFrameNanos { } // the menu has closed
-        parking = true
-        withFrameNanos { } // the holder can take the focus
-        runCatching { parked.requestFocus() }
-        hide()
-        withFrameNanos { } // the groups are redrawn: `chip` is on the shown group's chip
-        withFrameNanos { }
-        runCatching { chip.requestFocus() }
-        parking = false
-        pendingHide = null
+        try {
+            withFrameNanos { } // the menu has closed
+            parking = true
+            withFrameNanos { } // the holder can take the focus
+            runCatching { parked.requestFocus() }
+            hide()
+            withFrameNanos { } // the groups are redrawn: `chip` is on the shown group's chip
+            withFrameNanos { }
+            runCatching { chip.requestFocus() }
+        } finally {
+            // Also when cancelled (the last group hidden ends the page): never run twice, never stay parked.
+            parking = false
+            pendingHide = null
+        }
     }
 
     menu?.let { c ->

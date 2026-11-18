@@ -120,33 +120,37 @@ private fun LiveSection() {
     val hebrew = isHebrew()
     val scope = rememberCoroutineScope()
     var filters by remember { mutableStateOf<LiveFilters?>(null) }
+    var failed by remember { mutableStateOf<String?>(null) }
     var channels by remember { mutableStateOf(emptyList<Channel>()) }
     var categories by remember { mutableStateOf(emptyList<LiveCategory>()) }
     LaunchedEffect(Unit) {
         // Names for the hidden items are a nicety; the switch needs only the filters.
-        runCatching { catalog.liveFilters() }.onSuccess { filters = it }
+        runCatching { catalog.liveFilters() }.onSuccess { filters = it }.onFailure { failed = it.message ?: it.toString() }
         runCatching { channels = catalog.channels(); categories = catalog.liveCategories() }
     }
     // A chip that goes takes the focus with it: it moves first to a neighbour, or the radio switch.
     val radio = remember { FocusRequester() }
     val chips = remember { mutableMapOf<String, FocusRequester>() }
-    // Saved at once, put back if the save fails.
-    fun change(to: LiveFilters, save: suspend () -> Unit) {
-        val before = filters
-        filters = to
-        scope.launch { runCatching { save() }.onFailure { filters = before } }
+    // Saved at once. A failed save undoes only its own change: others may have been made meanwhile.
+    fun change(apply: (LiveFilters) -> LiveFilters, undo: (LiveFilters) -> LiveFilters, save: suspend () -> Unit) {
+        filters = filters?.let(apply)
+        scope.launch { runCatching { save() }.onFailure { filters = filters?.let(undo) } }
     }
 
     Text(stringResource(R.string.setting_live), style = MaterialTheme.typography.titleMedium, color = WtvColors.TextPrimary)
     Spacer(Modifier.height(12.dp))
-    val f = filters ?: return
+    val f = filters
+    if (f == null) {
+        failed?.let { Text(stringResource(R.string.load_failed, it), style = MaterialTheme.typography.bodyMedium, color = WtvColors.TextMuted) }
+        return
+    }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.setting_radio), style = MaterialTheme.typography.bodyLarge, color = WtvColors.TextSecondary, modifier = Modifier.width(140.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             for (on in listOf(true, false)) {
                 FilterChip(
                     selected = f.showRadio == on,
-                    onClick = { if (f.showRadio != on) change(f.copy(showRadio = on)) { catalog.setShowRadio(on) } },
+                    onClick = { if (f.showRadio != on) change({ it.copy(showRadio = on) }, { it.copy(showRadio = !on) }) { catalog.setShowRadio(on) } },
                     modifier = if (on) Modifier.focusRequester(radio) else Modifier,
                 ) { Text(stringResource(if (on) R.string.setting_on else R.string.setting_off)) }
             }
@@ -172,14 +176,18 @@ private fun LiveSection() {
                         val key = "g${c.id}"
                         FilterChip(selected = false, modifier = Modifier.focusRequester(chips.getOrPut(key) { FocusRequester() }), onClick = {
                             leave(key)
-                            change(f.copy(hiddenGroups = f.hiddenGroups - c.id)) { catalog.setGroupHidden(c.id, false) }
+                            change({ it.copy(hiddenGroups = it.hiddenGroups - c.id) }, { it.copy(hiddenGroups = it.hiddenGroups + c.id) }) {
+                                catalog.setGroupHidden(c.id, false)
+                            }
                         }) { Text(c.label(hebrew)) }
                     }
                     items(hiddenChannels, key = { "c${it.id}" }) { c ->
                         val key = "c${c.id}"
                         FilterChip(selected = false, modifier = Modifier.focusRequester(chips.getOrPut(key) { FocusRequester() }), onClick = {
                             leave(key)
-                            change(f.copy(hiddenChannels = f.hiddenChannels - c.id)) { catalog.setChannelHidden(c.id, false) }
+                            change({ it.copy(hiddenChannels = it.hiddenChannels - c.id) }, { it.copy(hiddenChannels = it.hiddenChannels + c.id) }) {
+                                catalog.setChannelHidden(c.id, false)
+                            }
                         }) { Text(c.name) }
                     }
                 }
