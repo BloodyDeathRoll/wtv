@@ -53,6 +53,7 @@ import com.wtv.app.data.LiveCategory
 import com.wtv.app.data.LiveFilters
 import com.wtv.app.data.liveGroups
 import com.wtv.app.ui.browse.isHebrew
+import com.wtv.app.ui.components.ignoresOpeningPress
 import com.wtv.app.ui.components.ChannelCard
 import com.wtv.app.ui.theme.WtvColors
 import kotlinx.coroutines.launch
@@ -250,7 +251,7 @@ private fun ChannelMenu(
     Dialog(onDismissRequest = onDismiss) {
         val first = remember { FocusRequester() }
         Column(
-            Modifier.background(WtvColors.Surface, RoundedCornerShape(12.dp)).padding(28.dp).width(420.dp),
+            Modifier.ignoresOpeningPress().background(WtvColors.Surface, RoundedCornerShape(12.dp)).padding(28.dp).width(420.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(channel.name, style = MaterialTheme.typography.titleLarge, color = WtvColors.TextPrimary)

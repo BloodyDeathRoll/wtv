@@ -66,6 +66,8 @@ import com.wtv.app.player.streamUrl
 import com.wtv.app.ui.browse.BrowseScreen
 import com.wtv.app.ui.browse.BrowseSource
 import com.wtv.app.ui.browse.isHebrew
+import com.wtv.app.ui.components.LocalTitleMenu
+import com.wtv.app.ui.components.TitleMenu
 import com.wtv.app.ui.components.RailItem
 import com.wtv.app.ui.components.SideRail
 import com.wtv.app.ui.grid.GridScreen
@@ -97,7 +99,8 @@ private sealed interface Page {
         override val id get() = "grid:${category.kind}:${category.id}"
     }
 
-    data class TitlePage(val title: Title) : Page {
+    /** `autoPlay`: opened from a card's menu with Play, so Play is pressed once the page is in. */
+    data class TitlePage(val title: Title, val autoPlay: Boolean = false) : Page {
         override val id get() = "title:${title.id}"
     }
 
@@ -289,6 +292,18 @@ fun WtvApp() {
     BackHandler(enabled = !railOpen && stack.isNotEmpty()) { close { stack.removeAt(stack.lastIndex) } }
     BackHandler(enabled = railOpen) { close { railPage = null } }
 
+    // A card held down opens its menu, over whatever page it is on.
+    var menuFor by remember { mutableStateOf<Title?>(null) }
+    menuFor?.let { t ->
+        TitleMenu(
+            t,
+            onInfo = { menuFor = null; open(Page.TitlePage(t)) },
+            onPlay = { menuFor = null; open(Page.TitlePage(t, autoPlay = true)) },
+            onDismiss = { menuFor = null },
+        )
+    }
+
+    CompositionLocalProvider(LocalTitleMenu provides { menuFor = it }) {
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.size(1.dp).focusRequester(parked).focusProperties { canFocus = parking }.focusable())
         Layer(blocked = railOpen || stack.isNotEmpty(), hidden = stack.isNotEmpty(), memory = baseMemory) {
@@ -360,6 +375,7 @@ fun WtvApp() {
                         is Page.Grid -> GridScreen(p.category, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
                         is Page.TitlePage -> TitleScreen(
                             p.title,
+                            autoPlay = p.autoPlay,
                             play = entry.first,
                             progressVersion = progressVersion,
                             onPlay = { copy, start -> play(StreamKind.Movie, copy.id, null, copy.extId, copy.containerExt, p.title.displayName(hebrew), start) },
@@ -428,6 +444,7 @@ fun WtvApp() {
             },
             modifier = Modifier.align(Alignment.CenterStart),
         )
+    }
     }
 }
 
