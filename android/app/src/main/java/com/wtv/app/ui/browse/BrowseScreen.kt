@@ -143,8 +143,8 @@ fun BrowseScreen(
     }
 
     when (val state = load) {
-        Load.Loading -> Message(stringResource(R.string.loading), firstFocus)
-        is Load.Failed -> Message(stringResource(R.string.load_failed, state.message), firstFocus, onRetry = { attempt++ })
+        Load.Loading -> Message(stringResource(R.string.loading), firstFocus, up)
+        is Load.Failed -> Message(stringResource(R.string.load_failed, state.message), firstFocus, up, onRetry = { attempt++ })
         is Load.Ready -> {
             val home = source == BrowseSource.Home
             val w = watching
@@ -152,8 +152,8 @@ fun BrowseScreen(
                 (if (home && w != null) listOfNotNull(continueRow(w, continueLabel, seasonEpisode)) else emptyList()) + state.rows
             }
             when {
-                home && w == null -> Message(stringResource(R.string.loading), firstFocus)
-                rows.isEmpty() -> Message(stringResource(R.string.nothing_here), firstFocus)
+                home && w == null -> Message(stringResource(R.string.loading), firstFocus, up)
+                rows.isEmpty() -> Message(stringResource(R.string.nothing_here), firstFocus, up)
                 else -> Rows(rows, state.genres, hebrew, firstFocus, up, tabsFocused, onMore, onOpen)
             }
         }
@@ -323,14 +323,16 @@ private fun metaItems(t: Title, genres: Map<Pair<Kind, Int>, Genre>, hebrew: Boo
  * somewhere; with `onRetry`, a Retry button takes the focus instead.
  */
 @Composable
-private fun Message(text: String, focus: FocusRequester, onRetry: (() -> Unit)? = null) {
-    val box = if (onRetry == null) Modifier.focusRequester(focus).focusable() else Modifier
+private fun Message(text: String, focus: FocusRequester, up: FocusRequester, onRetry: (() -> Unit)? = null) {
+    // Up goes to the selected tab, not whichever tab sits above the middle (that would switch the section).
+    val toTab = Modifier.focusRequester(focus).focusProperties { this.up = up }
+    val box = if (onRetry == null) toTab.focusable() else Modifier
     Box(Modifier.fillMaxSize().then(box), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(text, style = MaterialTheme.typography.titleMedium, color = WtvColors.TextMuted)
             if (onRetry != null) {
                 Spacer(Modifier.height(16.dp))
-                Button(onClick = onRetry, modifier = Modifier.focusRequester(focus)) { Text(stringResource(R.string.retry)) }
+                Button(onClick = onRetry, modifier = toTab) { Text(stringResource(R.string.retry)) }
             }
         }
     }

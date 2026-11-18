@@ -24,6 +24,7 @@ android {
         targetSdk = 36
         versionCode = 2
         versionName = "0.2.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // The WTV database's public URL and publishable key (meant for apps;
         // row level security guards the data).
@@ -92,4 +93,9 @@ dependencies {
     implementation(libs.media3.ui)
     testImplementation(libs.junit)
     testImplementation(libs.org.json)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
