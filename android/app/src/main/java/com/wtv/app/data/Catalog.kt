@@ -216,15 +216,25 @@ class Catalog(private val api: Api) {
         return personCards(rows + cards)
     }
 
-    /** Cards whose name contains `query`, in English, Hebrew or the provider's own; names starting with it first. */
-    suspend fun search(query: String, hebrew: Boolean): List<Title> {
+    /**
+     * Cards whose name contains `query`, in English, Hebrew or the provider's
+     * own; names starting with it first. Of one kind, or both.
+     */
+    suspend fun search(query: String, hebrew: Boolean, kind: Kind? = null): List<Title> {
         val q = query.replace("*", "").trim()
         if (q.isEmpty()) return emptyList()
         return coroutineScope {
-            val startsWith = async { api.get(searchPath(q, hebrew, prefix = true)).objects().map(::title) }
-            val contains = async { api.get(searchPath(q, hebrew, prefix = false)).objects().map(::title) }
+            val startsWith = async { api.get(searchPath(q, hebrew, prefix = true, kind)).objects().map(::title) }
+            val contains = async { api.get(searchPath(q, hebrew, prefix = false, kind)).objects().map(::title) }
             mergeSearch(startsWith.await(), contains.await())
         }
+    }
+
+    /** Actors whose name contains `query` and who are in an available title (of `kind`): the best known first. */
+    suspend fun searchPeople(query: String, kind: Kind? = null): List<CastMember> {
+        val q = query.trim()
+        if (q.length < 2) return emptyList()
+        return api.get(peopleSearchPath(q, kind)).objects().map { CastMember(it.getInt("tmdb_id"), it.getString("name"), null, it.text("profile")) }
     }
 
     /** Billed cast of a title, in order. */
@@ -415,7 +425,7 @@ internal fun personCards(rows: List<JSONObject>): List<Title> =
  * parentheses and quotes are text) and URL-encoded. `*` is PostgREST's ilike
  * wildcard; `%` and `_` in the query are escaped so they match themselves.
  */
-internal fun searchPath(query: String, hebrew: Boolean, prefix: Boolean): String {
+internal fun searchPath(query: String, hebrew: Boolean, prefix: Boolean, kind: Kind? = null): String {
     val literal = query
         .replace("*", "")
         .replace("\\", "\\\\")
@@ -425,12 +435,16 @@ internal fun searchPath(query: String, hebrew: Boolean, prefix: Boolean): String
     val quotedBody = literal.replace("\\", "\\\\").replace("\"", "\\\"")
     val pattern = "\"" + (if (prefix) "" else "*") + quotedBody + "*\""
     val or = "(sort_name_en.ilike.$pattern,sort_name_he.ilike.$pattern,name.ilike.$pattern)"
-    return "titles?select=$TITLE_COLUMNS&is_primary=is.true&available=is.true" +
+    return "titles?select=$TITLE_COLUMNS&is_primary=is.true&available=is.true" + (kind?.let { "&kind=eq.${it.db}" } ?: "") +
         "&or=${java.net.URLEncoder.encode(or, "UTF-8").replace("+", "%20")}" +
         "&order=${Sort.Name.order(hebrew)}&limit=$SEARCH_LIMIT"
 }
 
 internal const val SEARCH_LIMIT = 60
+
+/** The actors search, the query URL-encoded. */
+internal fun peopleSearchPath(query: String, kind: Kind?): String =
+    "rpc/search_people?p_query=" + java.net.URLEncoder.encode(query, "UTF-8").replace("+", "%20") + (kind?.let { "&p_kind=${it.db}" } ?: "")
 
 /** Rows read for Continue watching: a series has a row per episode watched. */
 private const val CONTINUE_ROWS = 200

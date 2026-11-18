@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -38,11 +40,15 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.Button
+import androidx.tv.material3.Icon
+import androidx.tv.material3.IconButton
+import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Tab
 import androidx.tv.material3.TabDefaults
@@ -68,14 +74,15 @@ import com.wtv.app.ui.browse.BrowseSource
 import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.categories.CategoriesScreen
 import com.wtv.app.ui.components.LocalTitleMenu
-import com.wtv.app.ui.components.TitleMenu
 import com.wtv.app.ui.components.RailItem
 import com.wtv.app.ui.components.SideRail
+import com.wtv.app.ui.components.TitleMenu
 import com.wtv.app.ui.grid.GridScreen
 import com.wtv.app.ui.grid.PosterGrid
 import com.wtv.app.ui.live.LiveScreen
 import com.wtv.app.ui.person.PersonScreen
 import com.wtv.app.ui.person.TitlesPage
+import com.wtv.app.ui.search.SearchScope
 import com.wtv.app.ui.search.SearchScreen
 import com.wtv.app.ui.settings.SettingsScreen
 import com.wtv.app.ui.theme.WtvColors
@@ -120,8 +127,9 @@ private sealed interface Page {
         override val id get() = "person:${person.personId}"
     }
 
-    data object Search : Page {
-        override val id get() = "search"
+    /** `grow`: opened from a section's search icon, the field opens out across the line. */
+    data class Search(val scope: SearchScope = SearchScope.All, val grow: Boolean = false) : Page {
+        override val id get() = "search:$scope"
     }
 
     data object Watchlist : Page {
@@ -185,6 +193,8 @@ fun WtvApp() {
     val selectedTab = tabs.getValue(section)
     // Down from the tabs enters the page here, never the rail.
     val page = remember { FocusRequester() }
+    // The section's search icon, top right: Up from a tab reaches it without moving along the tabs (which switches the section).
+    val sectionSearch = remember { FocusRequester() }
     // The section remembers its last focused card, to return to it.
     val baseMemory = remember { FocusMemory() }
 
@@ -364,7 +374,10 @@ fun WtvApp() {
                             selected = s == section,
                             onFocus = { section = s },
                             // Set on each tab: focus moves from the tab, not the row.
-                            modifier = Modifier.focusRequester(tabs.getValue(s)).focusProperties { down = page },
+                            modifier = Modifier.focusRequester(tabs.getValue(s)).focusProperties {
+                                down = page
+                                if (section != Section.Home) up = sectionSearch
+                            },
                             colors = TabDefaults.pillIndicatorTabColors(
                                 contentColor = WtvColors.TextSecondary,
                                 selectedContentColor = WtvColors.TextPrimary,
@@ -378,6 +391,35 @@ fun WtvApp() {
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                             )
                         }
+                    }
+                }
+                // Movies, Series and Live TV search in their own section; the field opens out from here.
+                val sectionScope = when (section) {
+                    Section.Movies -> SearchScope.Movies
+                    Section.Series -> SearchScope.Series
+                    Section.LiveTv -> SearchScope.Live
+                    Section.Home -> null
+                }
+                if (sectionScope != null) {
+                    IconButton(
+                        onClick = {
+                            tabsHaveFocus = false
+                            open(Page.Search(sectionScope, grow = true))
+                        },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 18.dp, end = 48.dp)
+                            .size(44.dp)
+                            .focusRequester(sectionSearch)
+                            .focusProperties { down = selectedTab },
+                        colors = IconButtonDefaults.colors(
+                            containerColor = Color.Transparent,
+                            contentColor = WtvColors.TextSecondary,
+                            focusedContainerColor = WtvColors.TextPrimary,
+                            focusedContentColor = WtvColors.Background,
+                        ),
+                    ) {
+                        Icon(Icons.Outlined.Search, contentDescription = stringResource(R.string.search_in_section), modifier = Modifier.size(24.dp))
                     }
                 }
             }
@@ -410,7 +452,14 @@ fun WtvApp() {
                             )
                             is Page.Categories -> CategoriesScreen(p.kind, firstFocus = entry.first, onOpen = { open(Page.Grid(it)) })
                             is Page.Person -> PersonScreen(p.person, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
-                            Page.Search -> SearchScreen(field = entry.first, onOpen = { open(Page.TitlePage(it)) })
+                            is Page.Search -> SearchScreen(
+                                field = entry.first,
+                                onOpen = { open(Page.TitlePage(it)) },
+                                onPerson = { open(Page.Person(it)) },
+                                onWatch = ::watch,
+                                scope = p.scope,
+                                grow = p.grow,
+                            )
                             // Read again after a watchlist change (a title removed from its page, say).
                             Page.Watchlist -> TitlesPage(catalog.watchlistVersion, { catalog.watchlist() }, entry.first, onOpen = { open(Page.TitlePage(it)) }) {
                                 Text(stringResource(R.string.rail_watchlist), style = MaterialTheme.typography.displayMedium, color = WtvColors.TextPrimary)
@@ -438,7 +487,7 @@ fun WtvApp() {
                     tabsHaveFocus = false
                     // Search and Settings are pages like the others: Back returns from them.
                     when (it) {
-                        RailItem.Search -> open(Page.Search)
+                        RailItem.Search -> open(Page.Search())
                         RailItem.Categories -> open(Page.Categories(if (section == Section.Series) Kind.Series else Kind.Movie))
                         RailItem.MainMenu ->
                             if (stack.isEmpty()) selectedTab.requestFocus()
