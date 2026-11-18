@@ -72,10 +72,14 @@ class Session(
      * device's session ends: the user stays signed in elsewhere.
      */
     suspend fun signOut() = lock.withLock {
-        val token = prefs.getString(ACCESS, null)
+        val stored = prefs.getString(ACCESS, null)
+        val fresh = isFresh(prefs.getLong(EXPIRES_AT, 0), System.currentTimeMillis() / 1000)
+        val refresh = prefs.getString(REFRESH, null)
         prefs.edit().clear().apply()
-        if (token != null) {
+        if (stored != null) {
             background.launch {
+                // The server refuses an expired access token, which would leave the session alive there.
+                val token = if (fresh) stored else refresh?.let { freshToken(it) } ?: return@launch
                 val request = Request.Builder()
                     .url("$url/auth/v1/logout?scope=local")
                     .header("apikey", key)
@@ -117,6 +121,16 @@ class Session(
     }
 
     private suspend fun signUpAnonymously(): String = auth("signup", JSONObject())
+
+    /** A new access token for `refresh`, not stored (for the logout after the device has forgotten it). */
+    private fun freshToken(refresh: String): String? = runCatching {
+        val request = Request.Builder()
+            .url("$url/auth/v1/token?grant_type=refresh_token")
+            .header("apikey", key)
+            .post(JSONObject().put("refresh_token", refresh).toString().toRequestBody(JSON))
+            .build()
+        http.newCall(request).execute().use { JSONObject(it.body?.string().orEmpty()).optString("access_token") }
+    }.getOrNull()?.takeIf { it.isNotEmpty() }
 
     /** Calls the auth API (as `bearer` when given), stores the new session, returns its access token. */
     private suspend fun auth(path: String, body: JSONObject, bearer: String? = null): String = withContext(Dispatchers.IO) {

@@ -221,6 +221,8 @@ private fun AccountSection() {
     var code by remember { mutableStateOf<GoogleSignIn.Code?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var job by remember { mutableStateOf<Job?>(null) }
+    // Set once the phone has approved: the sign-ins then finish whatever Cancel says.
+    var finishing by remember { mutableStateOf(false) }
     val signInFocus = remember { FocusRequester() }
     val cancelFocus = remember { FocusRequester() }
     var codeShown by remember { mutableStateOf(false) }
@@ -255,7 +257,7 @@ private fun AccountSection() {
             shown == null -> {
                 Button(
                     onClick = {
-                        if (job?.isActive == true) return@Button
+                        if (job?.isActive == true || finishing) return@Button
                         error = null
                         job = scope.launch {
                             try {
@@ -265,6 +267,7 @@ private fun AccountSection() {
                                 // Cancel stops the wait only: once approved, both sign-ins run to the end.
                                 // WTV first: if it fails, nothing has changed on this device. If WTW
                                 // then fails, signing in again finishes it (WTV is already the account).
+                                finishing = true
                                 withContext(NonCancellable) {
                                     app.session.signInWithGoogle(idToken, link = true)
                                     app.wtw.signInWithGoogle(idToken, link = false)
@@ -273,6 +276,8 @@ private fun AccountSection() {
                             } catch (e: ApiException) {
                                 error = e.message
                                 code = null
+                            } finally {
+                                finishing = false
                             }
                         }
                     },
@@ -297,8 +302,10 @@ private fun AccountSection() {
                 Spacer(Modifier.width(24.dp))
                 Button(
                     onClick = {
-                        job?.cancel()
-                        code = null
+                        if (!finishing) {
+                            job?.cancel()
+                            code = null
+                        }
                     },
                     modifier = Modifier.focusRequester(cancelFocus),
                 ) { Text(stringResource(R.string.cancel)) }
