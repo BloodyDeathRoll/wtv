@@ -36,9 +36,17 @@ suspend fun shortEpg(http: OkHttpClient, login: ProviderLogin, streamId: Long, l
  * (`get_simple_data_table`) is a few hundred rows.
  */
 suspend fun archive(http: OkHttpClient, login: ProviderLogin, streamId: Long, now: Long): List<Programme> =
-    programmes(guideCall(http, login, "get_simple_data_table", streamId))
-        .filter { it.archived && it.end <= now && it.providerStart != null }
+    playable(programmes(guideCall(http, login, "get_simple_data_table", streamId)), now)
+
+/** Archived, over at `now`, with a start a catch-up address can be made from; one per start, newest first. */
+internal fun playable(programmes: List<Programme>, now: Long): List<Programme> =
+    programmes.filter { it.archived && it.end <= now && providerStartParts(it.providerStart) != null }
+        .distinctBy { it.start }
         .sortedByDescending { it.start }
+
+/** "2026-11-18 07:40:00" as day, hour and minute; null when it is not that shape. */
+internal fun providerStartParts(text: String?): Triple<String, String, String>? =
+    Regex("""^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})""").find(text ?: return null)?.destructured?.let { (d, h, m) -> Triple(d, h, m) }
 
 private suspend fun guideCall(http: OkHttpClient, login: ProviderLogin, action: String, streamId: Long, vararg extra: Pair<String, String>): String =
     withContext(Dispatchers.IO) {

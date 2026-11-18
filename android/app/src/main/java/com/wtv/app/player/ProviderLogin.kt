@@ -95,8 +95,7 @@ internal fun serverBase(login: ProviderLogin): String =
  * The start is the provider's own text (its server's time), so no time zone is guessed. Null without it.
  */
 fun timeshiftUrl(login: ProviderLogin, streamId: Long, programme: Programme): String? {
-    val m = Regex("""^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})""").find(programme.providerStart ?: return null) ?: return null
-    val (day, hour, minute) = m.destructured
+    val (day, hour, minute) = providerStartParts(programme.providerStart) ?: return null
     val minutes = ((programme.end - programme.start + 59) / 60).coerceAtLeast(1)
     fun seg(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
     return "${serverBase(login)}/timeshift/${seg(login.user.trim())}/${seg(login.password)}/$minutes/$day:$hour-$minute/$streamId.ts"

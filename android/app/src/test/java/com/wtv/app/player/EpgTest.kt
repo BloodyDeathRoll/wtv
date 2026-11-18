@@ -80,4 +80,10 @@ class EpgTest {
         assertNull(timeshiftUrl(login, 42, p.copy(providerStart = null)))
         assertNull(timeshiftUrl(login, 42, p.copy(providerStart = "yesterday")))
     }
+
+    @Test fun `playable - archived, over, with a usable start, one per start, newest first`() {
+        fun p(start: Long, archived: Boolean = true, text: String? = "2026-11-18 07:10:00") = Programme("p$start", null, start, start + 100, archived, text)
+        val list = listOf(p(100), p(300), p(300), p(500), p(200, archived = false), p(400, text = "soon"), p(1000))
+        assertEquals(listOf(500L, 300L, 100L), playable(list, now = 1000).map { it.start })
+    }
 }

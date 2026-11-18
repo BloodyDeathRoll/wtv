@@ -99,9 +99,10 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
     // The banner's clock: ticks while the banner is up (on radio it stays), so the line and bar move on.
     var now by remember { mutableLongStateOf(System.currentTimeMillis() / 1000) }
     val http = (context.applicationContext as WtvApplication).http
-    // The past programme playing instead of live, if any; the earlier-programmes panel (null: closed, empty: loading).
+    // The past programme playing instead of live, if any; the earlier-programmes panel (null: closed).
     var catchup by remember { mutableStateOf<Programme?>(null) }
     var panel by remember { mutableStateOf<List<Programme>?>(null) }
+    var panelLoading by remember { mutableStateOf(false) }
     var panelFailed by remember { mutableStateOf(false) }
 
     val player = remember {
@@ -121,12 +122,14 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
     LaunchedEffect(panelOpen, channel.id) {
         if (!panelOpen) return@LaunchedEffect
         panelFailed = false
+        panelLoading = true
         runCatching { archive(http, login, channel.extId, System.currentTimeMillis() / 1000) }
             .onSuccess { panel = it }
             .onFailure {
                 if (it is CancellationException) throw it
                 panelFailed = true
             }
+        panelLoading = false
     }
     BackHandler(enabled = panelOpen) {
         panel = null
@@ -190,6 +193,11 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 buffering = state == Player.STATE_BUFFERING
+                // A past programme played to its end: back to live.
+                if (state == Player.STATE_ENDED && catchup != null) {
+                    catchup = null
+                    bannerAt++
+                }
                 // A stall that ends: the picture is back, so the failed banner goes (after its usual few seconds).
                 if (state == Player.STATE_READY && error == STALLED) {
                     error = null
@@ -228,7 +236,12 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
                 when (it.nativeKeyEvent.keyCode) {
                     AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_CHANNEL_UP -> move(1).let { true }
                     AndroidKeyEvent.KEYCODE_DPAD_DOWN, AndroidKeyEvent.KEYCODE_CHANNEL_DOWN -> move(-1).let { true }
-                    AndroidKeyEvent.KEYCODE_DPAD_LEFT -> (channel.archiveDays > 0).also { open -> if (open) panel = emptyList() }
+                    AndroidKeyEvent.KEYCODE_DPAD_LEFT -> (channel.archiveDays > 0).also { open ->
+                        if (open) {
+                            panelLoading = true // from the first frame, not "nothing to play back"
+                            panel = emptyList()
+                        }
+                    }
                     AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_INFO -> {
                         if (catchup != null) player.playWhenReady = !player.playWhenReady
                         bannerAt++
@@ -263,6 +276,7 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
             EarlierPanel(
                 channel = channel,
                 programmes = list,
+                loading = panelLoading,
                 failed = panelFailed,
                 onPlay = { p ->
                     panel = null
@@ -277,7 +291,7 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
 
 /** The earlier programmes of a catch-up channel, newest first, on the start side. OK plays one; Back closes. */
 @Composable
-private fun BoxScope.EarlierPanel(channel: Channel, programmes: List<Programme>, failed: Boolean, onPlay: (Programme) -> Unit) {
+private fun BoxScope.EarlierPanel(channel: Channel, programmes: List<Programme>, loading: Boolean, failed: Boolean, onPlay: (Programme) -> Unit) {
     val first = remember { FocusRequester() }
     val locale = LocalConfiguration.current.locales[0]
     val day = remember(locale) { java.time.format.DateTimeFormatter.ofPattern("EEE d.M", locale) }
@@ -295,7 +309,8 @@ private fun BoxScope.EarlierPanel(channel: Channel, programmes: List<Programme>,
         Spacer(Modifier.height(16.dp))
         when {
             failed -> Text(stringResource(R.string.live_archive_failed), color = WtvColors.TextSecondary)
-            programmes.isEmpty() -> Text(stringResource(R.string.loading), color = WtvColors.TextMuted)
+            loading -> Text(stringResource(R.string.loading), color = WtvColors.TextMuted)
+            programmes.isEmpty() -> Text(stringResource(R.string.live_no_archive), color = WtvColors.TextSecondary)
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
                 itemsIndexed(programmes, key = { _, p -> p.start }) { i, p ->
                     ListItem(

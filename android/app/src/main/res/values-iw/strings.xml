@@ -91,6 +91,7 @@
     <string name="live_next">בהמשך  %1$s  %2$s</string>
     <string name="live_earlier">תוכניות קודמות</string>
     <string name="live_earlier_hint">◀  תוכניות קודמות</string>
-    <string name="live_catchup">צפייה חוזרת · Back חוזר לשידור חי</string>
+    <string name="live_catchup">צפייה חוזרת · כפתור חזרה מחזיר לשידור החי</string>
     <string name="live_archive_failed">לא ניתן לטעון תוכניות קודמות</string>
+    <string name="live_no_archive">אין עדיין תוכניות קודמות לצפייה</string>
 </resources>
