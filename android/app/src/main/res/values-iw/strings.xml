@@ -71,4 +71,9 @@
     <string name="play_episode">צפייה: %1$s</string>
     <string name="up_next">הפרק הבא</string>
     <string name="play_next_in">הפעלה עכשיו (%1$d)</string>
+    <string name="live_favorites">מועדפים</string>
+    <string name="live_hint">לחיצה ארוכה על OK מוסיפה או מסירה ממועדפים</string>
+    <string name="live_favorite_added">נוסף למועדפים</string>
+    <string name="live_favorite_removed">הוסר מהמועדפים</string>
+    <string name="live_failed">הערוץ לא זמין כרגע</string>
 </resources>

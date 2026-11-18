@@ -43,10 +43,12 @@ import com.wtv.app.R
 import com.wtv.app.WtvApplication
 import com.wtv.app.data.CastMember
 import com.wtv.app.data.Category
+import com.wtv.app.data.Channel
 import com.wtv.app.data.Episode
 import com.wtv.app.data.Kind
 import com.wtv.app.data.Title
 import com.wtv.app.data.episodeAfter
+import com.wtv.app.player.LivePlayerScreen
 import com.wtv.app.player.PlayerScreen
 import com.wtv.app.player.ProviderLogin
 import com.wtv.app.player.StreamKind
@@ -57,6 +59,7 @@ import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.components.RailItem
 import com.wtv.app.ui.components.SideRail
 import com.wtv.app.ui.grid.GridScreen
+import com.wtv.app.ui.live.LiveScreen
 import com.wtv.app.ui.person.PersonScreen
 import com.wtv.app.ui.search.SearchScreen
 import com.wtv.app.ui.settings.SettingsScreen
@@ -98,6 +101,11 @@ private sealed interface Page {
     /** `providerFirst`: opened from Play without a provider login, focused on the login. */
     data class Settings(val providerFirst: Boolean = false) : Page {
         override val id get() = "settings"
+    }
+
+    /** Live TV, full screen: `channels` is the group it was opened from, for channel up / down. */
+    data class Live(val channels: List<Channel>, val index: Int, val login: ProviderLogin) : Page {
+        override val id get() = "live"
     }
 
     /**
@@ -188,6 +196,15 @@ fun WtvApp() {
             open(Page.Player(streamUrl(login, kind, extId, containerExt), title, titleId, episodeId, startSecs, series, episodes))
         }
     }
+    fun watch(channels: List<Channel>, index: Int) {
+        val login = ProviderLogin.load(context)?.takeIf { it.isComplete }
+        if (login == null) {
+            Toast.makeText(context, noLogin, Toast.LENGTH_LONG).show()
+            open(Page.Settings(providerFirst = true))
+        } else {
+            open(Page.Live(channels, index, login))
+        }
+    }
     fun episodeTitle(series: String, e: Episode) = "$series · ${seasonEpisode.format(e.season, e.number)}"
     // The next episode replaces the player on top: Back still returns to the series page.
     fun playNext(p: Page.Player) {
@@ -262,7 +279,7 @@ fun WtvApp() {
                 Section.LiveTv -> null
             }
             Box(Modifier.onFocusChanged { if (it.hasFocus) lastOnTabs = false }) {
-                if (source == null) Placeholder(stringResource(section.label), page)
+                if (source == null) LiveScreen(firstFocus = page, up = selectedTab, onWatch = ::watch)
                 else BrowseScreen(
                     source,
                     firstFocus = page,
@@ -335,6 +352,7 @@ fun WtvApp() {
                         is Page.Person -> PersonScreen(p.person, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
                         Page.Search -> SearchScreen(field = entry.first, onOpen = { open(Page.TitlePage(it)) })
                         is Page.Settings -> SettingsScreen(firstFocus = entry.first, providerFirst = p.providerFirst)
+                        is Page.Live -> LivePlayerScreen(p.channels, p.index, p.login, firstFocus = entry.first)
                         is Page.Player -> PlayerScreen(
                             p.url,
                             p.title,
@@ -352,7 +370,7 @@ fun WtvApp() {
         val railFocus = remember { FocusRequester() }
         railPage?.let { Placeholder(stringResource(it.label), railFocus) }
         // Not over the video: the player is the whole screen.
-        if (stack.lastOrNull()?.page !is Page.Player) SideRail(
+        if (stack.lastOrNull()?.page.let { it !is Page.Player && it !is Page.Live }) SideRail(
             onSelect = {
                 // The tabs' focus flag would go stale under the page.
                 tabsHaveFocus = false

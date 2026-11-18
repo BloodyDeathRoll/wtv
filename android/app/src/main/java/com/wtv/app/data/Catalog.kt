@@ -219,6 +219,22 @@ class Catalog(private val api: Api) {
                 .objects(),
         ).take(CONTINUE_CARDS)
 
+    /** The live categories, in the provider's order. */
+    suspend fun liveCategories(): List<LiveCategory> =
+        api.get("categories?select=ext_id,name,name_en,name_he&kind=eq.live&order=position").objects()
+            .map { LiveCategory(it.getInt("ext_id"), it.getString("name"), it.text("name_en"), it.text("name_he")) }
+
+    /** The available channels by number. shortcut: one call, the API's 1,000-row cap (583 today); page it if the provider passes 1,000. */
+    suspend fun channels(): List<Channel> =
+        api.get("channels?select=$CHANNEL_COLUMNS&available=is.true&order=num.nullslast,id&limit=1000").objects().map(::channel)
+
+    /** The ids of the user's favourite channels. */
+    suspend fun favoriteChannels(): Set<Long> =
+        api.get("channel_prefs?select=channel_id&favorite=is.true").objects().mapTo(HashSet()) { it.getLong("channel_id") }
+
+    suspend fun setFavorite(channelId: Long, favorite: Boolean) =
+        api.post("channel_prefs?on_conflict=user_id,channel_id", favoriteBody(channelId, favorite), prefer = "resolution=merge-duplicates,return=minimal")
+
     /** One row per provider category, newest first; empty categories left out. */
     suspend fun rows(kind: Kind, perRow: Int = 10): List<Pair<Category, List<Title>>> = coroutineScope {
         categories(kind).map { c -> async { rowRequests.withPermit { c to latest(kind, c.id, perRow) } } }
@@ -379,7 +395,7 @@ fun copyLabels(copies: List<Copy>): List<String> {
 
 private fun JSONObject.int(key: String): Int? = if (isNull(key) || !has(key)) null else getInt(key)
 
-private fun JSONArray.objects(): List<JSONObject> = List(length()) { getJSONObject(it) }
+internal fun JSONArray.objects(): List<JSONObject> = List(length()) { getJSONObject(it) }
 
 /** The string at `key`, or null for a missing, null or blank value. */
 internal fun JSONObject.text(key: String): String? = if (isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
