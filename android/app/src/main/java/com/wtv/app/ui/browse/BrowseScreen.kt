@@ -100,6 +100,8 @@ fun BrowseScreen(
     firstFocus: FocusRequester,
     up: FocusRequester,
     progressVersion: Int,
+    /** The connected WTW account; a change reloads the rows (Top picks, Watch it again). */
+    wtwEmail: String?,
     tabsFocused: Boolean,
     onMore: (Category) -> Unit,
     onOpen: (Title) -> Unit,
@@ -129,12 +131,12 @@ fun BrowseScreen(
     var attempt by remember { mutableIntStateOf(0) }
     // A reload for a new ranking keeps the rows on screen until the new ones are in.
     var quiet by remember { mutableStateOf(false) }
-    val load by produceState<Load>(Load.Loading, source, hebrew, attempt) {
+    val load by produceState<Load>(Load.Loading, source, hebrew, attempt, wtwEmail) {
         val keep = quiet && value is Load.Ready
         quiet = false
         if (!keep) value = Load.Loading
         val next = runCatching {
-            val rows = loadRows(catalog, source, hebrew, recentMovies, recentSeries, forYou, wtw = app.wtw.email != null)
+            val rows = loadRows(catalog, source, hebrew, recentMovies, recentSeries, forYou, wtw = wtwEmail != null)
             // Genre names are a nicety: without them the meta line just has no genres.
             Load.Ready(rows, runCatching { catalog.genres() }.getOrDefault(emptyMap()))
         }.getOrElse { Load.Failed(it.message ?: it.toString()) }

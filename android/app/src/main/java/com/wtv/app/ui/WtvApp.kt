@@ -252,6 +252,8 @@ fun WtvApp() {
     // into the latest, which carries the whole position (a held seek key sends many).
     // The pages showing positions reload when the player's last save is in.
     val catalog = (context.applicationContext as WtvApplication).catalog
+    // Settings connects or disconnects WTW on a page above Browse: re-read it when a page closes.
+    val wtwEmail = remember(stack.size) { (context.applicationContext as WtvApplication).wtw.email }
     val scope = rememberCoroutineScope()
     val saving = remember { Mutex() }
     var latest by remember { mutableStateOf<(suspend () -> Unit)?>(null) }
@@ -330,6 +332,7 @@ fun WtvApp() {
                         firstFocus = page,
                         up = selectedTab,
                         progressVersion = progressVersion,
+                        wtwEmail = wtwEmail,
                         tabsFocused = tabsHaveFocus,
                         onMore = { open(Page.Grid(it)) },
                         onOpen = { open(Page.TitlePage(it)) },
