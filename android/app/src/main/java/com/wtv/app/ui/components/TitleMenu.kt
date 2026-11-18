@@ -98,8 +98,9 @@ fun TitleMenu(title: Title, onInfo: () -> Unit, onPlay: () -> Unit, onDismiss: (
                 MenuItem(Icons.Outlined.Close, stringResource(R.string.close), onDismiss)
             }
         }
+        // Inside the dialog's own composition, so Play is there when asked.
+        LaunchedEffect(Unit) { runCatching { play.requestFocus() } }
     }
-    LaunchedEffect(Unit) { runCatching { play.requestFocus() } }
 }
 
 @Composable
