@@ -106,12 +106,12 @@ private sealed interface Page {
         override val id get() = "categories"
     }
 
-    /** `autoPlay`: opened from a card's menu with Play, so Play is pressed once the page is in. */
     /** "Recommended for You" in full, 50 at a time: one kind, or (null) both. */
     data class Recommendations(val kind: Kind?) : Page {
         override val id get() = "recommendations:${kind ?: "all"}"
     }
 
+    /** `autoPlay`: opened from a card's menu with Play, so Play is pressed once the page is in. */
     data class TitlePage(val title: Title, val autoPlay: Boolean = false) : Page {
         override val id get() = "title:${title.id}"
     }

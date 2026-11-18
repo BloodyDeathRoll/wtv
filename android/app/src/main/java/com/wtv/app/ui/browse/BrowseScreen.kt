@@ -243,7 +243,8 @@ private suspend fun loadRows(
             ).filter { it.titles.isNotEmpty() }
         }
         is BrowseSource.Section -> coroutineScope {
-            val recommended = async { if (wtw) catalog.topPicksPage(source.kind, 0, SECTION_PICKS) else emptyList() }
+            // A nicety: when it fails, the section just has no Recommended row.
+            val recommended = async { if (wtw) runCatching { catalog.topPicksPage(source.kind, 0, SECTION_PICKS) }.getOrDefault(emptyList()) else emptyList() }
             val rows = catalog.rows(source.kind).map { (c, titles) -> BrowseRow(c.label(hebrew), c, titles) }
             listOf(BrowseRow(forYou.recommended, null, recommended.await(), forYou = true, forYouKind = source.kind))
                 .filter { it.titles.isNotEmpty() } + rows

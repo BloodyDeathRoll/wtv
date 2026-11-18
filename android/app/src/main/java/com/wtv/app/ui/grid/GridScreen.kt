@@ -144,6 +144,7 @@ fun PosterGrid(
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 if (sorts) Spacer(Modifier.padding(start = 24.dp))
+                // Without sorts `sort` stays null, which `fetch` gets.
                 if (sorts) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     // Recommended (null) is not a Sort: it is a server function, not a REST order.
                     (listOf<Sort?>(null) + Sort.entries).forEachIndexed { i, s ->
