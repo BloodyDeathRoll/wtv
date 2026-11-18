@@ -15,23 +15,23 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.key
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -74,39 +74,57 @@ fun Backdrop(imageUrl: String?, modifier: Modifier = Modifier) {
         ) {
             // A crossfade without offscreen layers: ModulateAlpha applies the
             // alpha to the image's own draw. Compose's Crossfade rendered both
-            // images to buffers, the main frame cost left on the streamer.
+            // images to buffers, the main remaining frame cost on the streamer.
+            // The new image fades in over the old one at full alpha (no dip),
+            // once it has loaded; the old one goes when the fade ends.
             var shown by remember { mutableStateOf(imageUrl) }
             var previous by remember { mutableStateOf<String?>(null) }
+            var loaded by remember { mutableStateOf<String?>(null) }
             val fade = remember { Animatable(1f) }
             LaunchedEffect(imageUrl) {
                 if (imageUrl == shown) return@LaunchedEffect
-                previous = shown
+                // Mid-fade, the half-faded image is dropped: the old one stays under.
+                if (fade.value >= 0.5f || previous == null) previous = shown
                 shown = imageUrl
                 fade.snapTo(0f)
-                fade.animateTo(1f, tween(FadeMillis))
-                previous = null
             }
-            previous?.let { BackdropImage(it) { 1f - fade.value } }
-            shown?.let { BackdropImage(it) { fade.value } }
+            LaunchedEffect(shown, loaded) {
+                if (fade.value < 1f && (shown == null || loaded == shown)) {
+                    fade.animateTo(1f, tween(FadeMillis))
+                    previous = null
+                }
+            }
+            // One call site, so an image keeps its composition (and painter) as it goes from new to old.
+            for (url in listOfNotNull(previous, shown).distinct()) {
+                key(url) {
+                    BackdropImage(url, onLoaded = { loaded = url }) {
+                        when {
+                            url == shown && url != previous -> fade.value
+                            shown == null -> 1f - fade.value // fading out to nothing
+                            else -> 1f
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun BackdropImage(url: String, alpha: () -> Float) {
-    // Keyed by URL, so a fading-out image keeps its painter.
-    key(url) {
-        AsyncImage(
-            model = url,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            alignment = Alignment.TopEnd,
-            modifier = Modifier.fillMaxSize().graphicsLayer {
-                this.alpha = alpha()
-                compositingStrategy = CompositingStrategy.ModulateAlpha
-            },
-        )
-    }
+private fun BackdropImage(url: String, onLoaded: () -> Unit, alpha: () -> Float) {
+    AsyncImage(
+        model = url,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        alignment = Alignment.TopEnd,
+        // A failed image counts as loaded: the fade then shows the page colour.
+        onSuccess = { onLoaded() },
+        onError = { onLoaded() },
+        modifier = Modifier.fillMaxSize().graphicsLayer {
+            this.alpha = alpha()
+            compositingStrategy = CompositingStrategy.ModulateAlpha
+        },
+    )
 }
 
 private const val FadeMillis = 300
