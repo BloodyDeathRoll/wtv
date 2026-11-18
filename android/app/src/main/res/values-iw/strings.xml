@@ -69,4 +69,6 @@
     <string name="resume">המשך צפייה</string>
     <string name="start_over">מההתחלה</string>
     <string name="play_episode">צפייה: %1$s</string>
+    <string name="up_next">הפרק הבא</string>
+    <string name="play_next_in">הפעלה עכשיו (%1$d)</string>
 </resources>

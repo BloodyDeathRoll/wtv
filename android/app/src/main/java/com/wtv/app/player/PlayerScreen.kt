@@ -1,6 +1,7 @@
 package com.wtv.app.player
 
 import android.view.ViewGroup
+import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -8,10 +9,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
@@ -51,6 +55,11 @@ import kotlinx.coroutines.delay
  * Starts at `startSecs`. Reports the position (seconds, and the length when
  * known) every [SAVE_EVERY_MS] while playing, on pause, at the end, when the
  * app goes to the background, and, with `final`, when the page closes.
+ *
+ * `next` names the episode that follows, if any. When the episode ends, an
+ * Up next card counts down [UP_NEXT_SECS] and then calls `onNext`; OK on it
+ * plays at once, Back hides it. Not before the end: there is no way to tell
+ * where the credits start, and a guess cut the story short.
  */
 @OptIn(UnstableApi::class)
 @Composable
@@ -59,6 +68,8 @@ fun PlayerScreen(
     title: String,
     startSecs: Int,
     firstFocus: FocusRequester,
+    next: String?,
+    onNext: () -> Unit,
     onProgress: (positionSecs: Int, durationSecs: Int?, final: Boolean) -> Unit,
     onClose: () -> Unit,
 ) {
@@ -93,6 +104,7 @@ fun PlayerScreen(
             if (player.isPlaying) save(final = false)
         }
     }
+    var upNext by remember { mutableStateOf(false) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(player, lifecycle) {
         val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) player.pause() }
@@ -111,7 +123,10 @@ fun PlayerScreen(
             }
 
             override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_ENDED) save(final = false)
+                if (state == Player.STATE_ENDED) {
+                    save(final = false)
+                    if (next != null) upNext = true
+                }
             }
         }
         player.addListener(listener)
@@ -134,6 +149,32 @@ fun PlayerScreen(
             },
             modifier = Modifier.fillMaxSize().focusRequester(firstFocus),
         )
+        if (upNext && next != null && error == null) {
+            val button = remember { FocusRequester() }
+            var left by remember { mutableIntStateOf(UP_NEXT_SECS) }
+            LaunchedEffect(Unit) {
+                runCatching { button.requestFocus() }
+                while (left > 0) {
+                    delay(1_000)
+                    left--
+                }
+                onNext()
+            }
+            BackHandler {
+                upNext = false
+                runCatching { firstFocus.requestFocus() }
+            }
+            Column(
+                Modifier.align(Alignment.BottomEnd).padding(48.dp)
+                    .background(WtvColors.Surface.copy(alpha = 0.92f), RoundedCornerShape(8.dp)).padding(24.dp),
+            ) {
+                Text(stringResource(R.string.up_next), style = MaterialTheme.typography.labelLarge, color = WtvColors.TextSecondary)
+                Spacer(Modifier.height(4.dp))
+                Text(next, style = MaterialTheme.typography.titleMedium, color = WtvColors.TextPrimary)
+                Spacer(Modifier.height(16.dp))
+                Button(onClick = onNext, modifier = Modifier.focusRequester(button)) { Text(stringResource(R.string.play_next_in, left)) }
+            }
+        }
         val e = error
         if (e != null) {
             Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -150,3 +191,4 @@ fun PlayerScreen(
 }
 
 private const val SAVE_EVERY_MS = 15_000L
+private const val UP_NEXT_SECS = 10

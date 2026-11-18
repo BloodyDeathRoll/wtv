@@ -42,6 +42,10 @@ fun nextEpisode(episodes: List<Episode>, progress: List<Progress>): EpisodePlay?
     }
 }
 
+/** The episode after `episodeId` in `episodes` (in order); null after the last, or when it is not there. */
+fun episodeAfter(episodes: List<Episode>, episodeId: Long?): Episode? =
+    episodes.indexOfFirst { it.id == episodeId }.takeIf { it >= 0 }?.let { episodes.getOrNull(it + 1) }
+
 /** A card in the Continue watching row. */
 data class ContinueItem(val title: Title, val progress: Progress)
 

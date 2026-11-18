@@ -25,6 +25,15 @@ class ProgressTest {
         assertNull(movie(3000, 0).fraction)
     }
 
+    @Test fun `the episode after - across seasons, none after the last or for an unknown one`() {
+        val eps = listOf(episode(1, 1), episode(1, 2), episode(2, 1))
+        assertEquals(eps[1], episodeAfter(eps, eps[0].id))
+        assertEquals(eps[2], episodeAfter(eps, eps[1].id))
+        assertNull(episodeAfter(eps, eps[2].id))
+        assertNull(episodeAfter(eps, 999))
+        assertNull(episodeAfter(eps, null))
+    }
+
     @Test fun `series Play - first episode, the unfinished one, the next, or back to the first`() {
         val eps = listOf(episode(1, 1), episode(1, 2), episode(2, 1))
         assertNull(nextEpisode(emptyList(), emptyList()))

@@ -43,8 +43,10 @@ import com.wtv.app.R
 import com.wtv.app.WtvApplication
 import com.wtv.app.data.CastMember
 import com.wtv.app.data.Category
+import com.wtv.app.data.Episode
 import com.wtv.app.data.Kind
 import com.wtv.app.data.Title
+import com.wtv.app.data.episodeAfter
 import com.wtv.app.player.PlayerScreen
 import com.wtv.app.player.ProviderLogin
 import com.wtv.app.player.StreamKind
@@ -98,9 +100,22 @@ private sealed interface Page {
         override val id get() = "settings"
     }
 
-    /** `titleId` is the copy played; `episodeId` set for an episode. */
-    data class Player(val url: String, val title: String, val titleId: Long, val episodeId: Long?, val startSecs: Int) : Page {
+    /**
+     * `titleId` is the copy played; `episodeId` set for an episode. For an
+     * episode, `series` is the series' name and `episodes` its episodes in
+     * order, so the next one can follow.
+     */
+    data class Player(
+        val url: String,
+        val title: String,
+        val titleId: Long,
+        val episodeId: Long?,
+        val startSecs: Int,
+        val series: String? = null,
+        val episodes: List<Episode> = emptyList(),
+    ) : Page {
         override val id get() = "player"
+        val next: Episode? get() = episodeAfter(episodes, episodeId)
     }
 }
 
@@ -161,14 +176,25 @@ fun WtvApp() {
     val seasonEpisode = stringResource(R.string.season_episode)
     val noLogin = stringResource(R.string.provider_missing)
     // Play: the stream needs the provider login; without one, Settings opens on it.
-    fun play(kind: StreamKind, titleId: Long, episodeId: Long?, extId: Long, containerExt: String?, title: String, startSecs: Int) {
+    fun play(
+        kind: StreamKind, titleId: Long, episodeId: Long?, extId: Long, containerExt: String?, title: String, startSecs: Int,
+        series: String? = null, episodes: List<Episode> = emptyList(),
+    ) {
         val login = ProviderLogin.load(context)
         if (login == null || !login.isComplete) {
             Toast.makeText(context, noLogin, Toast.LENGTH_LONG).show()
             open(Page.Settings(providerFirst = true))
         } else {
-            open(Page.Player(streamUrl(login, kind, extId, containerExt), title, titleId, episodeId, startSecs))
+            open(Page.Player(streamUrl(login, kind, extId, containerExt), title, titleId, episodeId, startSecs, series, episodes))
         }
+    }
+    fun episodeTitle(series: String, e: Episode) = "$series · ${seasonEpisode.format(e.season, e.number)}"
+    // The next episode replaces the player on top: Back still returns to the series page.
+    fun playNext(p: Page.Player) {
+        val e = p.next ?: return
+        val login = ProviderLogin.load(context)?.takeIf { it.isComplete } ?: return
+        val url = streamUrl(login, StreamKind.Episode, e.extId, e.containerExt)
+        stack[stack.lastIndex] = Entry(p.copy(url = url, title = episodeTitle(p.series.orEmpty(), e), episodeId = e.id, startSecs = 0))
     }
 
     // Saved positions. One save at a time; reports that arrive meanwhile collapse
@@ -201,7 +227,8 @@ fun WtvApp() {
     val depth = stack.size
     val railOpen = railPage != null
     var shown by remember { mutableStateOf<Pair<Int, Boolean>?>(null) }
-    LaunchedEffect(depth, railOpen) {
+    // The top entry too: the next episode replaces the player at the same depth.
+    LaunchedEffect(depth, railOpen, stack.lastOrNull()) {
         val (fromDepth, fromRail) = shown ?: (-1 to false)
         shown = depth to railOpen
         if (!railOpen) {
@@ -294,9 +321,9 @@ fun WtvApp() {
                             play = entry.first,
                             progressVersion = progressVersion,
                             onPlay = { copy, start -> play(StreamKind.Movie, copy.id, null, copy.extId, copy.containerExt, p.title.displayName(hebrew), start) },
-                            onPlayEpisode = { e, start ->
-                                val name = "${p.title.displayName(hebrew)} · ${seasonEpisode.format(e.season, e.number)}"
-                                play(StreamKind.Episode, p.title.id, e.id, e.extId, e.containerExt, name, start)
+                            onPlayEpisode = { e, start, episodes ->
+                                val series = p.title.displayName(hebrew)
+                                play(StreamKind.Episode, p.title.id, e.id, e.extId, e.containerExt, episodeTitle(series, e), start, series, episodes)
                             },
                             onPerson = { open(Page.Person(it)) },
                         )
@@ -308,6 +335,8 @@ fun WtvApp() {
                             p.title,
                             startSecs = p.startSecs,
                             firstFocus = entry.first,
+                            next = p.next?.let { e -> listOfNotNull(seasonEpisode.format(e.season, e.number), e.displayName(hebrew)).joinToString(" · ") },
+                            onNext = { playNext(p) },
                             onProgress = { position, duration, final -> saveProgress(p, position, duration, final) },
                             onClose = { close { stack.removeAt(stack.lastIndex) } },
                         )
