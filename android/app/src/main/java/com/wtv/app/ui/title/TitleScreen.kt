@@ -83,7 +83,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.Mutex
 
-private data class Extras(val cast: List<CastMember>, val copies: List<Copy>, val genres: Map<Pair<Kind, Int>, Genre>, val loaded: Boolean)
+private data class Extras(
+    val cast: List<CastMember>,
+    val copies: List<Copy>,
+    val genres: Map<Pair<Kind, Int>, Genre>,
+    val loaded: Boolean,
+    val alsoLiked: List<Title> = emptyList(),
+)
 
 /**
  * A title's page: the header with Play and the title's actions; for a series
@@ -103,6 +109,7 @@ fun TitleScreen(
     /** The episode, the second to start at, and the series' episodes in order (for the next one). */
     onPlayEpisode: (Episode, Int, List<Episode>) -> Unit,
     onPerson: (CastMember) -> Unit,
+    onOpen: (Title) -> Unit,
 ) {
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
     val hebrew = isHebrew()
@@ -112,7 +119,8 @@ fun TitleScreen(
             val cast = async { orDefault(emptyList()) { catalog.cast(title.id) } }
             val copies = async { orDefault(emptyList()) { catalog.copies(title) } }
             val genres = async { orDefault(emptyMap()) { catalog.genres() } }
-            Extras(cast.await(), copies.await(), genres.await(), loaded = true)
+            val alsoLiked = async { orDefault(emptyList()) { catalog.alsoLiked(title) } }
+            Extras(cast.await(), copies.await(), genres.await(), loaded = true, alsoLiked = alsoLiked.await())
         }
     }
     // Saved positions, newest first; null until first loaded. A failed load counts as none.
@@ -328,6 +336,24 @@ fun TitleScreen(
                                                     onFocused = { episode = e },
                                                 )
                                             }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Loaded with the cast, so it never lands above a row already on screen.
+                    if (extras.alsoLiked.isNotEmpty()) {
+                        item(key = "alsoLiked") {
+                            Column(showsTitle) {
+                                RowTitle(stringResource(R.string.row_also_liked))
+                                Sideways {
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                        contentPadding = PaddingValues(end = 48.dp, top = 6.dp, bottom = 6.dp),
+                                    ) {
+                                        items(extras.alsoLiked, key = { it.id }) { t ->
+                                            LandscapeCard(imageUrl = t.cardImage, title = t.displayName(hebrew), onClick = { onOpen(t) })
                                         }
                                     }
                                 }

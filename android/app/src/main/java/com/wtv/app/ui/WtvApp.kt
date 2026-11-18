@@ -353,6 +353,7 @@ fun WtvApp() {
                                 play(StreamKind.Episode, p.title.id, e.id, e.extId, e.containerExt, episodeTitle(series, e), start, series, episodes)
                             },
                             onPerson = { open(Page.Person(it)) },
+                            onOpen = { open(Page.TitlePage(it)) },
                         )
                         is Page.Person -> PersonScreen(p.person, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
                         Page.Search -> SearchScreen(field = entry.first, onOpen = { open(Page.TitlePage(it)) })
