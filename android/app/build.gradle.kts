@@ -29,6 +29,13 @@ android {
         // row level security guards the data).
         buildConfigField("String", "SUPABASE_URL", "\"${setting("SUPABASE_URL")}\"")
         buildConfigField("String", "SUPABASE_KEY", "\"${setting("SUPABASE_PUBLISHABLE_KEY")}\"")
+        // WTW's database (read-only for us: the user's taste profile and ratings).
+        buildConfigField("String", "WTW_SUPABASE_URL", "\"${setting("WTW_SUPABASE_URL")}\"")
+        buildConfigField("String", "WTW_SUPABASE_KEY", "\"${setting("WTW_SUPABASE_ANON_KEY")}\"")
+        // Google sign-in for TVs (device flow). Google treats this client's
+        // secret as not confidential: it ships in every TV app.
+        buildConfigField("String", "GOOGLE_TV_CLIENT_ID", "\"${setting("GOOGLE_TV_CLIENT_ID")}\"")
+        buildConfigField("String", "GOOGLE_TV_CLIENT_SECRET", "\"${setting("GOOGLE_TV_CLIENT_SECRET")}\"")
     }
 
     buildTypes {
