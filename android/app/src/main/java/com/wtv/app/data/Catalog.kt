@@ -50,7 +50,7 @@ data class Title(
     val groupId: Long?,
 ) {
     fun displayName(hebrew: Boolean): String = (if (hebrew) nameHe else nameEn) ?: name
-    fun synopsis(hebrew: Boolean): String? = if (hebrew) overviewHe ?: plot ?: overviewEn else overviewEn ?: plot
+    fun synopsis(hebrew: Boolean): String? = if (hebrew) overviewHe ?: plot ?: overviewEn else overviewEn ?: plot ?: overviewHe
     val cardImage: String? get() = tmdbImage(tmdbBackdrop, TmdbSize.Card) ?: providerBackdrop ?: tmdbImage(tmdbPoster, TmdbSize.Card) ?: providerPoster
     val heroImage: String? get() = tmdbImage(tmdbBackdrop, TmdbSize.Backdrop) ?: providerBackdrop
     val posterImage: String? get() = tmdbImage(tmdbPoster, TmdbSize.Poster) ?: providerPoster
@@ -97,8 +97,11 @@ data class Episode(
      */
     fun displayName(hebrew: Boolean): String? = if (hebrew) nameHe ?: nameEn else nameEn
 
-    /** As for titles: in Hebrew the provider's (Hebrew) plot comes before TMDB's English. */
-    fun synopsis(hebrew: Boolean): String? = if (hebrew) overviewHe ?: plot ?: overviewEn else overviewEn ?: plot
+    /**
+     * As for titles: in Hebrew the provider's (Hebrew) plot comes before TMDB's English.
+     * English ends on the Hebrew overview because the database drops the plot when one exists.
+     */
+    fun synopsis(hebrew: Boolean): String? = if (hebrew) overviewHe ?: plot ?: overviewEn else overviewEn ?: plot ?: overviewHe
     val image: String? get() = tmdbImage(tmdbStill, TmdbSize.Still) ?: providerImage
 }
 

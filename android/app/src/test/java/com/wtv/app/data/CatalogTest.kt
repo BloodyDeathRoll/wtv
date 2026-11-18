@@ -58,6 +58,8 @@ class CatalogTest {
         assertEquals("Pilot", e.displayName(hebrew = true))
         assertEquals("EN", e.synopsis(hebrew = false))
         assertEquals("PROVIDER", e.synopsis(hebrew = true))
+        val onlyHebrew = episode(JSONObject().put("id", 7).put("ext_id", 2).put("season", 1).put("episode", 5).put("overview_he", "HE"))
+        assertEquals("HE", onlyHebrew.synopsis(hebrew = false))
         assertEquals("https://image.tmdb.org/t/p/w300/s.jpg", e.image)
         assertNull(episode(JSONObject().put("id", 6).put("ext_id", 1).put("season", 1).put("episode", 4)).displayName(hebrew = false))
     }
@@ -138,6 +140,9 @@ class CatalogTest {
         assertEquals("PROVIDER", onlyProvider.synopsis(hebrew = true))
         val onlyEnglish = title(row("overview_en" to "EN"))
         assertEquals("EN", onlyEnglish.synopsis(hebrew = true))
+        // The database drops the provider's plot when TMDB has a Hebrew overview.
+        val onlyHebrew = title(row("overview_he" to "HE"))
+        assertEquals("HE", onlyHebrew.synopsis(hebrew = false))
     }
 
     @Test fun `images use the TMDB backdrop first and provider images after`() {
