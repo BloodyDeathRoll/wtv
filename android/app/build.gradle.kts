@@ -38,14 +38,17 @@ android {
         buildConfigField("String", "GOOGLE_TV_CLIENT_SECRET", "\"${setting("GOOGLE_TV_CLIENT_SECRET")}\"")
     }
 
-    // The sideload release key lives outside the repo (WTV_KEYSTORE in local.properties).
-    // Without it the release build is unsigned and cannot be installed.
+    // The release key lives outside the repo: WTV_KEYSTORE (absolute path),
+    // WTV_KEYSTORE_PASSWORD and WTV_KEY_ALIAS in local.properties. Without it
+    // the release build is unsigned and cannot be installed.
     val keystore = setting("WTV_KEYSTORE")
     if (keystore.isNotBlank()) {
+        val store = file(keystore)
+        require(store.exists()) { "WTV_KEYSTORE not found: $keystore" }
         signingConfigs.create("release") {
-            storeFile = file(keystore)
+            storeFile = store
             storePassword = setting("WTV_KEYSTORE_PASSWORD")
-            keyAlias = setting("WTV_KEY_ALIAS")
+            keyAlias = setting("WTV_KEY_ALIAS").ifBlank { "wtv" }
             keyPassword = setting("WTV_KEYSTORE_PASSWORD")
         }
     }
