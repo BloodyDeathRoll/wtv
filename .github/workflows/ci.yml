@@ -122,11 +122,18 @@ jobs:
           target: android-tv
           arch: x86_64
           disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           working-directory: android
-          script: ./gradlew :app:connectedDebugAndroidTest
+          # A stuck run is cut short and leaves the device's log and screen behind for the artifact.
+          script: |
+            adb shell input keyevent 82
+            timeout 15m ./gradlew :app:connectedDebugAndroidTest || { adb logcat -d > build/logcat.txt; adb exec-out screencap -p > build/screen.png; exit 1; }
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: navigation-test-results
-          path: android/app/build/outputs/androidTest-results/
+          path: |
+            android/app/build/outputs/androidTest-results/
+            android/build/logcat.txt
+            android/build/screen.png
