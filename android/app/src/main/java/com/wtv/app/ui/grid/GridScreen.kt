@@ -65,7 +65,8 @@ fun GridScreen(category: Category, firstFocus: FocusRequester, onOpen: (Title) -
     val hebrew = isHebrew()
     val scope = rememberCoroutineScope()
 
-    var sort by rememberSaveable { mutableStateOf(Sort.Added) }
+    // Null: Recommended, the user's WTW ranking (newest first without one).
+    var sort by rememberSaveable { mutableStateOf<Sort?>(null) }
     val titles = remember(sort, hebrew) { mutableStateListOf<Title>() }
     // Rows received so far: the next offset. Not titles.size, which drops repeats.
     var fetched by remember(sort, hebrew) { mutableStateOf(0) }
@@ -80,7 +81,7 @@ fun GridScreen(category: Category, firstFocus: FocusRequester, onOpen: (Title) -
         loading = true
         val before = titles.size
         scope.launch {
-            runCatching { catalog.page(category, sort, hebrew, fetched, PAGE) }
+            runCatching { sort?.let { catalog.page(category, it, hebrew, fetched, PAGE) } ?: catalog.recommendedPage(category, fetched, PAGE) }
                 .onSuccess {
                     fetched += it.size
                     // A sync between two pages shifts rows, so a title can come twice: keys must stay unique.
@@ -123,12 +124,13 @@ fun GridScreen(category: Category, firstFocus: FocusRequester, onOpen: (Title) -
                 )
                 Spacer(Modifier.padding(start = 24.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Sort.entries.forEachIndexed { i, s ->
+                    // Recommended (null) is not a Sort: it is a server function, not a REST order.
+                    (listOf<Sort?>(null) + Sort.entries).forEachIndexed { i, s ->
                         FilterChip(
                             selected = s == sort,
                             onClick = { sort = s },
                             modifier = if (i == 0) Modifier.focusRequester(chips) else Modifier,
-                        ) { Text(stringResource(s.label)) }
+                        ) { Text(stringResource(s?.label ?: R.string.sort_recommended)) }
                     }
                 }
             }

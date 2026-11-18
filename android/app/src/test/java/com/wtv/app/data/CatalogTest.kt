@@ -201,4 +201,10 @@ class CatalogTest {
         assertFalse(isFresh(expiresAtSeconds = 1000, nowSeconds = 940))
         assertFalse(isFresh(expiresAtSeconds = 0, nowSeconds = 1))
     }
+
+    @Test fun `a recommended page asks the server function for one category, offset and limit`() {
+        val path = recommendedPath(Category(7, Kind.Movie, "Kids", null, null), offset = 60, limit = 60)
+        assertTrue(path, path.startsWith("rpc/recommended_page?select="))
+        for (part in listOf("&p_kind=movie", "&p_category=7", "&p_offset=60", "&p_limit=60")) assertTrue(part, path.contains(part))
+    }
 }

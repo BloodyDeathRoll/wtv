@@ -19,4 +19,12 @@ class MarksTest {
         assertEquals("like", body.getString("rating"))
         assertEquals(2, body.length())
     }
+
+    @Test fun `WTW reactions become ratings, anything else none`() {
+        assertEquals(Rating.Love, fromWtw("loved"))
+        assertEquals(Rating.Like, fromWtw("liked"))
+        assertEquals(Rating.Dislike, fromWtw("disliked"))
+        assertNull(fromWtw("mixed"))
+        assertNull(fromWtw(null))
+    }
 }

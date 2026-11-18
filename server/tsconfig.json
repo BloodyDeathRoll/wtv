@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src", "../supabase/functions/_shared/wtw"]
+  "include": ["src", "../supabase/functions/_shared"]
 }
