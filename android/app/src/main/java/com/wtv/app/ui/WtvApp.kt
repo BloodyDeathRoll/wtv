@@ -61,6 +61,7 @@ import com.wtv.app.ui.components.SideRail
 import com.wtv.app.ui.grid.GridScreen
 import com.wtv.app.ui.live.LiveScreen
 import com.wtv.app.ui.person.PersonScreen
+import com.wtv.app.ui.person.TitlesPage
 import com.wtv.app.ui.search.SearchScreen
 import com.wtv.app.ui.settings.SettingsScreen
 import com.wtv.app.ui.theme.WtvColors
@@ -96,6 +97,10 @@ private sealed interface Page {
 
     data object Search : Page {
         override val id get() = "search"
+    }
+
+    data object Watchlist : Page {
+        override val id get() = "watchlist"
     }
 
     /** `providerFirst`: opened from Play without a provider login, focused on the login. */
@@ -351,6 +356,10 @@ fun WtvApp() {
                         )
                         is Page.Person -> PersonScreen(p.person, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
                         Page.Search -> SearchScreen(field = entry.first, onOpen = { open(Page.TitlePage(it)) })
+                        // Read again after a watchlist change (a title removed from its page, say).
+                        Page.Watchlist -> TitlesPage(catalog.watchlistVersion, { catalog.watchlist() }, entry.first, onOpen = { open(Page.TitlePage(it)) }) {
+                            Text(stringResource(R.string.rail_watchlist), style = MaterialTheme.typography.displayMedium, color = WtvColors.TextPrimary)
+                        }
                         is Page.Settings -> SettingsScreen(firstFocus = entry.first, providerFirst = p.providerFirst)
                         is Page.Live -> LivePlayerScreen(p.channels, p.index, p.login, firstFocus = entry.first)
                         is Page.Player -> PlayerScreen(
@@ -383,6 +392,10 @@ fun WtvApp() {
                     RailItem.Settings -> {
                         railPage = null
                         open(Page.Settings())
+                    }
+                    RailItem.Watchlist -> {
+                        railPage = null
+                        open(Page.Watchlist)
                     }
                     else -> railPage = it
                 }

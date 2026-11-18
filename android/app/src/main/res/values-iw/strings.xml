@@ -94,4 +94,5 @@
     <string name="live_catchup">צפייה חוזרת · כפתור חזרה מחזיר לשידור החי</string>
     <string name="live_archive_failed">לא ניתן לטעון תוכניות קודמות</string>
     <string name="live_no_archive">אין עדיין תוכניות קודמות לצפייה</string>
+    <string name="remove_from_watchlist">הסרה מרשימת הצפייה</string>
 </resources>

@@ -16,7 +16,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Replay
@@ -29,6 +33,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,7 +57,9 @@ import com.wtv.app.data.Copy
 import com.wtv.app.data.Episode
 import com.wtv.app.data.Genre
 import com.wtv.app.data.Kind
+import com.wtv.app.data.Marks
 import com.wtv.app.data.Progress
+import com.wtv.app.data.Rating
 import com.wtv.app.data.Title
 import com.wtv.app.data.asCopy
 import com.wtv.app.data.copyLabels
@@ -72,6 +79,7 @@ import com.wtv.app.ui.theme.WtvColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 private data class Extras(val cast: List<CastMember>, val copies: List<Copy>, val genres: Map<Pair<Kind, Int>, Genre>, val loaded: Boolean)
 
@@ -130,6 +138,21 @@ fun TitleScreen(
     }
     var info by remember { mutableStateOf(false) }
     LaunchedEffect(title.id) { play.requestFocus() }
+
+    // Rating and watchlist: shown at once, put back if the save fails. A rating pressed again is cleared.
+    val scope = rememberCoroutineScope()
+    var marks by remember(title.id) { mutableStateOf(Marks()) }
+    LaunchedEffect(title.id) { runCatching { catalog.marks(title) }.onSuccess { marks = it } }
+    fun rate(r: Rating) {
+        val to = if (marks.rating == r) null else r
+        marks = marks.copy(rating = to)
+        scope.launch { runCatching { catalog.setRating(title, to) }.onFailure { if (marks.rating == to) marks = marks.copy(rating = if (to == null) r else null) } }
+    }
+    fun toggleWatchlist() {
+        val to = !marks.onWatchlist
+        marks = marks.copy(onWatchlist = to)
+        scope.launch { runCatching { catalog.setWatchlist(title, to) }.onFailure { if (marks.onWatchlist == to) marks = marks.copy(onWatchlist = !to) } }
+    }
 
     // Series: the episodes, a season at a time; the header shows the focused episode.
     // Null until loaded.
@@ -218,11 +241,30 @@ fun TitleScreen(
                                     },
                                 )
                             }
-                            // TODO(P4-2): watchlist and ratings are stored with the ratings work.
-                            ActionIcon(Icons.Outlined.Add, stringResource(R.string.add_to_watchlist), onClick = {})
-                            ActionIcon(Icons.Outlined.FavoriteBorder, stringResource(R.string.rate_love), onClick = {})
-                            ActionIcon(Icons.Outlined.ThumbUp, stringResource(R.string.rate_like), onClick = {})
-                            ActionIcon(Icons.Outlined.ThumbDown, stringResource(R.string.rate_dislike), onClick = {})
+                            ActionIcon(
+                                if (marks.onWatchlist) Icons.Outlined.Check else Icons.Outlined.Add,
+                                stringResource(if (marks.onWatchlist) R.string.remove_from_watchlist else R.string.add_to_watchlist),
+                                onClick = ::toggleWatchlist,
+                                selected = marks.onWatchlist,
+                            )
+                            ActionIcon(
+                                if (marks.rating == Rating.Love) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                stringResource(R.string.rate_love),
+                                onClick = { rate(Rating.Love) },
+                                selected = marks.rating == Rating.Love,
+                            )
+                            ActionIcon(
+                                if (marks.rating == Rating.Like) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
+                                stringResource(R.string.rate_like),
+                                onClick = { rate(Rating.Like) },
+                                selected = marks.rating == Rating.Like,
+                            )
+                            ActionIcon(
+                                if (marks.rating == Rating.Dislike) Icons.Filled.ThumbDown else Icons.Outlined.ThumbDown,
+                                stringResource(R.string.rate_dislike),
+                                onClick = { rate(Rating.Dislike) },
+                                selected = marks.rating == Rating.Dislike,
+                            )
                             ActionIcon(Icons.Outlined.Info, stringResource(R.string.more_info), onClick = { info = true })
                         }
                     },

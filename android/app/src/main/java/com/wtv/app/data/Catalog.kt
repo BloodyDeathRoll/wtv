@@ -1,5 +1,8 @@
 package com.wtv.app.data
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import com.wtv.app.ui.TmdbSize
 import com.wtv.app.ui.tmdbImage
 import kotlinx.coroutines.async
@@ -234,6 +237,34 @@ class Catalog(private val api: Api) {
 
     suspend fun setFavorite(channelId: Long, favorite: Boolean) =
         api.post("channel_prefs?on_conflict=user_id,channel_id", favoriteBody(channelId, favorite), prefer = UPSERT)
+
+    /** Bumped on every watchlist change, so the Watchlist page reads it again. */
+    var watchlistVersion by mutableIntStateOf(0)
+        private set
+
+    /** The user's rating and watchlist entry for a title's card. */
+    suspend fun marks(title: Title): Marks = coroutineScope {
+        val rating = async { api.get("ratings?select=rating&title_id=eq.${title.cardId}").objects().firstOrNull()?.text("rating") }
+        val listed = async { api.get("watchlist?select=title_id&title_id=eq.${title.cardId}").objects().isNotEmpty() }
+        Marks(rating(rating.await()), listed.await())
+    }
+
+    /** Rates a title's card, or clears its rating with null. */
+    suspend fun setRating(title: Title, rating: Rating?) {
+        if (rating == null) api.delete("ratings?title_id=eq.${title.cardId}")
+        else api.post("ratings?on_conflict=user_id,title_id", ratingBody(title.cardId, rating), prefer = UPSERT)
+    }
+
+    suspend fun setWatchlist(title: Title, on: Boolean) {
+        if (on) api.post("watchlist?on_conflict=user_id,title_id", JSONObject().put("title_id", title.cardId).toString(), prefer = "resolution=ignore-duplicates,return=minimal")
+        else api.delete("watchlist?title_id=eq.${title.cardId}")
+        watchlistVersion++
+    }
+
+    /** The watchlist, last added first; titles the provider no longer has are left out. */
+    suspend fun watchlist(): List<Title> =
+        api.get("watchlist?select=added_at,titles!inner($TITLE_COLUMNS)&titles.available=is.true&order=added_at.desc").objects()
+            .mapNotNull { it.optJSONObject("titles") }.map(::title)
 
     /** What the user hid on the Live TV page. */
     suspend fun liveFilters(): LiveFilters = coroutineScope {

@@ -60,29 +60,7 @@ private sealed interface Load {
 @Composable
 fun PersonScreen(person: CastMember, firstFocus: FocusRequester, onOpen: (Title) -> Unit) {
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
-    val hebrew = isHebrew()
-    var attempt by remember { mutableIntStateOf(0) }
-    // The loading message holds the focus until the posters arrive. They take it
-    // unless the user pressed a key meanwhile (moved to the rail, say). Removing the
-    // message clears the focus, so "had the focus" cannot tell; a key press can.
-    var moved by remember { mutableStateOf(false) }
-    val load by produceState<Load>(Load.Loading, person.personId, attempt) {
-        value = Load.Loading
-        value = try {
-            Load.Ready(catalog.personTitles(person.personId))
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Load.Failed(e.message ?: e.toString())
-        }
-    }
-
-    // Each state's first item (loading message, Retry, empty message, first
-    // poster) holds `firstFocus`; replacing a state clears the focus, so it is
-    // requested again on every change, unless the user pressed a key meanwhile.
-    LaunchedEffect(load) { if (!moved) runCatching { firstFocus.requestFocus() } }
-
-    Column(Modifier.fillMaxSize().padding(start = 88.dp, end = 48.dp, top = 48.dp)) {
+    TitlesPage(person.personId, { catalog.personTitles(person.personId) }, firstFocus, onOpen) { count ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (person.photo != null) {
                 AsyncImage(
@@ -95,22 +73,61 @@ fun PersonScreen(person: CastMember, firstFocus: FocusRequester, onOpen: (Title)
             }
             Column {
                 Text(person.name, style = MaterialTheme.typography.displayMedium, color = WtvColors.TextPrimary)
-                val state = load
-                if (state is Load.Ready) {
+                if (count != null) {
                     Text(
-                        pluralStringResource(R.plurals.person_titles, state.titles.size, state.titles.size),
+                        pluralStringResource(R.plurals.person_titles, count, count),
                         style = MaterialTheme.typography.titleSmall,
                         color = WtvColors.TextSecondary,
                     )
                 }
             }
         }
+    }
+}
+
+/**
+ * A page of title posters under a header: a person's titles, the watchlist.
+ * `load` runs again when `key` changes; `header` gets the number of titles
+ * once they are in.
+ */
+@Composable
+fun TitlesPage(
+    key: Any,
+    load: suspend () -> List<Title>,
+    firstFocus: FocusRequester,
+    onOpen: (Title) -> Unit,
+    header: @Composable (count: Int?) -> Unit,
+) {
+    val hebrew = isHebrew()
+    var attempt by remember { mutableIntStateOf(0) }
+    // The loading message holds the focus until the posters arrive. They take it
+    // unless the user pressed a key meanwhile (moved to the rail, say). Removing the
+    // message clears the focus, so "had the focus" cannot tell; a key press can.
+    var moved by remember { mutableStateOf(false) }
+    val state by produceState<Load>(Load.Loading, key, attempt) {
+        value = Load.Loading
+        value = try {
+            Load.Ready(load())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Load.Failed(e.message ?: e.toString())
+        }
+    }
+
+    // Each state's first item (loading message, Retry, empty message, first
+    // poster) holds `firstFocus`; replacing a state clears the focus, so it is
+    // requested again on every change, unless the user pressed a key meanwhile.
+    LaunchedEffect(state) { if (!moved) runCatching { firstFocus.requestFocus() } }
+
+    Column(Modifier.fillMaxSize().padding(start = 88.dp, end = 48.dp, top = 48.dp)) {
+        header((state as? Load.Ready)?.titles?.size)
         Spacer(Modifier.height(24.dp))
-        when (val state = load) {
+        when (val s = state) {
             Load.Loading -> Message(stringResource(R.string.loading), firstFocus, onKey = { moved = true })
-            is Load.Failed -> Message(stringResource(R.string.load_failed, state.message), firstFocus, onKey = { moved = true }, onRetry = { moved = false; attempt++ })
+            is Load.Failed -> Message(stringResource(R.string.load_failed, s.message), firstFocus, onKey = { moved = true }, onRetry = { moved = false; attempt++ })
             is Load.Ready ->
-                if (state.titles.isEmpty()) Message(stringResource(R.string.nothing_here), firstFocus, onKey = { moved = true })
+                if (s.titles.isEmpty()) Message(stringResource(R.string.nothing_here), firstFocus, onKey = { moved = true })
                 else {
                     LazyVerticalGrid(
                         columns = GridCells.Fixed(6),
@@ -118,7 +135,7 @@ fun PersonScreen(person: CastMember, firstFocus: FocusRequester, onOpen: (Title)
                         verticalArrangement = Arrangement.spacedBy(18.dp),
                         contentPadding = PaddingValues(top = 6.dp, bottom = 48.dp),
                     ) {
-                        itemsIndexed(state.titles, key = { _, t -> t.id }) { i, t ->
+                        itemsIndexed(s.titles, key = { _, t -> t.id }) { i, t ->
                             PosterCard(
                                 imageUrl = t.posterImage,
                                 title = t.displayName(hebrew),

@@ -95,4 +95,5 @@
     <string name="live_catchup">Catch-up · Back returns to live</string>
     <string name="live_archive_failed">Earlier programmes could not be loaded</string>
     <string name="live_no_archive">No earlier programmes to play back yet</string>
+    <string name="remove_from_watchlist">Remove from watchlist</string>
 </resources>
