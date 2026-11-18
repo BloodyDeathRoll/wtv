@@ -158,11 +158,11 @@ class Catalog(private val api: Api) {
 
     /**
      * Asks the server to rank the catalog from the user's WTW data (`wtwToken`
-     * is their WTW session). Cheap when a recent ranking exists: the server keeps it.
+     * is their WTW session). Cheap when a recent ranking exists: the server
+     * keeps it. True when a new ranking was made.
      */
-    suspend fun refreshRanking(wtwToken: String) {
-        api.function("rank", JSONObject().put("wtw_token", wtwToken).toString())
-    }
+    suspend fun refreshRanking(wtwToken: String): Boolean =
+        !JSONObject(api.function("rank", JSONObject().put("wtw_token", wtwToken).toString())).optBoolean("fresh")
 
     /** One page of a category in the given order. */
     suspend fun page(category: Category, sort: Sort, hebrew: Boolean, offset: Int, limit: Int): List<Title> =
@@ -268,6 +268,8 @@ class Catalog(private val api: Api) {
         val rating = async { api.get("ratings?select=rating&title_id=eq.${title.cardId}").objects().firstOrNull()?.text("rating") }
         val listed = async { api.get("watchlist?select=title_id&title_id=eq.${title.cardId}").objects().isNotEmpty() }
         // Pre-filled from WTW (P4-6): the user's WTW rating shows until they rate here.
+        // It cannot be cleared from the TV: clearing removes only the WTV rating.
+        // `title.id` is the card's copy; `rank` writes a row for every copy of a title.
         val wtw = async { runCatching { api.get("rankings?select=wtw_reaction&title_id=eq.${title.id}").objects().firstOrNull()?.text("wtw_reaction") }.getOrNull() }
         Marks(rating(rating.await()) ?: fromWtw(wtw.await()), listed.await())
     }

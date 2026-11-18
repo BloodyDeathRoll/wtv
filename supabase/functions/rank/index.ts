@@ -15,6 +15,7 @@ import { blankDNA, type DNA, type TMDBCrewSnapshot } from '../_shared/wtw/dna.ts
 import { TASTE_FEATURE_VERSION } from '../_shared/wtw/features.ts'
 import { degree1Ids, getBoostEligibleIds, LINEAGE_COLUMNS, LINEAGE_TABLE, lineageCacheFromRows, type LineageCache, type LineageRecord } from '../_shared/wtw/lineage-boost.ts'
 import { scoreV2, vecKey } from '../_shared/wtw/step2.ts'
+import { reactionsByKey } from '../_shared/reactions.ts'
 import { picksFromPayloads, tasteVecsFromRows, trainingTitleIds, trainUserWeights } from '../_shared/wtw/taste-training.ts'
 
 /** A ranking younger than this is kept unless `force`. */
@@ -108,13 +109,7 @@ Deno.serve(async req => {
     const scores: number[] = []
     const sums: number[] = []
     const reactions: (string | null)[] = []
-    // The user's own WTW rating of each title; the last signal for a title wins.
-    const reactionOf = new Map<string, string>()
-    for (const sig of dna.signals) {
-      // Old signals may carry 'mixed' (dropped by WTW): not a rating the app knows.
-      if (sig.reaction !== 'loved' && sig.reaction !== 'liked' && sig.reaction !== 'disliked') continue
-      reactionOf.set(vecKey({ type: sig.type, tmdb_id: String(sig.tmdb_id).trim().replace(/^0+(?=\d)/, '') }), sig.reaction)
-    }
+    const reactionOf = reactionsByKey(dna.signals)
     for (const s of scored) {
       for (const id of idsByKey.get(vecKey(s.title)) ?? []) {
         titleIds.push(id)

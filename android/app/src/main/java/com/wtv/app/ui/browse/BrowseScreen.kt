@@ -50,6 +50,7 @@ import com.wtv.app.ui.components.RowTitle
 import com.wtv.app.ui.components.RowsAtTop
 import com.wtv.app.ui.components.Sideways
 import com.wtv.app.ui.theme.WtvColors
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
@@ -118,11 +119,16 @@ fun BrowseScreen(
     val load by produceState<Load>(Load.Loading, source, hebrew, attempt) {
         value = Load.Loading
         value = runCatching {
-            if (source == BrowseSource.Home) refreshRanking(app)
             val rows = loadRows(catalog, source, hebrew, recentMovies, recentSeries, forYou)
             // Genre names are a nicety: without them the meta line just has no genres.
             Load.Ready(rows, runCatching { catalog.genres() }.getOrDefault(emptyMap()))
         }.getOrElse { Load.Failed(it.message ?: it.toString()) }
+    }
+
+    // Home shows its rows at once; with WTW connected it then has the server rank,
+    // and reloads only when a new ranking was made (the server keeps one for an hour).
+    if (source == BrowseSource.Home) {
+        LaunchedEffect(Unit) { if (refreshRanking(app)) attempt++ }
     }
 
     when (val state = load) {
@@ -145,17 +151,25 @@ fun BrowseScreen(
 
 private const val CONTINUE_WAIT_MS = 5_000L
 /** A first ranking takes about 10 s; after that the server answers at once. */
-private const val RANKING_WAIT_MS = 15_000L
+private const val RANKING_WAIT_MS = 30_000L
 
 private class HomeLabels(val topPicks: String, val newForYou: String, val watchAgain: String)
 
 /**
- * With WTW connected, has the server rank the catalog before Home reads its
- * rows. A nicety: on failure or timeout, Home shows the last ranking or none.
+ * With WTW connected, has the server rank the catalog; true when a new
+ * ranking was made. A nicety: on failure or timeout Home keeps what it shows.
  */
-private suspend fun refreshRanking(app: WtvApplication) {
-    if (app.wtw.email == null) return
-    withTimeoutOrNull(RANKING_WAIT_MS) { runCatching { app.catalog.refreshRanking(app.wtw.token()) } }
+private suspend fun refreshRanking(app: WtvApplication): Boolean {
+    if (app.wtw.email == null) return false
+    return withTimeoutOrNull(RANKING_WAIT_MS) {
+        try {
+            app.catalog.refreshRanking(app.wtw.token())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
+    } ?: false
 }
 
 /**
