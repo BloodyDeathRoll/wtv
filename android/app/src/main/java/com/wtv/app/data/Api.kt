@@ -29,28 +29,32 @@ class Api(private val session: Session, private val http: OkHttpClient) {
         send(path, post = body, prefer = prefer, verb = "save")
     }
 
+    /** Calls the edge function `name` with a JSON `body`; returns its answer. */
+    suspend fun function(name: String, body: String): String =
+        send(name, post = body, prefer = null, verb = "run", base = "functions/v1")
+
     /** Deletes the rows `path` (a PostgREST filter) matches. */
     suspend fun delete(path: String) {
         send(path, post = null, prefer = null, verb = "delete", delete = true)
     }
 
-    private suspend fun send(path: String, post: String?, prefer: String?, verb: String, delete: Boolean = false): String = withContext(Dispatchers.IO) {
+    private suspend fun send(path: String, post: String?, prefer: String?, verb: String, delete: Boolean = false, base: String = "rest/v1"): String = withContext(Dispatchers.IO) {
         val what = path.substringBefore('?')
         val token = session.token()
-        var result = call(path, token, what, post, prefer, delete)
+        var result = call(base, path, token, what, post, prefer, delete)
         if (result.first == 401) {
             // Expired or revoked: one retry with a fresh token.
             session.invalidate(token)
-            result = call(path, session.token(), what, post, prefer, delete)
+            result = call(base, path, session.token(), what, post, prefer, delete)
         }
         val (code, body) = result
         if (code !in 200..299) throw ApiException("Could not $verb $what (HTTP $code)")
         body
     }
 
-    private fun call(path: String, token: String, what: String, post: String?, prefer: String?, delete: Boolean): Pair<Int, String> {
+    private fun call(base: String, path: String, token: String, what: String, post: String?, prefer: String?, delete: Boolean): Pair<Int, String> {
         val request = Request.Builder()
-            .url("${BuildConfig.SUPABASE_URL}/rest/v1/$path")
+            .url("${BuildConfig.SUPABASE_URL}/$base/$path")
             .header("apikey", BuildConfig.SUPABASE_KEY)
             .header("Authorization", "Bearer $token")
             .apply {

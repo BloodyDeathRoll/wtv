@@ -143,6 +143,27 @@ class Catalog(private val api: Api) {
     suspend fun latest(kind: Kind, category: Int? = null, limit: Int = 10): List<Title> =
         api.get(latestPath(kind, category, limit)).objects().map(::title)
 
+    /** One page of a category, best first by the user's WTW ranking; newest first without one. */
+    suspend fun recommendedPage(category: Category, offset: Int, limit: Int): List<Title> =
+        api.get(recommendedPath(category, offset, limit)).objects().map(::title)
+
+    /** Home: the best ranked titles the user has not rated in WTW. */
+    suspend fun topPicks(limit: Int = 20): List<Title> = api.get("rpc/top_picks?select=$TITLE_COLUMNS&p_limit=$limit").objects().map(::title)
+
+    /** Home: of the newest titles, the ranking's best, unrated. */
+    suspend fun newForYou(limit: Int = 20): List<Title> = api.get("rpc/new_for_you?select=$TITLE_COLUMNS&p_limit=$limit").objects().map(::title)
+
+    /** Home: titles loved or liked in WTW. */
+    suspend fun watchAgain(limit: Int = 20): List<Title> = api.get("rpc/watch_again?select=$TITLE_COLUMNS&p_limit=$limit").objects().map(::title)
+
+    /**
+     * Asks the server to rank the catalog from the user's WTW data (`wtwToken`
+     * is their WTW session). Cheap when a recent ranking exists: the server keeps it.
+     */
+    suspend fun refreshRanking(wtwToken: String) {
+        api.function("rank", JSONObject().put("wtw_token", wtwToken).toString())
+    }
+
     /** One page of a category in the given order. */
     suspend fun page(category: Category, sort: Sort, hebrew: Boolean, offset: Int, limit: Int): List<Title> =
         api.get(pagePath(category, sort, hebrew, offset, limit)).objects().map(::title)
@@ -246,7 +267,9 @@ class Catalog(private val api: Api) {
     suspend fun marks(title: Title): Marks = coroutineScope {
         val rating = async { api.get("ratings?select=rating&title_id=eq.${title.cardId}").objects().firstOrNull()?.text("rating") }
         val listed = async { api.get("watchlist?select=title_id&title_id=eq.${title.cardId}").objects().isNotEmpty() }
-        Marks(rating(rating.await()), listed.await())
+        // Pre-filled from WTW (P4-6): the user's WTW rating shows until they rate here.
+        val wtw = async { runCatching { api.get("rankings?select=wtw_reaction&title_id=eq.${title.id}").objects().firstOrNull()?.text("wtw_reaction") }.getOrNull() }
+        Marks(rating(rating.await()) ?: fromWtw(wtw.await()), listed.await())
     }
 
     /** Rates a title's card, or clears its rating with null. */
@@ -306,6 +329,9 @@ private fun cards(kind: Kind, category: Int?): String =
 
 internal fun latestPath(kind: Kind, category: Int?, limit: Int): String =
     cards(kind, category) + "&order=${Sort.Added.order(hebrew = false)}&limit=$limit"
+
+internal fun recommendedPath(category: Category, offset: Int, limit: Int): String =
+    "rpc/recommended_page?select=$TITLE_COLUMNS&p_kind=${category.kind.db}&p_category=${category.id}&p_offset=$offset&p_limit=$limit"
 
 internal fun pagePath(category: Category, sort: Sort, hebrew: Boolean, offset: Int, limit: Int): String =
     cards(category.kind, category.id) + "&order=${sort.order(hebrew)}&offset=$offset&limit=$limit"

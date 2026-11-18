@@ -77,6 +77,10 @@
     <string name="play_failed">לא ניתן להפעיל (%1$s)</string>
     <string name="provider_incomplete">יש למלא את שלושת השדות</string>
     <string name="provider_save_failed">לא ניתן לשמור במכשיר הזה</string>
+    <string name="row_top_picks">הבחירות שלנו בשבילך</string>
+    <string name="row_new_for_you">חדש בשבילך</string>
+    <string name="row_watch_again">לצפות שוב</string>
+    <string name="sort_recommended">מומלץ</string>
     <string name="row_continue">להמשיך לצפות</string>
     <string name="resume">המשך צפייה</string>
     <string name="start_over">מההתחלה</string>

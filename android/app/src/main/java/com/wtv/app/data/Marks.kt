@@ -13,4 +13,12 @@ internal val Title.cardId: Long get() = groupId ?: id
 
 internal fun rating(db: String?): Rating? = Rating.entries.firstOrNull { it.db == db }
 
+/** WTW's reaction (loved, liked, disliked) as a rating. */
+internal fun fromWtw(reaction: String?): Rating? = when (reaction) {
+    "loved" -> Rating.Love
+    "liked" -> Rating.Like
+    "disliked" -> Rating.Dislike
+    else -> null
+}
+
 internal fun ratingBody(titleId: Long, rating: Rating): String = JSONObject().put("title_id", titleId).put("rating", rating.db).toString()

@@ -50,6 +50,8 @@ import com.wtv.app.ui.components.RowTitle
 import com.wtv.app.ui.components.RowsAtTop
 import com.wtv.app.ui.components.Sideways
 import com.wtv.app.ui.theme.WtvColors
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** What a browse page shows: one section's category rows, or Home's latest rows. */
@@ -108,13 +110,16 @@ fun BrowseScreen(
     val watching by produceState<List<ContinueItem>?>(null, progressVersion) {
         value = runCatching { withTimeoutOrNull(CONTINUE_WAIT_MS) { catalog.continueWatching() } }.getOrNull() ?: value.orEmpty()
     }
+    val app = LocalContext.current.applicationContext as WtvApplication
     val recentMovies = stringResource(R.string.row_recent_movies)
     val recentSeries = stringResource(R.string.row_recent_series)
+    val forYou = HomeLabels(stringResource(R.string.row_top_picks), stringResource(R.string.row_new_for_you), stringResource(R.string.row_watch_again))
     var attempt by remember { mutableIntStateOf(0) }
     val load by produceState<Load>(Load.Loading, source, hebrew, attempt) {
         value = Load.Loading
         value = runCatching {
-            val rows = loadRows(catalog, source, hebrew, recentMovies, recentSeries)
+            if (source == BrowseSource.Home) refreshRanking(app)
+            val rows = loadRows(catalog, source, hebrew, recentMovies, recentSeries, forYou)
             // Genre names are a nicety: without them the meta line just has no genres.
             Load.Ready(rows, runCatching { catalog.genres() }.getOrDefault(emptyMap()))
         }.getOrElse { Load.Failed(it.message ?: it.toString()) }
@@ -139,6 +144,19 @@ fun BrowseScreen(
 }
 
 private const val CONTINUE_WAIT_MS = 5_000L
+/** A first ranking takes about 10 s; after that the server answers at once. */
+private const val RANKING_WAIT_MS = 15_000L
+
+private class HomeLabels(val topPicks: String, val newForYou: String, val watchAgain: String)
+
+/**
+ * With WTW connected, has the server rank the catalog before Home reads its
+ * rows. A nicety: on failure or timeout, Home shows the last ranking or none.
+ */
+private suspend fun refreshRanking(app: WtvApplication) {
+    if (app.wtw.email == null) return
+    withTimeoutOrNull(RANKING_WAIT_MS) { runCatching { app.catalog.refreshRanking(app.wtw.token()) } }
+}
 
 /**
  * Continue watching as a row: a series' card names the episode to resume.
@@ -158,12 +176,30 @@ private fun continueRow(items: List<ContinueItem>, label: String, seasonEpisode:
         )
     }
 
-private suspend fun loadRows(catalog: Catalog, source: BrowseSource, hebrew: Boolean, recentMovies: String, recentSeries: String): List<BrowseRow> =
+private suspend fun loadRows(
+    catalog: Catalog,
+    source: BrowseSource,
+    hebrew: Boolean,
+    recentMovies: String,
+    recentSeries: String,
+    forYou: HomeLabels,
+): List<BrowseRow> =
     when (source) {
-        BrowseSource.Home -> listOf(
-            BrowseRow(recentMovies, null, catalog.latest(Kind.Movie)),
-            BrowseRow(recentSeries, null, catalog.latest(Kind.Series)),
-        ).filter { it.titles.isNotEmpty() }
+        // The rows from the ranking are empty without one (no WTW, or no WTW ratings) and then left out.
+        BrowseSource.Home -> coroutineScope {
+            val picks = async { catalog.topPicks() }
+            val fresh = async { catalog.newForYou() }
+            val movies = async { catalog.latest(Kind.Movie) }
+            val series = async { catalog.latest(Kind.Series) }
+            val again = async { catalog.watchAgain() }
+            listOf(
+                BrowseRow(forYou.topPicks, null, picks.await()),
+                BrowseRow(forYou.newForYou, null, fresh.await()),
+                BrowseRow(recentMovies, null, movies.await()),
+                BrowseRow(recentSeries, null, series.await()),
+                BrowseRow(forYou.watchAgain, null, again.await()),
+            ).filter { it.titles.isNotEmpty() }
+        }
         is BrowseSource.Section -> catalog.rows(source.kind).map { (c, titles) -> BrowseRow(c.label(hebrew), c, titles) }
     }
 

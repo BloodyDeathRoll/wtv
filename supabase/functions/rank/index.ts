@@ -107,17 +107,28 @@ Deno.serve(async req => {
     const titleIds: number[] = []
     const scores: number[] = []
     const sums: number[] = []
+    const reactions: (string | null)[] = []
+    // The user's own WTW rating of each title; the last signal for a title wins.
+    const reactionOf = new Map<string, string>()
+    for (const sig of dna.signals) {
+      // Old signals may carry 'mixed' (dropped by WTW): not a rating the app knows.
+      if (sig.reaction !== 'loved' && sig.reaction !== 'liked' && sig.reaction !== 'disliked') continue
+      reactionOf.set(vecKey({ type: sig.type, tmdb_id: String(sig.tmdb_id).trim().replace(/^0+(?=\d)/, '') }), sig.reaction)
+    }
     for (const s of scored) {
       for (const id of idsByKey.get(vecKey(s.title)) ?? []) {
         titleIds.push(id)
         scores.push(s.composite)
         sums.push(s.s)
+        reactions.push(reactionOf.get(vecKey(s.title)) ?? null)
       }
     }
     await sql.begin(async tx => {
+      // Two calls at once for one user: the second waits here, then rewrites the same rows.
+      await tx`select pg_advisory_xact_lock(hashtext(${userId}))`
       await tx`delete from public.rankings where user_id = ${userId}`
-      await tx`insert into public.rankings (user_id, title_id, score, s)
-        select ${userId}, * from unnest(${titleIds}::bigint[], ${scores}::real[], ${sums}::float8[])`
+      await tx`insert into public.rankings (user_id, title_id, score, s, wtw_reaction)
+        select ${userId}, * from unnest(${titleIds}::bigint[], ${scores}::real[], ${sums}::float8[], ${reactions}::text[])`
       await tx`insert into public.ranking_runs (user_id, ranked_at, wtw_user_id, titles, ratings, picks)
         values (${userId}, now(), ${wtwUserId}, ${titleIds.length}, ${dna.signals.length}, ${picks.length})
         on conflict (user_id) do update set ranked_at = excluded.ranked_at, wtw_user_id = excluded.wtw_user_id,
