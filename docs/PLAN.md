@@ -61,7 +61,7 @@ choice.
 
 - Search is text only. Voice comes with the web version.
 - One profile per device.
-- Distribution: sideload (APK) and Play Store.
+- Distribution: sideload (APK) and Play Store as an internal test track for invited testers only, no public listing (decided 2026-11-18). One signing key for both, registered with Play as the app signing key, so either install updates the other.
 
 ## 2. Architecture
 
@@ -220,7 +220,7 @@ milestone.
 | P6-1 | Settings screen: account, language, provider credentials (O5), hidden channels |
 | P6-2 | Speed on the streamer: image caching, list performance, start-up time |
 | P6-3 | Sideload release: signed APK |
-| P6-4 | Play Store release for TV: store listing, TV banner, privacy policy, review |
+| P6-4 | Play Store internal test track for TV (invited testers, no public listing) |
 
 ## 5. Later
 
