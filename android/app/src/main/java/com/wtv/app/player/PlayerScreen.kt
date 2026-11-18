@@ -129,15 +129,18 @@ fun PlayerScreen(
                 if (isPlaying) started = true else if (player.playbackState == Player.STATE_READY) save(final = false)
             }
 
-            // Only a choice the viewer made is kept, not a file's own default.
+            // Only a subtitle choice the viewer made is kept: not a file's own default,
+            // not an audio change, and not a moment with no tracks (between files, on an error).
             var chosen = false
+            var last = player.trackSelectionParameters
 
             override fun onTrackSelectionParametersChanged(parameters: TrackSelectionParameters) {
-                chosen = true
+                if (textSelection(parameters) != textSelection(last)) chosen = true
+                last = parameters
             }
 
             override fun onTracksChanged(tracks: Tracks) {
-                if (chosen) Subtitles.save(context, subtitleChoice(tracks))
+                if (chosen && tracks.groups.any { it.type == C.TRACK_TYPE_TEXT }) Subtitles.save(context, subtitleChoice(tracks))
             }
 
             override fun onPlaybackStateChanged(state: Int) {
@@ -158,7 +161,7 @@ fun PlayerScreen(
     // The view itself must hold the Android focus: the remote's keys show its
     // controls and move between them. The Compose focus alone does not pass them in.
     var view by remember { mutableStateOf<PlayerView?>(null) }
-    LaunchedEffect(view) { view?.requestFocus() }
+    LaunchedEffect(view) { view?.let { if (!it.requestFocus()) it.post { it.requestFocus() } } }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             factory = { ctx ->
@@ -168,13 +171,20 @@ fun PlayerScreen(
                     keepScreenOn = true
                     setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
                     setShowSubtitleButton(true)
-                    // Hidden controls take their focused button with them: the view takes the focus back.
-                    setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { if (it != View.VISIBLE) requestFocus() })
-                    // Focus search does not cross the Compose wrapper: the bar and the buttons under it are linked by hand.
-                    findViewById<View>(androidx.media3.ui.R.id.exo_progress)?.nextFocusDownId = androidx.media3.ui.R.id.exo_subtitle
+                    // Focus search does not cross the Compose wrapper: the bar and the buttons under it
+                    // are linked by hand. The CC button is disabled for files with no subtitles; then Down goes to settings.
+                    val subtitle = findViewById<View>(androidx.media3.ui.R.id.exo_subtitle)
+                    findViewById<View>(androidx.media3.ui.R.id.exo_progress)?.setOnFocusChangeListener { bar, focused ->
+                        if (focused) {
+                            bar.nextFocusDownId =
+                                if (subtitle?.isShown == true && subtitle.isEnabled) androidx.media3.ui.R.id.exo_subtitle else androidx.media3.ui.R.id.exo_settings
+                        }
+                    }
                     for (id in listOf(androidx.media3.ui.R.id.exo_subtitle, androidx.media3.ui.R.id.exo_settings)) {
                         findViewById<View>(id)?.nextFocusUpId = androidx.media3.ui.R.id.exo_progress
                     }
+                    // Hidden controls take their focused button with them: the view takes the focus back.
+                    setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { if (it != View.VISIBLE) requestFocus() })
                     view = this
                 }
             },
@@ -193,7 +203,7 @@ fun PlayerScreen(
             }
             BackHandler {
                 upNext = false
-                view?.requestFocus() ?: runCatching { firstFocus.requestFocus() }
+                if (view?.requestFocus() != true) runCatching { firstFocus.requestFocus() }
             }
             Column(
                 Modifier.align(Alignment.BottomEnd).padding(48.dp)

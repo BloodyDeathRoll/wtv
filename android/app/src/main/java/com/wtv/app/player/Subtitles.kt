@@ -11,7 +11,8 @@ import androidx.media3.common.Tracks
  * point O3): the provider lists none, and many tracks carry no language tag.
  *
  * Stored as [OFF], [UNTAGGED] or a language code. Nothing stored: each file's
- * own default.
+ * own default. A file without the saved language shows its untagged track, if
+ * any: most tracks here carry no tag.
  */
 object Subtitles {
     const val OFF = "off"
@@ -36,6 +37,14 @@ internal fun withSubtitles(params: TrackSelectionParameters, saved: String?): Tr
         .setSelectUndeterminedTextLanguage(true)
         .build()
 }
+
+/** The parts of `params` that choose subtitles; a change in them is the viewer's choice. */
+internal fun textSelection(params: TrackSelectionParameters): List<Any> = listOf(
+    C.TRACK_TYPE_TEXT in params.disabledTrackTypes,
+    params.overrides.filterKeys { it.type == C.TRACK_TYPE_TEXT },
+    params.preferredTextLanguages,
+    params.ignoredTextSelectionFlags,
+)
 
 /** The choice the playing tracks show: the selected subtitle's language, or [Subtitles.OFF]. */
 internal fun subtitleChoice(tracks: Tracks): String =

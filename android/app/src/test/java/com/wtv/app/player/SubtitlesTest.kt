@@ -4,10 +4,12 @@ import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.TrackGroup
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.Tracks
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -35,5 +37,16 @@ class SubtitlesTest {
         assertEquals("he", subtitleChoice(Tracks(listOf(group(text("en"), false), group(text("he"), true)))))
         assertEquals(Subtitles.UNTAGGED, subtitleChoice(Tracks(listOf(group(text(null), true)))))
         assertEquals(Subtitles.OFF, subtitleChoice(Tracks.EMPTY))
+    }
+
+    @Test fun `only subtitle settings count as a subtitle choice`() {
+        val audio = base.buildUpon().setPreferredAudioLanguage("en").setMaxVideoBitrate(1_000_000).build()
+        assertEquals(textSelection(base), textSelection(audio))
+        val off = base.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
+        assertNotEquals(textSelection(base), textSelection(off))
+        val none = base.buildUpon().setIgnoredTextSelectionFlags(C.SELECTION_FLAG_DEFAULT).build()
+        assertNotEquals(textSelection(base), textSelection(none))
+        val heb = base.buildUpon().addOverride(TrackSelectionOverride(TrackGroup(text("he")), 0)).build()
+        assertNotEquals(textSelection(base), textSelection(heb))
     }
 }
