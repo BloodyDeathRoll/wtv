@@ -506,3 +506,6 @@ private fun ExitDialog(onYes: () -> Unit, onNo: () -> Unit) {
     }
     LaunchedEffect(Unit) { runCatching { yes.requestFocus() } }
 }
+
+/** Recommendations come 50 at a time; the next 50 load as the focus nears the end. */
+private const val RECOMMENDATIONS_PAGE = 50
