@@ -64,6 +64,9 @@ const ratings = { tmdb_rating: 7.4, omdb_rating: 0.81 }
 test('trimCrew keeps what the ranking reads, in a fixed key order', () => {
   assert.deepEqual(trimCrew(wtwCrew), crew)
   assert.equal(trimCrew(null), null)
+  // A cast entry without an id is dropped; the others keep their own order.
+  const noId = { ...wtwCrew, cast: [{ name: 'No id', order: 0 }, ...wtwCrew.cast.slice(1)] }
+  assert.deepEqual(trimCrew(noId)?.cast, [2, 3, 4].map(i => ({ tmdb_person_id: `a${i}`, name: `A${i}`, order: i - 1 })))
   assert.equal(trimCrew('x'), null)
   // jsonb returns its own key order: still the same crew.
   const reordered = { cast: crew.cast, writers: [], directors: crew.directors, cinematographers: crew.cinematographers }

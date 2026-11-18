@@ -101,17 +101,16 @@ export function parseVector(v: string | null): number[] | null {
 export function trimCrew(crew: unknown): Crew | null {
   if (crew === null || typeof crew !== 'object') return null
   const c = crew as Record<string, unknown>
-  const people = (list: unknown): Person[] =>
-    Array.isArray(list)
-      ? list.filter(p => p && typeof p === 'object' && (p as Person).tmdb_person_id != null)
-        .map(p => ({ tmdb_person_id: String((p as Person).tmdb_person_id), name: String((p as Person).name ?? '') }))
-      : []
-  const cast = Array.isArray(c.cast) ? c.cast.slice(0, 3) : []
+  const valid = (list: unknown): Record<string, unknown>[] =>
+    Array.isArray(list) ? list.filter(p => p && typeof p === 'object' && (p as Person).tmdb_person_id != null) : []
+  const person = (p: Record<string, unknown>): Person => ({ tmdb_person_id: String(p.tmdb_person_id), name: String(p.name ?? '') })
+  // `order` is read from each entry itself, after the entries without an id are dropped.
+  const cast = valid(c.cast).slice(0, 3).map((p, i) => ({ ...person(p), order: Number(p.order ?? i) }))
   return {
-    directors: people(c.directors),
-    writers: people(c.writers),
-    cinematographers: people(c.cinematographers),
-    cast: people(cast).map((p, i) => ({ ...p, order: Number((cast[i] as { order?: unknown }).order ?? i) })),
+    directors: valid(c.directors).map(person),
+    writers: valid(c.writers).map(person),
+    cinematographers: valid(c.cinematographers).map(person),
+    cast,
   }
 }
 

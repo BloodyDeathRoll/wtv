@@ -19,6 +19,10 @@ import { picksFromPayloads, tasteVecsFromRows, trainingTitleIds, trainUserWeight
 
 /** A ranking younger than this is kept unless `force`. */
 const FRESH_MS = 60 * 60 * 1000
+/** Even with `force`, a user is ranked at most this often (each run rewrites ~12k rows). */
+const MIN_INTERVAL_MS = 2 * 60 * 1000
+/** WTW reads in flight at once, per list of chunks. */
+const PARALLEL = 4
 /** Ids per `in (...)` filter, as WTW does, to keep request URLs short. */
 const ID_CHUNK = 300
 const PAGE = 1000
@@ -44,19 +48,25 @@ Deno.serve(async req => {
   if (wtvError || !wtvUser.user) return json({ error: 'Not signed in to WTV' }, 401)
   const userId = wtvUser.user.id
 
-  if (body?.force !== true) {
-    const [run] = await sql`select ranked_at from public.ranking_runs where user_id = ${userId}`
-    if (run && Date.now() - new Date(run.ranked_at).getTime() < FRESH_MS) return json({ fresh: true })
-  }
-
-  // WTW, read as the user.
+  // WTW, read as the user. The token is checked before anything is answered.
   const wtw = createClient(Deno.env.get('WTW_SUPABASE_URL')!, Deno.env.get('WTW_SUPABASE_ANON_KEY')!, {
     global: { headers: { Authorization: `Bearer ${wtwToken}` } },
     auth: { persistSession: false, autoRefreshToken: false },
   })
   const { data: wtwUser, error: wtwError } = await wtw.auth.getUser(wtwToken)
-  if (wtwError || !wtwUser.user) return json({ error: 'WTW session not valid' }, 401)
+  if (wtwError || !wtwUser.user) {
+    // Only a refusal means "connect WTW again"; anything else is passing trouble.
+    const refused = !wtwError || [400, 401, 403].includes(wtwError.status ?? 0)
+    return refused ? json({ error: 'WTW session not valid' }, 401) : json({ error: `WTW unreachable: ${wtwError.message}` }, 502)
+  }
   const wtwUserId = wtwUser.user.id
+
+  // A ranking is kept only for the same WTW account.
+  const [run] = await sql`select ranked_at, wtw_user_id from public.ranking_runs where user_id = ${userId}`
+  if (run && run.wtw_user_id === wtwUserId) {
+    const age = Date.now() - new Date(run.ranked_at).getTime()
+    if (age < MIN_INTERVAL_MS || (body?.force !== true && age < FRESH_MS)) return json({ fresh: true })
+  }
 
   try {
     const dna = await readDna(wtw, wtwUserId)
@@ -148,10 +158,8 @@ async function readPicks(wtw: SupabaseClient, wtwUserId: string): Promise<unknow
 
 /** WTW taste vectors of the titles the training needs (rated or picked), current version only. */
 async function readWtwVectors(wtw: SupabaseClient, ids: string[]) {
-  const chunks: string[][] = []
-  for (let i = 0; i < ids.length; i += ID_CHUNK) chunks.push(ids.slice(i, i + ID_CHUNK))
-  const results = await Promise.all(chunks.map(chunk => wtw.from('titles').select('tmdb_id, type, taste_vec')
-    .in('tmdb_id', chunk).eq('taste_version', TASTE_FEATURE_VERSION).not('taste_vec', 'is', null)))
+  const results = await inChunks(ids, chunk => wtw.from('titles').select('tmdb_id, type, taste_vec')
+    .in('tmdb_id', chunk).eq('taste_version', TASTE_FEATURE_VERSION).not('taste_vec', 'is', null))
   return results.flatMap(({ data, error }) => {
     if (error) throw new Error(`WTW titles: ${error.message}`)
     return data ?? []
@@ -159,13 +167,20 @@ async function readWtwVectors(wtw: SupabaseClient, ids: string[]) {
 }
 
 async function readLineage(wtw: SupabaseClient, personIds: string[]): Promise<LineageRecord[]> {
-  const chunks: string[][] = []
-  for (let i = 0; i < personIds.length; i += ID_CHUNK) chunks.push(personIds.slice(i, i + ID_CHUNK))
-  const results = await Promise.all(chunks.map(chunk => wtw.from(LINEAGE_TABLE).select(LINEAGE_COLUMNS).in('tmdb_person_id', chunk)))
+  const results = await inChunks(personIds, chunk => wtw.from(LINEAGE_TABLE).select(LINEAGE_COLUMNS).in('tmdb_person_id', chunk))
   return results.flatMap(({ data, error }) => {
     if (error) throw new Error(`WTW ${LINEAGE_TABLE}: ${error.message}`)
     return (data ?? []) as unknown as LineageRecord[]
   })
+}
+
+/** Runs `read` over `ids` in chunks of ID_CHUNK, PARALLEL at a time, keeping the order. */
+async function inChunks<T>(ids: string[], read: (chunk: string[]) => PromiseLike<T>): Promise<T[]> {
+  const chunks: string[][] = []
+  for (let i = 0; i < ids.length; i += ID_CHUNK) chunks.push(ids.slice(i, i + ID_CHUNK))
+  const out: T[] = []
+  for (let i = 0; i < chunks.length; i += PARALLEL) out.push(...await Promise.all(chunks.slice(i, i + PARALLEL).map(read)))
+  return out
 }
 
 interface Candidate {

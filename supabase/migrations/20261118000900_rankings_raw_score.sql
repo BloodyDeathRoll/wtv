@@ -1,6 +1,6 @@
 -- The composite saturates near 1 for a user's best titles (Φ of several sd),
 -- so many tie at the top. Rank by the weighted sum before Φ instead, and
--- keep the composite for a match %.
+-- keep the composite for a match % (real is plenty for a percentage).
 alter table public.rankings add column s double precision;
 update public.rankings set s = score;
 alter table public.rankings alter column s set not null;
