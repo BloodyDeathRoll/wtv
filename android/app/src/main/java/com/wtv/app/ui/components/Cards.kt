@@ -8,8 +8,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -21,11 +24,14 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Border
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
@@ -138,3 +144,78 @@ fun PersonCard(
     modifier: Modifier = Modifier,
     onFocused: () -> Unit = {},
 ) = ImageCard(imageUrl, name, onClick, width = 96.dp, aspectRatio = 3f / 4f, modifier, onFocused = onFocused)
+
+/**
+ * A live channel: its logo (or its name, when there is none) on a plain
+ * card, the provider's number in the corner, a star when it is a favourite.
+ * Holding OK calls `onLongClick`.
+ */
+@Composable
+fun ChannelCard(
+    logo: String?,
+    name: String,
+    number: Int?,
+    favorite: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        onClick = onClick,
+        onLongClick = onLongClick,
+        modifier = modifier.remembersFocus().aspectRatio(16f / 9f),
+        shape = CardDefaults.shape(CardShape),
+        scale = CardDefaults.scale(focusedScale = 1.04f),
+        border = CardDefaults.border(
+            focusedBorder = Border(BorderStroke(3.dp, WtvColors.Focus), shape = CardShape),
+        ),
+        colors = CardDefaults.colors(containerColor = WtvColors.Surface),
+    ) {
+        Box(Modifier.fillMaxSize()) {
+            var failed by remember(logo) { mutableStateOf(false) }
+            if (logo != null && !failed) {
+                AsyncImage(
+                    model = logo,
+                    contentDescription = name,
+                    contentScale = ContentScale.Fit,
+                    onError = { failed = true },
+                    modifier = Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 30.dp),
+                )
+                Text(
+                    name,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = WtvColors.TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 8.dp, vertical = 6.dp),
+                )
+            } else {
+                Text(
+                    name,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = WtvColors.TextPrimary,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.align(Alignment.Center).padding(12.dp),
+                )
+            }
+            if (number != null) {
+                Text(
+                    number.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = WtvColors.TextMuted,
+                    modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
+                )
+            }
+            if (favorite) {
+                Icon(
+                    Icons.Filled.Star,
+                    contentDescription = null,
+                    tint = WtvColors.Accent,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(18.dp),
+                )
+            }
+        }
+    }
+}

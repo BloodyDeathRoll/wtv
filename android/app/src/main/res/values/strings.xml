@@ -72,4 +72,9 @@
     <string name="play_episode">Play %1$s</string>
     <string name="up_next">Up next</string>
     <string name="play_next_in">Play now (%1$d)</string>
+    <string name="live_favorites">Favourites</string>
+    <string name="live_hint">Hold OK to add or remove a favourite</string>
+    <string name="live_favorite_added">Added to favourites</string>
+    <string name="live_favorite_removed">Removed from favourites</string>
+    <string name="live_failed">This channel is not available right now</string>
 </resources>
