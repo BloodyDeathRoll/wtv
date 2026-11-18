@@ -207,8 +207,10 @@ private fun LiveSection() {
 }
 
 /**
- * Google sign-in: a code to enter on the phone, then a WTV and a WTW session.
- * The page is rebuilt afterwards, so every screen reads as the new user.
+ * Google sign-in: a code to enter on the phone, then a WTV session. Connecting
+ * WTW is a separate step, for people who already use WTW: signing in to WTW
+ * with a new Google account would create a WTW account, and WTV never writes
+ * to WTW. The page is rebuilt afterwards, so every screen reads as the new user.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -216,14 +218,15 @@ private fun AccountSection() {
     val context = LocalContext.current
     val app = context.applicationContext as WtvApplication
     val scope = rememberCoroutineScope()
-    // Signed in only when both sessions exist; a half-done sign-in shows the button again.
-    val email = remember { app.session.email?.takeIf { app.wtw.email != null } }
+    val email = remember { app.session.email }
+    val wtwEmail = remember { app.wtw.email }
     var code by remember { mutableStateOf<GoogleSignIn.Code?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var job by remember { mutableStateOf<Job?>(null) }
-    // Set once the phone has approved: the sign-ins then finish whatever Cancel says.
+    // Set once the phone has approved: the sign-in then finishes whatever Cancel says.
     var finishing by remember { mutableStateOf(false) }
-    val signInFocus = remember { FocusRequester() }
+    // On whichever button starts a sign-in (Sign in, or Connect WTW).
+    val startFocus = remember { FocusRequester() }
     val cancelFocus = remember { FocusRequester() }
     var codeShown by remember { mutableStateOf(false) }
     // The focused button leaves the screen when the code appears or goes; focus follows to the new one.
@@ -232,84 +235,98 @@ private fun AccountSection() {
             codeShown = true
             cancelFocus.requestFocus()
         } else if (codeShown) {
-            signInFocus.requestFocus()
+            startFocus.requestFocus()
         }
     }
 
+    /** Shows a code; once the phone approves, `signIn` runs with the ID token and the page is rebuilt. */
+    fun start(signIn: suspend (String) -> Unit) {
+        if (job?.isActive == true || finishing) return
+        error = null
+        job = scope.launch {
+            try {
+                val started = app.google.start()
+                code = started
+                val idToken = app.google.awaitIdToken(started)
+                // Cancel stops the wait only: once approved, the sign-in runs to the end.
+                finishing = true
+                withContext(NonCancellable) {
+                    signIn(idToken)
+                    (context as? Activity)?.recreate()
+                }
+            } catch (e: ApiException) {
+                error = e.message
+                code = null
+            } finally {
+                finishing = false
+            }
+        }
+    }
+
+    @Composable
+    fun Note(text: String) = Text(text, style = MaterialTheme.typography.bodyMedium, color = WtvColors.TextSecondary)
+
     Text(stringResource(R.string.setting_account), style = MaterialTheme.typography.titleMedium, color = WtvColors.TextPrimary)
     Spacer(Modifier.height(12.dp))
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        val shown = code
-        when {
-            email != null -> {
-                Text(stringResource(R.string.signed_in), style = MaterialTheme.typography.bodyLarge, color = WtvColors.TextSecondary)
-                Spacer(Modifier.width(8.dp))
-                Text(email, style = MaterialTheme.typography.bodyLarge, color = WtvColors.TextPrimary)
-                Spacer(Modifier.width(24.dp))
-                Button(onClick = {
-                    scope.launch(NonCancellable) {
-                        app.session.signOut()
-                        app.wtw.signOut()
-                        (context as? Activity)?.recreate()
-                    }
-                }) { Text(stringResource(R.string.sign_out)) }
-            }
-            shown == null -> {
-                Button(
-                    onClick = {
-                        if (job?.isActive == true || finishing) return@Button
-                        error = null
-                        job = scope.launch {
-                            try {
-                                val started = app.google.start()
-                                code = started
-                                val idToken = app.google.awaitIdToken(started)
-                                // Cancel stops the wait only: once approved, both sign-ins run to the end.
-                                // WTV first: if it fails, nothing has changed on this device. If WTW
-                                // then fails, signing in again finishes it (WTV is already the account).
-                                finishing = true
-                                withContext(NonCancellable) {
-                                    app.session.signInWithGoogle(idToken, link = true)
-                                    app.wtw.signInWithGoogle(idToken, link = false)
-                                    (context as? Activity)?.recreate()
-                                }
-                            } catch (e: ApiException) {
-                                error = e.message
-                                code = null
-                            } finally {
-                                finishing = false
-                            }
-                        }
-                    },
-                    modifier = Modifier.focusRequester(signInFocus),
-                ) { Text(stringResource(R.string.sign_in_google)) }
-                Spacer(Modifier.width(16.dp))
+    val shown = code
+    if (shown != null) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column {
                 Text(
-                    error?.let { stringResource(R.string.sign_in_failed, it) } ?: stringResource(R.string.account_signed_out),
-                    style = MaterialTheme.typography.bodyMedium,
+                    stringResource(R.string.sign_in_code, shown.url.removePrefix("https://").removePrefix("www.")),
+                    style = MaterialTheme.typography.bodyLarge,
                     color = WtvColors.TextSecondary,
                 )
+                Text(shown.userCode, style = MaterialTheme.typography.displaySmall, color = WtvColors.Accent)
             }
-            else -> {
-                Column {
-                    Text(
-                        stringResource(R.string.sign_in_code, shown.url.removePrefix("https://").removePrefix("www.")),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = WtvColors.TextSecondary,
-                    )
-                    Text(shown.userCode, style = MaterialTheme.typography.displaySmall, color = WtvColors.Accent)
-                }
-                Spacer(Modifier.width(24.dp))
-                Button(
-                    onClick = {
-                        if (!finishing) {
-                            job?.cancel()
-                            code = null
-                        }
-                    },
-                    modifier = Modifier.focusRequester(cancelFocus),
-                ) { Text(stringResource(R.string.cancel)) }
+            Spacer(Modifier.width(24.dp))
+            Button(
+                onClick = {
+                    if (!finishing) {
+                        job?.cancel()
+                        code = null
+                    }
+                },
+                modifier = Modifier.focusRequester(cancelFocus),
+            ) { Text(stringResource(R.string.cancel)) }
+        }
+        return
+    }
+    if (email == null) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Button(
+                onClick = { start { app.session.signInWithGoogle(it, link = true) } },
+                modifier = Modifier.focusRequester(startFocus),
+            ) { Text(stringResource(R.string.sign_in_google)) }
+            Spacer(Modifier.width(16.dp))
+            Note(error?.let { stringResource(R.string.sign_in_failed, it) } ?: stringResource(R.string.account_signed_out))
+        }
+        return
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.signed_in), style = MaterialTheme.typography.bodyLarge, color = WtvColors.TextSecondary)
+        Spacer(Modifier.width(8.dp))
+        Text(email, style = MaterialTheme.typography.bodyLarge, color = WtvColors.TextPrimary)
+        Spacer(Modifier.width(24.dp))
+        Button(onClick = {
+            scope.launch(NonCancellable) {
+                app.session.signOut()
+                app.wtw.signOut()
+                (context as? Activity)?.recreate()
             }
+        }) { Text(stringResource(R.string.sign_out)) }
+    }
+    Spacer(Modifier.height(10.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (wtwEmail != null) {
+            Note(stringResource(R.string.wtw_connected, wtwEmail))
+        } else {
+            Button(
+                onClick = { start { app.wtw.signInWithGoogle(it, link = false) } },
+                modifier = Modifier.focusRequester(startFocus),
+            ) { Text(stringResource(R.string.connect_wtw)) }
+            Spacer(Modifier.width(16.dp))
+            Note(error?.let { stringResource(R.string.sign_in_failed, it) } ?: stringResource(R.string.connect_wtw_hint))
         }
     }
 }

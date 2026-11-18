@@ -56,7 +56,10 @@
     <string name="no_results">לא נמצא דבר עבור „%1$s”</string>
     <string name="setting_language">שפה</string>
     <string name="setting_account">חשבון</string>
-    <string name="account_signed_out">התחברו עם Google כדי לקבל המלצות מ-WTW</string>
+    <string name="account_signed_out">התחברו עם Google כדי לשמור מועדפים והתקדמות בכל המכשירים</string>
+    <string name="connect_wtw">חיבור ל-WTW</string>
+    <string name="connect_wtw_hint">רק אם כבר יש לכם חשבון WTW: אחרת ייפתח חשבון חדש</string>
+    <string name="wtw_connected">WTW מחובר: %1$s</string>
     <string name="sign_in_google">התחברות עם Google</string>
     <string name="sign_in_code">בטלפון, פתחו את %1$s והזינו את הקוד:</string>
     <string name="signed_in">מחובר:</string>
