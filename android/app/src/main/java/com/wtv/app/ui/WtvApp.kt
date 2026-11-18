@@ -26,6 +26,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -276,7 +277,7 @@ fun WtvApp() {
 
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.size(1.dp).focusRequester(parked).focusProperties { canFocus = parking }.focusable())
-        Layer(blocked = railOpen || stack.isNotEmpty(), memory = baseMemory) {
+        Layer(blocked = railOpen || stack.isNotEmpty(), hidden = stack.isNotEmpty(), memory = baseMemory) {
             val source = when (section) {
                 Section.Home -> BrowseSource.Home
                 Section.Movies -> BrowseSource.Section(Kind.Movie)
@@ -340,7 +341,7 @@ fun WtvApp() {
         stack.forEachIndexed { i, entry ->
             // Keyed by the entry, so a page keeps its state while pages open over it.
             key(entry) {
-                Layer(blocked = railOpen || i != stack.lastIndex, memory = entry.memory, opaque = true) {
+                Layer(blocked = railOpen || i != stack.lastIndex, hidden = i != stack.lastIndex, memory = entry.memory) {
                     when (val p = entry.page) {
                         is Page.Grid -> GridScreen(p.category, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
                         is Page.TitlePage -> TitleScreen(
@@ -417,17 +418,18 @@ fun WtvApp() {
 
 /**
  * One screen of the stack. Layers below the top stay composed (no reload,
- * same scroll) but cannot take the focus. Cards inside record themselves in
+ * same scroll) but cannot take the focus and are not drawn (the window
+ * background shows through the top one, which covers them anyway). Cards inside record themselves in
  * `memory`, so the layer can give the focus back to the last one.
  */
 @Composable
-private fun Layer(blocked: Boolean, memory: FocusMemory, opaque: Boolean = false, content: @Composable BoxScope.() -> Unit) {
+private fun Layer(blocked: Boolean, hidden: Boolean, memory: FocusMemory, content: @Composable BoxScope.() -> Unit) {
     CompositionLocalProvider(LocalFocusMemory provides memory) {
         Box(
             Modifier
                 .fillMaxSize()
-                // A layer over another hides it whatever its own content draws.
-                .then(if (opaque) Modifier.background(WtvColors.Background) else Modifier)
+                // Drawing a covered layer cost a whole extra screen per frame.
+                .then(if (hidden) Modifier.drawWithContent {} else Modifier)
                 .focusProperties { onEnter = { if (blocked) cancelFocusChange() } }
                 .focusGroup(),
             content = content,

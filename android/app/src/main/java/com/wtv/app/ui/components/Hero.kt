@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -44,28 +45,41 @@ fun Backdrop(imageUrl: String?, modifier: Modifier = Modifier) {
     )
     val fromStart = LocalLayoutDirection.current == LayoutDirection.Ltr
     val fade = if (fromStart) stops else stops.map { (at, color) -> (1f - at) to color }.reversed().toTypedArray()
-    Box(modifier.fillMaxSize().background(WtvColors.Background)) {
-        Crossfade(targetState = imageUrl, modifier = Modifier.fillMaxSize(), label = "backdrop") { url ->
-            Box(Modifier.fillMaxSize()) {
+    // Only the image is drawn, with both fades over it alone: the window
+    // background is the page colour, and full-screen layers were the frame
+    // cost on the streamer's GPU (4x overdraw everywhere).
+    Box(modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxWidth(ImageWidth)
+                .fillMaxHeight(ImageHeight)
+                .align(Alignment.TopEnd)
+                .drawWithContent {
+                    drawContent()
+                    // The fades are laid out on the whole page; this box is its top-end part.
+                    val pageWidth = size.width / ImageWidth
+                    val left = if (fromStart) pageWidth - size.width else 0f
+                    drawRect(Brush.horizontalGradient(*fade, startX = -left, endX = pageWidth - left))
+                    drawRect(Brush.verticalGradient(0.45f / ImageHeight to Color.Transparent, 1f to WtvColors.Background))
+                },
+        ) {
+            Crossfade(targetState = imageUrl, modifier = Modifier.fillMaxSize(), label = "backdrop") { url ->
                 if (url != null) {
                     AsyncImage(
                         model = url,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         alignment = Alignment.TopEnd,
-                        modifier = Modifier.fillMaxWidth(0.72f).fillMaxHeight(0.8f).align(Alignment.TopEnd),
+                        modifier = Modifier.fillMaxSize(),
                     )
                 }
             }
         }
-        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(*fade)))
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(0.45f to Color.Transparent, 0.8f to WtvColors.Background),
-            ),
-        )
     }
 }
+
+private const val ImageWidth = 0.72f
+private const val ImageHeight = 0.8f
 
 /**
  * The header text block: title, highlight line, meta row, synopsis, and an
