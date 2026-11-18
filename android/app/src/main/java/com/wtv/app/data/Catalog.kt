@@ -157,6 +157,13 @@ class Catalog(private val api: Api) {
     /** Home: the best ranked titles the user has not rated in WTW. */
     suspend fun topPicks(limit: Int = 20): List<Title> = api.get("rpc/top_picks?select=$TITLE_COLUMNS&p_limit=$limit").objects().map(::title)
 
+    /** "Recommended for You": the ranking's best, unrated, in one kind or both; a page at a time. */
+    suspend fun topPicksPage(kind: Kind?, offset: Int, limit: Int): List<Title> =
+        api.get("rpc/top_picks_page?select=$TITLE_COLUMNS&p_offset=$offset&p_limit=$limit" + (kind?.let { "&p_kind=${it.db}" } ?: "")).objects().map(::title)
+
+    /** "Watch it again" without WTW: the titles the user finished, last finished first. */
+    suspend fun finishedTitles(limit: Int = 20): List<Title> = api.get("rpc/finished_titles?select=$TITLE_COLUMNS&p_limit=$limit").objects().map(::title)
+
     /** Home: of the newest titles, the ranking's best, unrated. */
     suspend fun newForYou(limit: Int = 20): List<Title> = api.get("rpc/new_for_you?select=$TITLE_COLUMNS&p_limit=$limit").objects().map(::title)
 

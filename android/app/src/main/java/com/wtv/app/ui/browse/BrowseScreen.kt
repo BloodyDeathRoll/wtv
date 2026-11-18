@@ -63,7 +63,8 @@ sealed interface BrowseSource {
 }
 
 /**
- * A row on the page; `category` is set when the row has a "More" card.
+ * A row on the page. Its "More" card opens `category`'s grid, or with
+ * `forYou` the recommendations page (of `forYouKind`, or both kinds).
  * `progress` (Continue watching) gives a card its watched bar and label, by title id.
  */
 data class BrowseRow(
@@ -71,6 +72,8 @@ data class BrowseRow(
     val category: Category?,
     val titles: List<Title>,
     val progress: Map<Long, Pair<Float?, String?>> = emptyMap(),
+    val forYou: Boolean = false,
+    val forYouKind: Kind? = null,
 )
 
 private sealed interface Load {
@@ -97,9 +100,13 @@ fun BrowseScreen(
     firstFocus: FocusRequester,
     up: FocusRequester,
     progressVersion: Int,
+    /** The connected WTW account; a change reloads the rows (Top picks, Watch it again). */
+    wtwEmail: String?,
     tabsFocused: Boolean,
     onMore: (Category) -> Unit,
     onOpen: (Title) -> Unit,
+    /** More on a recommendations row: the recommendations page, of one kind or (null) both. */
+    onForYou: (Kind?) -> Unit,
 ) {
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
     val hebrew = isHebrew()
@@ -115,16 +122,21 @@ fun BrowseScreen(
     val app = LocalContext.current.applicationContext as WtvApplication
     val recentMovies = stringResource(R.string.row_recent_movies)
     val recentSeries = stringResource(R.string.row_recent_series)
-    val forYou = HomeLabels(stringResource(R.string.row_top_picks), stringResource(R.string.row_new_for_you), stringResource(R.string.row_watch_again))
+    val forYou = HomeLabels(
+        stringResource(R.string.row_top_picks),
+        stringResource(R.string.row_new_for_you),
+        stringResource(R.string.row_watch_again),
+        stringResource(R.string.row_recommended),
+    )
     var attempt by remember { mutableIntStateOf(0) }
     // A reload for a new ranking keeps the rows on screen until the new ones are in.
     var quiet by remember { mutableStateOf(false) }
-    val load by produceState<Load>(Load.Loading, source, hebrew, attempt) {
+    val load by produceState<Load>(Load.Loading, source, hebrew, attempt, wtwEmail) {
         val keep = quiet && value is Load.Ready
         quiet = false
         if (!keep) value = Load.Loading
         val next = runCatching {
-            val rows = loadRows(catalog, source, hebrew, recentMovies, recentSeries, forYou)
+            val rows = loadRows(catalog, source, hebrew, recentMovies, recentSeries, forYou, wtw = wtwEmail != null)
             // Genre names are a nicety: without them the meta line just has no genres.
             Load.Ready(rows, runCatching { catalog.genres() }.getOrDefault(emptyMap()))
         }.getOrElse { Load.Failed(it.message ?: it.toString()) }
@@ -155,7 +167,7 @@ fun BrowseScreen(
             when {
                 home && w == null -> Message(stringResource(R.string.loading), firstFocus, up)
                 rows.isEmpty() -> Message(stringResource(R.string.nothing_here), firstFocus, up)
-                else -> Rows(rows, state.genres, hebrew, firstFocus, up, tabsFocused, onMore, onOpen)
+                else -> Rows(rows, state.genres, hebrew, firstFocus, up, tabsFocused, onMore, onOpen, onForYou)
             }
         }
     }
@@ -165,7 +177,7 @@ private const val CONTINUE_WAIT_MS = 5_000L
 /** A first ranking takes about 10 s; after that the server answers at once. */
 private const val RANKING_WAIT_MS = 30_000L
 
-private class HomeLabels(val topPicks: String, val newForYou: String, val watchAgain: String)
+private class HomeLabels(val topPicks: String, val newForYou: String, val watchAgain: String, val recommended: String)
 
 /**
  * With WTW connected, has the server rank the catalog; true when a new
@@ -202,6 +214,12 @@ private fun continueRow(items: List<ContinueItem>, label: String, seasonEpisode:
         )
     }
 
+/**
+ * The page's rows. With WTW connected: Top picks and New for you on Home,
+ * "Recommended for You" first on Movies and Series, and Watch it again from
+ * the titles Loved or Liked in WTW. Without WTW, Watch it again holds what
+ * the user finished. Empty rows are left out.
+ */
 private suspend fun loadRows(
     catalog: Catalog,
     source: BrowseSource,
@@ -209,25 +227,34 @@ private suspend fun loadRows(
     recentMovies: String,
     recentSeries: String,
     forYou: HomeLabels,
+    wtw: Boolean,
 ): List<BrowseRow> =
     when (source) {
-        // The rows from the ranking are empty without one (no WTW, or no WTW ratings) and then left out.
         BrowseSource.Home -> coroutineScope {
-            val picks = async { catalog.topPicks() }
-            val fresh = async { catalog.newForYou() }
+            val picks = async { if (wtw) catalog.topPicks() else emptyList() }
+            val fresh = async { if (wtw) catalog.newForYou() else emptyList() }
             val movies = async { catalog.latest(Kind.Movie) }
             val series = async { catalog.latest(Kind.Series) }
-            val again = async { catalog.watchAgain() }
+            val again = async { if (wtw) catalog.watchAgain() else catalog.finishedTitles() }
             listOf(
-                BrowseRow(forYou.topPicks, null, picks.await()),
+                BrowseRow(forYou.topPicks, null, picks.await(), forYou = true),
                 BrowseRow(forYou.newForYou, null, fresh.await()),
                 BrowseRow(recentMovies, null, movies.await()),
                 BrowseRow(recentSeries, null, series.await()),
                 BrowseRow(forYou.watchAgain, null, again.await()),
             ).filter { it.titles.isNotEmpty() }
         }
-        is BrowseSource.Section -> catalog.rows(source.kind).map { (c, titles) -> BrowseRow(c.label(hebrew), c, titles) }
+        is BrowseSource.Section -> coroutineScope {
+            // A nicety: when it fails, the section just has no Recommended row.
+            val recommended = async { if (wtw) runCatching { catalog.topPicksPage(source.kind, 0, SECTION_PICKS) }.getOrDefault(emptyList()) else emptyList() }
+            val rows = catalog.rows(source.kind).map { (c, titles) -> BrowseRow(c.label(hebrew), c, titles) }
+            listOf(BrowseRow(forYou.recommended, null, recommended.await(), forYou = true, forYouKind = source.kind))
+                .filter { it.titles.isNotEmpty() } + rows
+        }
     }
+
+/** Titles in a section's "Recommended for You" row, before its More card. */
+private const val SECTION_PICKS = 10
 
 @Composable
 private fun Rows(
@@ -239,6 +266,7 @@ private fun Rows(
     tabsFocused: Boolean,
     onMore: (Category) -> Unit,
     onOpen: (Title) -> Unit,
+    onForYou: (Kind?) -> Unit,
 ) {
     // Safe: empty rows are left out, and an empty page never gets here.
     // Kept when only Continue watching changes: the header stays on the focused card.
@@ -298,9 +326,14 @@ private fun Rows(
                                         )
                                     }
                                     val category = row.category
-                                    if (category != null) {
+                                    if (category != null || row.forYou) {
                                         item {
-                                            LandscapeCard(imageUrl = null, title = stringResource(R.string.more), onClick = { onMore(category) }, modifier = rowModifier)
+                                            LandscapeCard(
+                                                imageUrl = null,
+                                                title = stringResource(R.string.more),
+                                                onClick = { if (category != null) onMore(category) else onForYou(row.forYouKind) },
+                                                modifier = rowModifier,
+                                            )
                                         }
                                     }
                                 }

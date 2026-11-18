@@ -72,6 +72,7 @@ import com.wtv.app.ui.components.TitleMenu
 import com.wtv.app.ui.components.RailItem
 import com.wtv.app.ui.components.SideRail
 import com.wtv.app.ui.grid.GridScreen
+import com.wtv.app.ui.grid.PosterGrid
 import com.wtv.app.ui.live.LiveScreen
 import com.wtv.app.ui.person.PersonScreen
 import com.wtv.app.ui.person.TitlesPage
@@ -103,6 +104,11 @@ private sealed interface Page {
     /** Side bar → Categories: the provider's categories and the genres of a kind. */
     data class Categories(val kind: Kind) : Page {
         override val id get() = "categories"
+    }
+
+    /** "Recommended for You" in full, 50 at a time: one kind, or (null) both. */
+    data class Recommendations(val kind: Kind?) : Page {
+        override val id get() = "recommendations:${kind ?: "all"}"
     }
 
     /** `autoPlay`: opened from a card's menu with Play, so Play is pressed once the page is in. */
@@ -246,6 +252,8 @@ fun WtvApp() {
     // into the latest, which carries the whole position (a held seek key sends many).
     // The pages showing positions reload when the player's last save is in.
     val catalog = (context.applicationContext as WtvApplication).catalog
+    // Settings connects or disconnects WTW on a page above Browse: re-read it when a page closes.
+    val wtwEmail = remember(stack.size) { (context.applicationContext as WtvApplication).wtw.email }
     val scope = rememberCoroutineScope()
     val saving = remember { Mutex() }
     var latest by remember { mutableStateOf<(suspend () -> Unit)?>(null) }
@@ -324,9 +332,11 @@ fun WtvApp() {
                         firstFocus = page,
                         up = selectedTab,
                         progressVersion = progressVersion,
+                        wtwEmail = wtwEmail,
                         tabsFocused = tabsHaveFocus,
                         onMore = { open(Page.Grid(it)) },
                         onOpen = { open(Page.TitlePage(it)) },
+                        onForYou = { open(Page.Recommendations(it)) },
                     )
                 }
                 TabRow(
@@ -376,6 +386,13 @@ fun WtvApp() {
                 key(entry) {
                     Layer(blocked = i != stack.lastIndex, hidden = i != stack.lastIndex, memory = entry.memory) {
                         when (val p = entry.page) {
+                            is Page.Recommendations -> PosterGrid(
+                                stringResource(R.string.row_recommended),
+                                firstFocus = entry.first,
+                                onOpen = { open(Page.TitlePage(it)) },
+                                sorts = false,
+                                pageSize = RECOMMENDATIONS_PAGE,
+                            ) { _, offset, limit -> catalog.topPicksPage(p.kind, offset, limit) }
                             is Page.Grid -> GridScreen(p.category, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
                             is Page.TitlePage -> TitleScreen(
                                 p.title,
@@ -489,3 +506,6 @@ private fun ExitDialog(onYes: () -> Unit, onNo: () -> Unit) {
     }
     LaunchedEffect(Unit) { runCatching { yes.requestFocus() } }
 }
+
+/** Recommendations come 50 at a time; the next 50 load as the focus nears the end. */
+private const val RECOMMENDATIONS_PAGE = 50
