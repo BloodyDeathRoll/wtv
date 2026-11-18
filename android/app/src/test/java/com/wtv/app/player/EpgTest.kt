@@ -60,4 +60,30 @@ class EpgTest {
         assertEquals("https://tv.example:8080", serverBase(ProviderLogin("tv.example:8080/", "u", "p")))
         assertEquals("http://tv.example", serverBase(ProviderLogin(" http://tv.example ", "u", "p")))
     }
+
+    @Test fun `archive flags and the provider's start text are read`() {
+        val json = JSONObject().put(
+            "epg_listings",
+            JSONArray().put(listing(b64("יום"), 1794985800, 1794987600).put("has_archive", "1").put("start", "2026-11-18 07:10:00"))
+                .put(listing(b64("עכשיו"), 1794987600, 1794990000).put("has_archive", "0").put("start", "2026-11-18 07:40:00")),
+        ).toString()
+        val (archived, live) = programmes(json)
+        assertEquals(true, archived.archived)
+        assertEquals("2026-11-18 07:10:00", archived.providerStart)
+        assertEquals(false, live.archived)
+    }
+
+    @Test fun `the catch-up address uses the provider's start text and whole minutes`() {
+        val login = ProviderLogin("http://tv.example:80/", "u ser", "p/w")
+        val p = Programme("x", null, 1794985800, 1794987600 + 30, providerStart = "2026-11-18 07:10:00")
+        assertEquals("http://tv.example:80/timeshift/u%20ser/p%2Fw/31/2026-11-18:07-10/42.ts", timeshiftUrl(login, 42, p))
+        assertNull(timeshiftUrl(login, 42, p.copy(providerStart = null)))
+        assertNull(timeshiftUrl(login, 42, p.copy(providerStart = "yesterday")))
+    }
+
+    @Test fun `playable - archived, over, with a usable start, one per start, newest first`() {
+        fun p(start: Long, archived: Boolean = true, text: String? = "2026-11-18 07:10:00") = Programme("p$start", null, start, start + 100, archived, text)
+        val list = listOf(p(100), p(300), p(300), p(500), p(200, archived = false), p(400, text = "soon"), p(1000))
+        assertEquals(listOf(500L, 300L, 100L), playable(list, now = 1000).map { it.start })
+    }
 }
