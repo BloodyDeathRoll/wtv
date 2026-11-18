@@ -50,7 +50,8 @@ class Session(
      * Signs in with a Google ID token. With `link`, a device still on its
      * anonymous user becomes that Google user and keeps its data (favourites,
      * ratings, positions). When the Google account is already in use on
-     * another device, this device signs in to that account instead.
+     * another device, this device signs in to that account instead and moves
+     * its anonymous data into it.
      */
     suspend fun signInWithGoogle(idToken: String, link: Boolean) = lock.withLock {
         requireConfigured(url, key, settingNames)
@@ -63,7 +64,28 @@ class Session(
                 if (e.errorCode != "identity_already_exists") throw e
             }
         }
-        auth("token?grant_type=id_token", body())
+        // Switching to an account used elsewhere: the ticket carries this device's anonymous data across.
+        val ticket = bearer?.let { runCatching { rpc("create_merge_ticket", JSONObject(), it) }.getOrNull() }
+        val access = auth("token?grant_type=id_token", body())
+        if (ticket != null) {
+            // Best effort: a failure leaves the data on the old anonymous user, as before.
+            runCatching { rpc("redeem_merge_ticket", JSONObject().put("p_ticket", ticket.trim('"')), access) }
+        }
+        access
+    }
+
+    private suspend fun rpc(name: String, args: JSONObject, bearer: String): String = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("$url/rest/v1/rpc/$name")
+            .header("apikey", key)
+            .header("Authorization", "Bearer $bearer")
+            .post(args.toString().toRequestBody(JSON))
+            .build()
+        http.newCall(request).execute().use {
+            val text = it.body?.string().orEmpty()
+            if (!it.isSuccessful) throw ApiException("$name failed (HTTP ${it.code})")
+            text
+        }
     }
 
     /**
