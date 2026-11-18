@@ -59,10 +59,30 @@ private const val PRELOAD = 2 * COLUMNS
  * A whole category as a poster grid, with a choice of order. The focused
  * title's name and backdrop show above the grid.
  */
-@OptIn(ExperimentalTvMaterial3Api::class) // FilterChip
 @Composable
 fun GridScreen(category: Category, firstFocus: FocusRequester, onOpen: (Title) -> Unit) {
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
+    val hebrew = isHebrew()
+    PosterGrid(category.label(hebrew), firstFocus, onOpen) { sort, offset, limit ->
+        sort?.let { catalog.page(category, it, hebrew, offset, limit) } ?: catalog.recommendedPage(category, offset, limit)
+    }
+}
+
+/**
+ * Titles as a poster grid under `label`, loaded `pageSize` at a time as the
+ * focus nears the end. With `sorts`, chips choose the order (null:
+ * Recommended); without, `fetch` gets null.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class) // FilterChip
+@Composable
+fun PosterGrid(
+    label: String,
+    firstFocus: FocusRequester,
+    onOpen: (Title) -> Unit,
+    sorts: Boolean = true,
+    pageSize: Int = PAGE,
+    fetch: suspend (sort: Sort?, offset: Int, limit: Int) -> List<Title>,
+) {
     val hebrew = isHebrew()
     val scope = rememberCoroutineScope()
 
@@ -82,13 +102,13 @@ fun GridScreen(category: Category, firstFocus: FocusRequester, onOpen: (Title) -
         loading = true
         val before = titles.size
         scope.launch {
-            runCatching { sort?.let { catalog.page(category, it, hebrew, fetched, PAGE) } ?: catalog.recommendedPage(category, fetched, PAGE) }
+            runCatching { fetch(sort, fetched, pageSize) }
                 .onSuccess {
                     fetched += it.size
                     // A sync between two pages shifts rows, so a title can come twice: keys must stay unique.
                     val seen = titles.mapTo(HashSet()) { t -> t.id }
                     titles.addAll(it.filter { t -> seen.add(t.id) })
-                    if (it.size < PAGE) end = true
+                    if (it.size < pageSize) end = true
                     if (focused == null) focused = it.firstOrNull()
                     error = null
                 }
@@ -116,15 +136,15 @@ fun GridScreen(category: Category, firstFocus: FocusRequester, onOpen: (Title) -
         Column(Modifier.padding(start = 88.dp, end = 48.dp, top = 40.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    category.label(hebrew),
+                    label,
                     style = MaterialTheme.typography.headlineMedium,
                     color = WtvColors.TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                Spacer(Modifier.padding(start = 24.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (sorts) Spacer(Modifier.padding(start = 24.dp))
+                if (sorts) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     // Recommended (null) is not a Sort: it is a server function, not a REST order.
                     (listOf<Sort?>(null) + Sort.entries).forEachIndexed { i, s ->
                         FilterChip(
@@ -167,7 +187,7 @@ fun GridScreen(category: Category, firstFocus: FocusRequester, onOpen: (Title) -
                             modifier = Modifier
                                 .then(if (i == 0) Modifier.focusRequester(firstFocus) else Modifier)
                                 // Up from the first row goes to the sort chips.
-                                .then(if (i < COLUMNS) Modifier.focusProperties { up = chips } else Modifier),
+                                .then(if (sorts && i < COLUMNS) Modifier.focusProperties { up = chips } else Modifier),
                         )
                     }
                     // A later page failed: a Retry under the grid, since the focus may not move again.

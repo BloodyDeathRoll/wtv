@@ -72,6 +72,7 @@ import com.wtv.app.ui.components.TitleMenu
 import com.wtv.app.ui.components.RailItem
 import com.wtv.app.ui.components.SideRail
 import com.wtv.app.ui.grid.GridScreen
+import com.wtv.app.ui.grid.PosterGrid
 import com.wtv.app.ui.live.LiveScreen
 import com.wtv.app.ui.person.PersonScreen
 import com.wtv.app.ui.person.TitlesPage
@@ -106,6 +107,11 @@ private sealed interface Page {
     }
 
     /** `autoPlay`: opened from a card's menu with Play, so Play is pressed once the page is in. */
+    /** "Recommended for You" in full, 50 at a time: one kind, or (null) both. */
+    data class Recommendations(val kind: Kind?) : Page {
+        override val id get() = "recommendations:${kind ?: "all"}"
+    }
+
     data class TitlePage(val title: Title, val autoPlay: Boolean = false) : Page {
         override val id get() = "title:${title.id}"
     }
@@ -327,6 +333,7 @@ fun WtvApp() {
                         tabsFocused = tabsHaveFocus,
                         onMore = { open(Page.Grid(it)) },
                         onOpen = { open(Page.TitlePage(it)) },
+                        onForYou = { open(Page.Recommendations(it)) },
                     )
                 }
                 TabRow(
@@ -376,6 +383,13 @@ fun WtvApp() {
                 key(entry) {
                     Layer(blocked = i != stack.lastIndex, hidden = i != stack.lastIndex, memory = entry.memory) {
                         when (val p = entry.page) {
+                            is Page.Recommendations -> PosterGrid(
+                                stringResource(R.string.row_recommended),
+                                firstFocus = entry.first,
+                                onOpen = { open(Page.TitlePage(it)) },
+                                sorts = false,
+                                pageSize = RECOMMENDATIONS_PAGE,
+                            ) { _, offset, limit -> catalog.topPicksPage(p.kind, offset, limit) }
                             is Page.Grid -> GridScreen(p.category, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
                             is Page.TitlePage -> TitleScreen(
                                 p.title,
