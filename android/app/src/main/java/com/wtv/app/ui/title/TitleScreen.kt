@@ -80,6 +80,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Mutex
 
 private data class Extras(val cast: List<CastMember>, val copies: List<Copy>, val genres: Map<Pair<Kind, Int>, Genre>, val loaded: Boolean)
 
@@ -139,19 +141,37 @@ fun TitleScreen(
     var info by remember { mutableStateOf(false) }
     LaunchedEffect(title.id) { play.requestFocus() }
 
-    // Rating and watchlist: shown at once, put back if the save fails. A rating pressed again is cleared.
+    // Rating and watchlist: shown at once, saved one at a time in the order pressed,
+    // and put back to what it was if the save fails (unless a later press changed it).
+    // A rating pressed again is cleared.
     val scope = rememberCoroutineScope()
+    val saving = remember { Mutex() }
     var marks by remember(title.id) { mutableStateOf(Marks()) }
-    LaunchedEffect(title.id) { runCatching { catalog.marks(title) }.onSuccess { marks = it } }
+    var touched by remember(title.id) { mutableStateOf(false) }
+    LaunchedEffect(title.id) {
+        // A press before the load came in wins over the loaded value.
+        runCatching { catalog.marks(title) }.onSuccess { if (!touched) marks = it }
+    }
     fun rate(r: Rating) {
-        val to = if (marks.rating == r) null else r
+        touched = true
+        val before = marks.rating
+        val to = if (before == r) null else r
         marks = marks.copy(rating = to)
-        scope.launch { runCatching { catalog.setRating(title, to) }.onFailure { if (marks.rating == to) marks = marks.copy(rating = if (to == null) r else null) } }
+        scope.launch {
+            saving.withLock {
+                runCatching { catalog.setRating(title, to) }.onFailure { if (marks.rating == to) marks = marks.copy(rating = before) }
+            }
+        }
     }
     fun toggleWatchlist() {
+        touched = true
         val to = !marks.onWatchlist
         marks = marks.copy(onWatchlist = to)
-        scope.launch { runCatching { catalog.setWatchlist(title, to) }.onFailure { if (marks.onWatchlist == to) marks = marks.copy(onWatchlist = !to) } }
+        scope.launch {
+            saving.withLock {
+                runCatching { catalog.setWatchlist(title, to) }.onFailure { if (marks.onWatchlist == to) marks = marks.copy(onWatchlist = !to) }
+            }
+        }
     }
 
     // Series: the episodes, a season at a time; the header shows the focused episode.

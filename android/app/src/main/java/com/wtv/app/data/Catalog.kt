@@ -261,7 +261,12 @@ class Catalog(private val api: Api) {
         watchlistVersion++
     }
 
-    /** The watchlist, last added first; titles the provider no longer has are left out. */
+    /**
+     * The watchlist, last added first; titles the provider no longer has are left out.
+     * shortcut: entries (and ratings) point at the card's copy at the time. If the provider drops
+     * that copy, the regroup makes another copy the card and the entry no longer shows, though the
+     * title is still there; key them by TMDB id if that happens often.
+     */
     suspend fun watchlist(): List<Title> =
         api.get("watchlist?select=added_at,titles!inner($TITLE_COLUMNS)&titles.available=is.true&order=added_at.desc").objects()
             .mapNotNull { it.optJSONObject("titles") }.map(::title)
