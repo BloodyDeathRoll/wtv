@@ -1,6 +1,7 @@
 package com.wtv.app.ui.components
 
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,11 +15,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
@@ -63,21 +72,44 @@ fun Backdrop(imageUrl: String?, modifier: Modifier = Modifier) {
                     drawRect(Brush.verticalGradient(0.45f / ImageHeight to Color.Transparent, 1f to WtvColors.Background))
                 },
         ) {
-            Crossfade(targetState = imageUrl, modifier = Modifier.fillMaxSize(), label = "backdrop") { url ->
-                if (url != null) {
-                    AsyncImage(
-                        model = url,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        alignment = Alignment.TopEnd,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+            // A crossfade without offscreen layers: ModulateAlpha applies the
+            // alpha to the image's own draw. Compose's Crossfade rendered both
+            // images to buffers, the main frame cost left on the streamer.
+            var shown by remember { mutableStateOf(imageUrl) }
+            var previous by remember { mutableStateOf<String?>(null) }
+            val fade = remember { Animatable(1f) }
+            LaunchedEffect(imageUrl) {
+                if (imageUrl == shown) return@LaunchedEffect
+                previous = shown
+                shown = imageUrl
+                fade.snapTo(0f)
+                fade.animateTo(1f, tween(FadeMillis))
+                previous = null
             }
+            previous?.let { BackdropImage(it) { 1f - fade.value } }
+            shown?.let { BackdropImage(it) { fade.value } }
         }
     }
 }
 
+@Composable
+private fun BackdropImage(url: String, alpha: () -> Float) {
+    // Keyed by URL, so a fading-out image keeps its painter.
+    key(url) {
+        AsyncImage(
+            model = url,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            alignment = Alignment.TopEnd,
+            modifier = Modifier.fillMaxSize().graphicsLayer {
+                this.alpha = alpha()
+                compositingStrategy = CompositingStrategy.ModulateAlpha
+            },
+        )
+    }
+}
+
+private const val FadeMillis = 300
 private const val ImageWidth = 0.72f
 private const val ImageHeight = 0.8f
 
