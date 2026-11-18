@@ -245,7 +245,7 @@ private fun AccountSection() {
                 Text(email, style = MaterialTheme.typography.bodyLarge, color = WtvColors.TextPrimary)
                 Spacer(Modifier.width(24.dp))
                 Button(onClick = {
-                    scope.launch {
+                    scope.launch(NonCancellable) {
                         app.session.signOut()
                         app.wtw.signOut()
                         (context as? Activity)?.recreate()
@@ -268,8 +268,8 @@ private fun AccountSection() {
                                 withContext(NonCancellable) {
                                     app.session.signInWithGoogle(idToken, link = true)
                                     app.wtw.signInWithGoogle(idToken, link = false)
+                                    (context as? Activity)?.recreate()
                                 }
-                                (context as? Activity)?.recreate()
                             } catch (e: ApiException) {
                                 error = e.message
                                 code = null

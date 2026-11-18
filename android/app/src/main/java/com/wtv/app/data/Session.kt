@@ -2,7 +2,10 @@ package com.wtv.app.data
 
 import android.content.Context
 import com.wtv.app.BuildConfig
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -26,16 +29,20 @@ class Session(
     private val url: String = BuildConfig.SUPABASE_URL,
     private val key: String = BuildConfig.SUPABASE_KEY,
     private val anonymous: Boolean = true,
+    /** Named in the error when this build lacks the URL or key. */
+    private val settingNames: String = "SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY",
 ) {
     private val prefs = context.getSharedPreferences(name, Context.MODE_PRIVATE)
     private val lock = Mutex()
+    // Outlives the screen, so leaving Settings does not stop the server-side logout.
+    private val background = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** The Google account's email, or null while not signed in with Google. */
     val email: String? get() = prefs.getString(EMAIL, null)
 
     /** A valid access token, refreshed or created as needed. */
     suspend fun token(): String = lock.withLock {
-        requireConfigured(url, key)
+        requireConfigured(url, key, settingNames)
         current() ?: refresh() ?: if (anonymous) signUpAnonymously() else throw ApiException("Not signed in")
     }
 
@@ -46,7 +53,7 @@ class Session(
      * another device, this device signs in to that account instead.
      */
     suspend fun signInWithGoogle(idToken: String, link: Boolean) = lock.withLock {
-        requireConfigured(url, key)
+        requireConfigured(url, key, settingNames)
         val body = { JSONObject().put("provider", "google").put("id_token", idToken) }
         val bearer = if (link && email == null) current() ?: refresh() else null
         if (bearer != null) {
@@ -59,12 +66,18 @@ class Session(
         auth("token?grant_type=id_token", body())
     }
 
-    /** Ends the session on the server (best effort) and forgets it; WTV starts again as a new anonymous user. */
+    /**
+     * Forgets the session at once (WTV starts again as a new anonymous user),
+     * then ends it on the server in the background, best effort. Only this
+     * device's session ends: the user stays signed in elsewhere.
+     */
     suspend fun signOut() = lock.withLock {
-        prefs.getString(ACCESS, null)?.let { token ->
-            withContext(Dispatchers.IO) {
+        val token = prefs.getString(ACCESS, null)
+        prefs.edit().clear().apply()
+        if (token != null) {
+            background.launch {
                 val request = Request.Builder()
-                    .url("$url/auth/v1/logout")
+                    .url("$url/auth/v1/logout?scope=local")
                     .header("apikey", key)
                     .header("Authorization", "Bearer $token")
                     .post(ByteArray(0).toRequestBody(JSON))
@@ -72,7 +85,6 @@ class Session(
                 runCatching { http.newCall(request).execute().close() }
             }
         }
-        prefs.edit().clear().apply()
     }
 
     /**
@@ -160,10 +172,8 @@ internal fun isRejection(code: Int): Boolean = code in setOf(400, 401, 403, 404,
 internal fun isFresh(expiresAtSeconds: Long, nowSeconds: Long): Boolean = nowSeconds < expiresAtSeconds - 60
 
 /** A build without the database settings (local.properties) fails with a clear message, not a crash. */
-internal fun requireConfigured(url: String, key: String) {
-    if (url.isBlank() || key.isBlank()) {
-        throw ApiException("This build has no database settings for $url (SUPABASE_* or WTW_SUPABASE_* in local.properties)")
-    }
+internal fun requireConfigured(url: String, key: String, names: String) {
+    if (url.isBlank() || key.isBlank()) throw ApiException("This build has no database settings ($names in local.properties)")
 }
 
 open class ApiException(message: String) : Exception(message)
