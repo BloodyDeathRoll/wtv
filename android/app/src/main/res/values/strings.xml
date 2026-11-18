@@ -125,4 +125,9 @@
     <string name="categories_providers">Categories</string>
     <string name="categories_genres">Genres</string>
     <string name="row_recommended">Recommended for You</string>
+    <string name="search_actor">Actor</string>
+    <string name="search_in_section">Search here</string>
+    <string name="search_hint_movies">Search movies and actors</string>
+    <string name="search_hint_series">Search series and actors</string>
+    <string name="search_hint_live">Search channels</string>
 </resources>

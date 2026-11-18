@@ -124,4 +124,9 @@
     <string name="categories_providers">קטגוריות</string>
     <string name="categories_genres">ז׳אנרים</string>
     <string name="row_recommended">מומלץ עבורך</string>
+    <string name="search_actor">שחקן</string>
+    <string name="search_in_section">חיפוש כאן</string>
+    <string name="search_hint_movies">חיפוש סרטים ושחקנים</string>
+    <string name="search_hint_series">חיפוש סדרות ושחקנים</string>
+    <string name="search_hint_live">חיפוש ערוצים</string>
 </resources>
