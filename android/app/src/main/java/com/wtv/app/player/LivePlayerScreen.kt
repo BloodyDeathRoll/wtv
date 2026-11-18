@@ -59,6 +59,7 @@ import com.wtv.app.R
 import com.wtv.app.WtvApplication
 import com.wtv.app.data.Channel
 import com.wtv.app.ui.theme.WtvColors
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
 /**
@@ -112,13 +113,20 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
         // A nicety: without a guide the banner shows the channel only.
         runCatching { shortEpg(http, login, channel.extId) }
             .onSuccess { guide = it }
-            .onFailure { Log.d("WtvGuide", "No guide for channel ${channel.extId}: ${it.message}") }
+            .onFailure {
+                // A fetch cancelled by a newer one is not a missing guide.
+                if (it is CancellationException) throw it
+                Log.d("WtvGuide", "No guide for channel ${channel.extId}: ${it.message}")
+            }
     }
     LaunchedEffect(banner) {
+        var first = true
         while (banner) {
             now = System.currentTimeMillis() / 1000
-            // The programme on air ended: read the guide again for the one after.
-            if (guide.isNotEmpty() && nowAndNext(guide, now).first == null) bannerAt++
+            // The programme on air ended: read the guide again for the one after. Not on the
+            // first tick: showing the banner has just started a read.
+            if (!first && guide.isNotEmpty() && nowAndNext(guide, now).first == null) bannerAt++
+            first = false
             delay(CLOCK_TICK_MS)
         }
     }
