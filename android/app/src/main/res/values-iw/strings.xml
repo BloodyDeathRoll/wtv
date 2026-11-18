@@ -88,4 +88,5 @@
     <string name="setting_hidden">מוסתרים</string>
     <string name="setting_hidden_none">לא הוסתר דבר</string>
     <string name="setting_hidden_hint">בחירה מחזירה את הפריט</string>
+    <string name="live_next">בהמשך  %1$s  %2$s</string>
 </resources>

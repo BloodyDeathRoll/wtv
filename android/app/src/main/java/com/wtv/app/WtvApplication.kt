@@ -9,6 +9,6 @@ import java.util.concurrent.TimeUnit
 
 /** Holds the app-wide services. */
 class WtvApplication : Application() {
-    private val http by lazy { OkHttpClient.Builder().callTimeout(20, TimeUnit.SECONDS).build() }
+    val http by lazy { OkHttpClient.Builder().callTimeout(20, TimeUnit.SECONDS).build() }
     val catalog by lazy { Catalog(Api(Session(this, http), http)) }
 }
