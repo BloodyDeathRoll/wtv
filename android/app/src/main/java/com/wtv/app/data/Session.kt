@@ -2,6 +2,7 @@ package com.wtv.app.data
 
 import android.content.Context
 import com.wtv.app.BuildConfig
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -65,13 +66,23 @@ class Session(
             }
         }
         // Switching to an account used elsewhere: the ticket carries this device's anonymous data across.
-        val ticket = bearer?.let { runCatching { rpc("create_merge_ticket", JSONObject(), it) }.getOrNull() }
+        val ticket = bearer?.let { bestEffort { rpc("create_merge_ticket", JSONObject(), it) } }
         val access = auth("token?grant_type=id_token", body())
         if (ticket != null) {
             // Best effort: a failure leaves the data on the old anonymous user, as before.
-            runCatching { rpc("redeem_merge_ticket", JSONObject().put("p_ticket", ticket.trim('"')), access) }
+            // The move is one transaction on the server; a timed-out call may still have done it.
+            bestEffort { rpc("redeem_merge_ticket", JSONObject().put("p_ticket", ticket.trim('"')), access) }
         }
         access
+    }
+
+    /** Null on failure, but a cancelled sign-in stays cancelled. */
+    private inline fun <T> bestEffort(block: () -> T): T? = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
     }
 
     private suspend fun rpc(name: String, args: JSONObject, bearer: String): String = withContext(Dispatchers.IO) {
