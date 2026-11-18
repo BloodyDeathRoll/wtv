@@ -64,12 +64,14 @@ import kotlinx.coroutines.delay
 @OptIn(UnstableApi::class)
 @Composable
 fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, firstFocus: FocusRequester) {
+    require(channels.isNotEmpty()) { "A live page needs at least one channel" }
     val context = LocalContext.current
     var index by remember { mutableIntStateOf(start.coerceIn(channels.indices)) }
     val channel = channels[index]
     var error by remember { mutableStateOf<String?>(null) }
     var bannerAt by remember { mutableIntStateOf(0) } // bumped to show the banner again
     var banner by remember { mutableStateOf(true) }
+    var buffering by remember { mutableStateOf(false) }
 
     val player = remember {
         // Media3's own user agent, as for movies: the stream server blocks the API client's.
@@ -80,6 +82,14 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
         error = null
         player.setMediaItem(MediaItem.fromUri(streamUrl(login, StreamKind.Live, channel.extId, "ts")))
         player.prepare()
+    }
+    // A stream that never starts shows no error of its own: after a while it counts as failed.
+    LaunchedEffect(channel.id, buffering) {
+        if (buffering) {
+            delay(STALL_MS)
+            error = "TIMEOUT"
+            banner = true
+        }
     }
     LaunchedEffect(channel.id, bannerAt) {
         banner = true
@@ -94,11 +104,16 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_STOP -> player.stop()
-                Lifecycle.Event.ON_START -> player.prepare()
+                // Not on the first start (the observer is told at once): nothing is set yet.
+                Lifecycle.Event.ON_START -> if (player.playbackState == Player.STATE_IDLE && player.mediaItemCount > 0) player.prepare()
                 else -> Unit
             }
         }
         val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                buffering = state == Player.STATE_BUFFERING
+            }
+
             override fun onPlayerError(e: PlaybackException) {
                 error = e.errorCodeName
                 banner = true
@@ -180,3 +195,4 @@ private fun BoxScope.Banner(channel: Channel, error: String?) {
 }
 
 private const val BANNER_MS = 4_000L
+private const val STALL_MS = 20_000L

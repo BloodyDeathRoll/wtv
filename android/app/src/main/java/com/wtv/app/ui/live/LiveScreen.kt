@@ -107,8 +107,10 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
         favorites = if (now) favorites + c.id else favorites - c.id
         Toast.makeText(context, if (now) added else removed, Toast.LENGTH_SHORT).show()
         scope.launch {
-            // Put back on failure, so the star shows what is saved.
-            runCatching { catalog.setFavorite(c.id, now) }.onFailure { favorites = if (now) favorites - c.id else favorites + c.id }
+            // Put back on failure, so the star shows what is saved; unless a later press already changed it.
+            runCatching { catalog.setFavorite(c.id, now) }.onFailure {
+                if ((c.id in favorites) == now) favorites = if (now) favorites - c.id else favorites + c.id
+            }
         }
     }
 
