@@ -57,6 +57,7 @@ import com.wtv.app.player.ProviderLogin
 import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.components.ChannelCard
 import com.wtv.app.ui.theme.WtvColors
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private sealed interface Load {
@@ -182,12 +183,18 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
         ) {
             itemsIndexed(shown.channels, key = { _, c -> c.id }) { i, c ->
                 // Asked for each card as it comes on screen; the answer is kept until the programme ends.
+                // A card left on screen moves on when its programme ends.
                 val onNow by produceState(OnNow.cached(c.extId, nowSecs()).second, c.extId) {
                     val login = providerLogin ?: return@produceState
-                    value = runCatching { OnNow.fetch(app.http, login, c.extId, nowSecs()) }.getOrNull()
+                    while (true) {
+                        val p = OnNow.fetch(app.http, login, c.extId, nowSecs())
+                        value = p
+                        // No guide, or a failed call: OnNow's own wait decides when asking again is worth it.
+                        delay(((p?.end ?: (nowSecs() + 60)) - nowSecs()).coerceAtLeast(5) * 1000)
+                    }
                 }
                 ChannelCard(
-                    onNow = onNow?.title,
+                    onNow = onNow?.title?.takeIf { it.isNotBlank() },
                     logo = c.logo,
                     name = c.name,
                     number = c.num,

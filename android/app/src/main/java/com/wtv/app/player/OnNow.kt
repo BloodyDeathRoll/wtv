@@ -1,5 +1,6 @@
 package com.wtv.app.player
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import okhttp3.OkHttpClient
@@ -22,15 +23,27 @@ object OnNow {
     fun cached(streamId: Long, now: Long): Pair<Boolean, Programme?> =
         cache[streamId]?.takeIf { it.validUntil > now }?.let { true to it.programme } ?: (false to null)
 
-    /** The programme on now, from the provider's short guide; null when there is none. Throws when the call fails. */
+    /**
+     * The programme on now, from the provider's short guide; null when there is
+     * none, or when the call failed (then asked again a minute later at most,
+     * so cards scrolling past do not hammer a provider that is down).
+     */
     suspend fun fetch(http: OkHttpClient, login: ProviderLogin, streamId: Long, now: Long): Programme? {
         cached(streamId, now).let { (known, p) -> if (known) return p }
-        val programme = calls.withPermit { onAt(shortEpg(http, login, streamId, limit = 2), now) }
+        val programme = try {
+            calls.withPermit { onAt(shortEpg(http, login, streamId, limit = 2), now) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            cache[streamId] = Entry(null, now + FAILED_SECS)
+            return null
+        }
         cache[streamId] = Entry(programme, programme?.end ?: (now + NO_GUIDE_SECS))
         return programme
     }
 
     private const val NO_GUIDE_SECS = 600L
+    private const val FAILED_SECS = 60L
 }
 
 /** The programme running at `now`, if any. */
