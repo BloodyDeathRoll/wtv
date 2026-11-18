@@ -79,9 +79,13 @@ enum class StreamKind(val path: String) { Movie("movie"), Episode("series"), Liv
  * A server without a scheme is https; user and password are path-encoded.
  */
 fun streamUrl(login: ProviderLogin, kind: StreamKind, extId: Long, containerExt: String?): String {
-    val server = login.server.trim().trimEnd('/').let { if (Regex("^https?://", RegexOption.IGNORE_CASE).containsMatchIn(it)) it else "https://$it" }
+    val server = serverBase(login)
     val ext = containerExt?.takeIf { it.isNotBlank() } ?: if (kind == StreamKind.Live) "ts" else "mp4"
     fun seg(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
     // The password is sent exactly as saved; the user name is trimmed, as on save.
     return "$server/${kind.path}/${seg(login.user.trim())}/${seg(login.password)}/$extId.$ext"
 }
+
+/** The server as saved, without a trailing slash; https when it names no scheme. */
+internal fun serverBase(login: ProviderLogin): String =
+    login.server.trim().trimEnd('/').let { if (Regex("^https?://", RegexOption.IGNORE_CASE).containsMatchIn(it)) it else "https://$it" }

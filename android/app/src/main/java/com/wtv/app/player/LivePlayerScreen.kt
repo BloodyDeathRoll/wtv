@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -34,6 +36,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -51,6 +54,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
 import com.wtv.app.R
+import com.wtv.app.WtvApplication
 import com.wtv.app.data.Channel
 import com.wtv.app.ui.theme.WtvColors
 import kotlinx.coroutines.delay
@@ -58,8 +62,9 @@ import kotlinx.coroutines.delay
 /**
  * Live TV, full screen, like a TV box: Up / Down (and the remote's channel
  * keys) change channel within `channels`, wrapping at the ends; OK shows the
- * banner. The banner (number, logo, name) shows for a few seconds on every
- * change; on a radio channel it stays. Back leaves. Nothing is saved.
+ * banner. The banner (number, logo, name, and what is on now and next from the
+ * provider's short guide) shows for a few seconds on every change; on a radio
+ * channel it stays. Back leaves. Nothing is saved.
  */
 @OptIn(UnstableApi::class)
 @Composable
@@ -72,6 +77,9 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
     var bannerAt by remember { mutableIntStateOf(0) } // bumped to show the banner again
     var banner by remember { mutableStateOf(true) }
     var buffering by remember { mutableStateOf(false) }
+    // The channel's guide, read again each time the banner shows: what is on changes.
+    var guide by remember { mutableStateOf(emptyList<Programme>()) }
+    val http = (context.applicationContext as WtvApplication).http
 
     val player = remember {
         // Media3's own user agent, as for movies: the stream server blocks the API client's.
@@ -90,6 +98,11 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
             error = STALLED
             banner = true
         }
+    }
+    LaunchedEffect(channel.id) { guide = emptyList() }
+    LaunchedEffect(channel.id, bannerAt) {
+        // A nicety: without a guide the banner shows the channel only.
+        runCatching { shortEpg(http, login, channel.extId) }.onSuccess { guide = it }
     }
     LaunchedEffect(channel.id, bannerAt) {
         banner = true
@@ -168,18 +181,19 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
             },
             modifier = Modifier.fillMaxSize(),
         )
-        if (banner || error != null) Banner(channel, error)
+        if (banner || error != null) Banner(channel, error, nowAndNext(guide, System.currentTimeMillis() / 1000))
     }
 }
 
 /** The channel strip along the bottom: number, logo, name, and the error if the channel failed. */
 @Composable
-private fun BoxScope.Banner(channel: Channel, error: String?) {
+private fun BoxScope.Banner(channel: Channel, error: String?, onAir: Pair<Programme?, Programme?>) {
     Box(
         Modifier
             .fillMaxWidth()
             .align(Alignment.BottomStart)
-            .background(Brush.verticalGradient(0f to Color.Transparent, 1f to Color(0xE6000000)))
+            // Dark enough to read over any picture, channels' own graphics included.
+            .background(Brush.verticalGradient(0f to Color.Transparent, 0.3f to Color(0xCC000000), 1f to Color(0xF2000000)))
             .padding(start = 64.dp, end = 64.dp, top = 64.dp, bottom = 40.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -194,11 +208,39 @@ private fun BoxScope.Banner(channel: Channel, error: String?) {
                 if (error != null) {
                     Text(stringResource(R.string.live_failed) + " ($error)", style = MaterialTheme.typography.bodyMedium, color = WtvColors.TextSecondary)
                 }
+                val (now, next) = onAir
+                if (now != null) {
+                    Text(
+                        "${clock(now.start)}–${clock(now.end)}   ${now.title}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = WtvColors.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    val elapsed = ((System.currentTimeMillis() / 1000 - now.start).toFloat() / (now.end - now.start)).coerceIn(0f, 1f)
+                    Box(Modifier.padding(vertical = 6.dp).width(420.dp).height(3.dp).background(WtvColors.Surface)) {
+                        Box(Modifier.fillMaxWidth(elapsed).height(3.dp).background(WtvColors.Accent))
+                    }
+                }
+                if (next != null) {
+                    Text(
+                        stringResource(R.string.live_next, clock(next.start), next.title),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = WtvColors.TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }
 }
 
+/** "20:00" in the device's time zone. */
+private fun clock(unixSeconds: Long): String =
+    java.time.Instant.ofEpochSecond(unixSeconds).atZone(java.time.ZoneId.systemDefault()).toLocalTime().format(CLOCK)
+
+private val CLOCK = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
 private const val BANNER_MS = 4_000L
 private const val STALL_MS = 20_000L
 private const val STALLED = "TIMEOUT"

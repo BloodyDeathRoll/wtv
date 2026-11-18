@@ -89,4 +89,5 @@
     <string name="setting_hidden">Hidden</string>
     <string name="setting_hidden_none">Nothing hidden</string>
     <string name="setting_hidden_hint">Select one to show it again</string>
+    <string name="live_next">Next  %1$s  %2$s</string>
 </resources>
