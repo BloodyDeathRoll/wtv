@@ -87,7 +87,7 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
     LaunchedEffect(channel.id, buffering) {
         if (buffering) {
             delay(STALL_MS)
-            error = "TIMEOUT"
+            error = STALLED
             banner = true
         }
     }
@@ -112,6 +112,11 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 buffering = state == Player.STATE_BUFFERING
+                // A stall that ends: the picture is back, so the failed banner goes (after its usual few seconds).
+                if (state == Player.STATE_READY && error == STALLED) {
+                    error = null
+                    bannerAt++
+                }
             }
 
             override fun onPlayerError(e: PlaybackException) {
@@ -196,3 +201,4 @@ private fun BoxScope.Banner(channel: Channel, error: String?) {
 
 private const val BANNER_MS = 4_000L
 private const val STALL_MS = 20_000L
+private const val STALLED = "TIMEOUT"
