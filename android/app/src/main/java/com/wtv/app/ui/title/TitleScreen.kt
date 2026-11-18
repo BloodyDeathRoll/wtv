@@ -1,5 +1,6 @@
 package com.wtv.app.ui.title
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.Replay
 import androidx.compose.material.icons.outlined.ThumbDown
 import androidx.compose.material.icons.outlined.ThumbUp
@@ -65,6 +67,7 @@ import com.wtv.app.data.asCopy
 import com.wtv.app.data.copyLabels
 import com.wtv.app.data.nextEpisode
 import com.wtv.app.ui.browse.isHebrew
+import com.wtv.app.ui.components.ActionDivider
 import com.wtv.app.ui.components.ActionIcon
 import com.wtv.app.ui.components.Backdrop
 import com.wtv.app.ui.components.HeroText
@@ -80,8 +83,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 private data class Extras(
     val cast: List<CastMember>,
@@ -110,6 +113,8 @@ fun TitleScreen(
     onPlayEpisode: (Episode, Int, List<Episode>) -> Unit,
     onPerson: (CastMember) -> Unit,
     onOpen: (Title) -> Unit,
+    /** Saved positions were removed: the pages showing them reload. */
+    onProgressCleared: () -> Unit,
 ) {
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
     val hebrew = isHebrew()
@@ -275,6 +280,25 @@ fun TitleScreen(
                                 onClick = ::toggleWatchlist,
                                 selected = marks.onWatchlist,
                             )
+                            if (progress.orEmpty().isNotEmpty()) {
+                                ActionIcon(
+                                    Icons.Outlined.RemoveCircleOutline,
+                                    stringResource(R.string.remove_from_continue),
+                                    onClick = {
+                                        // The button goes away: the focus moves to Play first, not to the tabs.
+                                        play.requestFocus()
+                                        val ids = progress.orEmpty().map { it.titleId }.toSet()
+                                        scope.launch {
+                                            runCatching { catalog.clearProgress(ids) }
+                                                .onSuccess { onProgressCleared() }
+                                                .onFailure { Log.w("WtvProgress", "Removing the positions failed: ${it.message}") }
+                                        }
+                                    },
+                                )
+                            }
+                            ActionIcon(Icons.Outlined.Info, stringResource(R.string.more_info), onClick = { info = true })
+                            // The ratings stand apart from the title's actions.
+                            ActionDivider()
                             ActionIcon(
                                 if (marks.rating == Rating.Love) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                                 stringResource(R.string.rate_love),
@@ -293,7 +317,6 @@ fun TitleScreen(
                                 onClick = { rate(Rating.Dislike) },
                                 selected = marks.rating == Rating.Dislike,
                             )
-                            ActionIcon(Icons.Outlined.Info, stringResource(R.string.more_info), onClick = { info = true })
                         }
                     },
                 )

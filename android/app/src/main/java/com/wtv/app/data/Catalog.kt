@@ -240,6 +240,11 @@ class Catalog(private val api: Api) {
         api.get("progress?select=$PROGRESS_COLUMNS,titles!inner(group_id)&titles.group_id=eq.${title.groupId ?: title.id}&order=updated_at.desc")
             .objects().map(::progress)
 
+    /** Forgets the saved positions on these copies: the title leaves Continue watching and plays from the start. */
+    suspend fun clearProgress(titleIds: Collection<Long>) {
+        if (titleIds.isNotEmpty()) api.delete("progress?title_id=in.(${titleIds.joinToString(",")})")
+    }
+
     /** The Continue watching row: titles with a saved position, last watched first. */
     suspend fun continueWatching(): List<ContinueItem> =
         continueItems(
