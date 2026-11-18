@@ -59,6 +59,7 @@
     <string name="setting_account">Account</string>
     <string name="account_signed_out">Sign in with Google to keep your favourites and progress on every device</string>
     <string name="connect_wtw">Connect WTW</string>
+    <string name="connect_wtw_confirm">I already use WTW: connect</string>
     <string name="connect_wtw_hint">Only if you already use WTW: for a new account this would create one</string>
     <string name="wtw_connected">WTW connected: %1$s</string>
     <string name="sign_in_google">Sign in with Google</string>

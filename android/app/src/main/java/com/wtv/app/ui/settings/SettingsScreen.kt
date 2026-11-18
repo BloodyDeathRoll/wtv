@@ -220,6 +220,10 @@ private fun AccountSection() {
     val scope = rememberCoroutineScope()
     val email = remember { app.session.email }
     val wtwEmail = remember { app.wtw.email }
+    // Connect WTW asks first: WTW is read-only for us, so nothing can check that the account exists.
+    var confirmWtw by remember { mutableStateOf(false) }
+    // A WTW session left without a WTV one (an interrupted sign-out) is ended, not shown.
+    LaunchedEffect(Unit) { if (email == null && wtwEmail != null) app.wtw.signOut() }
     var code by remember { mutableStateOf<GoogleSignIn.Code?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var job by remember { mutableStateOf<Job?>(null) }
@@ -322,11 +326,16 @@ private fun AccountSection() {
             Note(stringResource(R.string.wtw_connected, wtwEmail))
         } else {
             Button(
-                onClick = { start { app.wtw.signInWithGoogle(it, link = false) } },
+                onClick = {
+                    if (confirmWtw) start { app.wtw.signInWithGoogle(it, link = false) } else confirmWtw = true
+                },
                 modifier = Modifier.focusRequester(startFocus),
-            ) { Text(stringResource(R.string.connect_wtw)) }
+            ) { Text(stringResource(if (confirmWtw) R.string.connect_wtw_confirm else R.string.connect_wtw)) }
             Spacer(Modifier.width(16.dp))
-            Note(error?.let { stringResource(R.string.sign_in_failed, it) } ?: stringResource(R.string.connect_wtw_hint))
+            Column {
+                Note(stringResource(R.string.connect_wtw_hint))
+                error?.let { Note(stringResource(R.string.sign_in_failed, it)) }
+            }
         }
     }
 }
