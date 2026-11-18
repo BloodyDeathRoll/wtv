@@ -355,6 +355,13 @@ private fun AccountSection() {
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (wtwEmail != null) {
             Note(stringResource(R.string.wtw_connected, wtwEmail))
+            Spacer(Modifier.width(24.dp))
+            Button(onClick = {
+                scope.launch(NonCancellable) {
+                    app.wtw.signOut()
+                    (context as? Activity)?.recreate()
+                }
+            }) { Text(stringResource(R.string.sign_out_wtw)) }
         } else {
             Button(
                 onClick = {
@@ -371,7 +378,10 @@ private fun AccountSection() {
     }
 }
 
-/** Server, user name and password of the provider, saved encrypted on this device. */
+/**
+ * Server, user name and password of the provider, saved encrypted on this device.
+ * Closed behind Edit once saved; open when there is no login yet, or when Play sent the user here.
+ */
 @Composable
 private fun ProviderSection(focus: FocusRequester?) {
     val context = LocalContext.current
@@ -379,13 +389,41 @@ private fun ProviderSection(focus: FocusRequester?) {
     var server by remember { mutableStateOf(saved?.server.orEmpty()) }
     var user by remember { mutableStateOf(saved?.user.orEmpty()) }
     var password by remember { mutableStateOf(saved?.password.orEmpty()) }
+    var editing by remember { mutableStateOf(focus != null || saved?.isComplete != true) }
     // Null: nothing to say; else the message after Save.
     var result by remember { mutableStateOf<Int?>(null) }
+    val edit = remember { FocusRequester() }
+    val ownField = remember { FocusRequester() }
+    val firstField = focus ?: ownField
+    var opened by remember { mutableStateOf(false) }
+    LaunchedEffect(editing) {
+        if (editing && opened) firstField.requestFocus()
+        // Save closes the fields under the focus: Edit takes it.
+        if (!editing && result == R.string.saved) edit.requestFocus()
+    }
 
-    Text(stringResource(R.string.setting_provider), style = MaterialTheme.typography.titleMedium, color = WtvColors.TextPrimary)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.setting_provider), style = MaterialTheme.typography.titleMedium, color = WtvColors.TextPrimary)
+        if (!editing) {
+            Spacer(Modifier.width(24.dp))
+            Button(
+                onClick = {
+                    opened = true
+                    result = null
+                    editing = true
+                },
+                modifier = Modifier.focusRequester(edit),
+            ) { Text(stringResource(R.string.edit)) }
+            if (result == R.string.saved) {
+                Spacer(Modifier.width(16.dp))
+                Text(stringResource(R.string.saved), style = MaterialTheme.typography.bodyMedium, color = WtvColors.Accent)
+            }
+        }
+    }
+    if (!editing) return
     Spacer(Modifier.height(12.dp))
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SettingField(stringResource(R.string.provider_server), server, { server = it; result = null }, focus = focus)
+        SettingField(stringResource(R.string.provider_server), server, { server = it; result = null }, focus = firstField)
         SettingField(stringResource(R.string.provider_user), user, { user = it; result = null })
         SettingField(stringResource(R.string.provider_password), password, { password = it; result = null }, secret = true)
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -396,14 +434,11 @@ private fun ProviderSection(focus: FocusRequester?) {
                     ProviderLogin.save(context, login) -> R.string.saved
                     else -> R.string.provider_save_failed
                 }
+                if (result == R.string.saved) editing = false
             }) { Text(stringResource(R.string.save)) }
             result?.let {
                 Spacer(Modifier.width(16.dp))
-                Text(
-                    stringResource(it),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (it == R.string.saved) WtvColors.Accent else WtvColors.TextSecondary,
-                )
+                Text(stringResource(it), style = MaterialTheme.typography.bodyMedium, color = WtvColors.TextSecondary)
             }
         }
     }

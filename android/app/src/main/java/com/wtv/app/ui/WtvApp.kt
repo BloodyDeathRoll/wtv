@@ -3,15 +3,22 @@ package com.wtv.app.ui
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -34,6 +41,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Tab
 import androidx.tv.material3.TabDefaults
@@ -272,6 +281,11 @@ fun WtvApp() {
     }
 
     BackHandler(enabled = !railOpen && stack.isEmpty() && !tabsHaveFocus) { selectedTab.requestFocus() }
+    // Back on the tabs asks before leaving.
+    var askExit by remember { mutableStateOf(false) }
+    BackHandler(enabled = !railOpen && stack.isEmpty() && tabsHaveFocus) { askExit = true }
+    val activity = LocalActivity.current
+    if (askExit) ExitDialog(onYes = { activity?.finish() }, onNo = { askExit = false })
     BackHandler(enabled = !railOpen && stack.isNotEmpty()) { close { stack.removeAt(stack.lastIndex) } }
     BackHandler(enabled = railOpen) { close { railPage = null } }
 
@@ -436,6 +450,26 @@ private fun Layer(blocked: Boolean, hidden: Boolean, memory: FocusMemory, conten
             content = content,
         )
     }
+}
+
+/** "Exit the app?" with Yes (focused) and No; Back answers No. */
+@Composable
+private fun ExitDialog(onYes: () -> Unit, onNo: () -> Unit) {
+    val yes = remember { FocusRequester() }
+    Dialog(onDismissRequest = onNo) {
+        Column(
+            Modifier.background(WtvColors.Surface, RoundedCornerShape(12.dp)).padding(horizontal = 40.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(stringResource(R.string.exit_question), style = MaterialTheme.typography.headlineSmall, color = WtvColors.TextPrimary)
+            Spacer(Modifier.height(24.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Button(onClick = onYes, modifier = Modifier.focusRequester(yes)) { Text(stringResource(R.string.yes)) }
+                Button(onClick = onNo) { Text(stringResource(R.string.no)) }
+            }
+        }
+    }
+    LaunchedEffect(Unit) { yes.requestFocus() }
 }
 
 /** Stands in for a page that is not built yet. Opaque; focusable, so Down from the tabs lands somewhere; brightens when focused. */

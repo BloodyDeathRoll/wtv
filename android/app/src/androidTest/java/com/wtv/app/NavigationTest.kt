@@ -13,7 +13,6 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -77,11 +76,20 @@ class NavigationTest {
     }
 
     @Test
-    fun backOnTabsLeavesTheApp() {
+    fun backOnTabsAsksBeforeLeaving() {
         startOn(R.string.tab_home)
         val activity = rule.activity
         press(KeyEvent.KEYCODE_BACK)
-        assertTrue("Back on the tabs should leave the app", activity.isFinishing || activity.isDestroyed)
+        waitFor(hasText(text(R.string.exit_question)))
+        // No (Back) keeps the app on the tabs.
+        press(KeyEvent.KEYCODE_BACK)
+        rule.waitUntil(5_000) { rule.onAllNodes(hasText(text(R.string.exit_question))).fetchSemanticsNodes().isEmpty() }
+        waitFor(tab(R.string.tab_home) and isFocused())
+        // Yes (focused) leaves.
+        press(KeyEvent.KEYCODE_BACK)
+        waitFor(hasText(text(R.string.exit_question)))
+        press(KeyEvent.KEYCODE_DPAD_CENTER)
+        rule.waitUntil(5_000) { activity.isFinishing || activity.isDestroyed }
     }
 
     @Test
