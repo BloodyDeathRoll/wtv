@@ -207,4 +207,14 @@ class CatalogTest {
         assertTrue(path, path.startsWith("rpc/recommended_page?select="))
         for (part in listOf("&p_kind=movie", "&p_category=7", "&p_offset=60", "&p_limit=60")) assertTrue(part, path.contains(part))
     }
+
+    @Test fun `a genre's page filters by TMDB genre, in both orders`() {
+        val drama = Category(18, Kind.Movie, "Drama", "Drama", null, genre = true)
+        val page = pagePath(drama, Sort.Year, hebrew = false, offset = 0, limit = 60)
+        assertTrue(page, page.contains("&tmdb_genre_ids=cs.%7B18%7D"))
+        assertFalse(page, page.contains("category_ids"))
+        val recommended = recommendedPath(drama, offset = 0, limit = 60)
+        assertTrue(recommended, recommended.contains("&p_genre=18"))
+        assertFalse(recommended, recommended.contains("p_category"))
+    }
 }

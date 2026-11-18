@@ -66,6 +66,7 @@ import com.wtv.app.player.streamUrl
 import com.wtv.app.ui.browse.BrowseScreen
 import com.wtv.app.ui.browse.BrowseSource
 import com.wtv.app.ui.browse.isHebrew
+import com.wtv.app.ui.categories.CategoriesScreen
 import com.wtv.app.ui.components.LocalTitleMenu
 import com.wtv.app.ui.components.TitleMenu
 import com.wtv.app.ui.components.RailItem
@@ -96,7 +97,12 @@ private sealed interface Page {
     val id: String
 
     data class Grid(val category: Category) : Page {
-        override val id get() = "grid:${category.kind}:${category.id}"
+        override val id get() = "grid:${category.kind}:${if (category.genre) "genre:" else ""}${category.id}"
+    }
+
+    /** Side bar → Categories: the provider's categories and the genres of a kind. */
+    data class Categories(val kind: Kind) : Page {
+        override val id get() = "categories"
     }
 
     /** `autoPlay`: opened from a card's menu with Play, so Play is pressed once the page is in. */
@@ -158,12 +164,11 @@ private class Entry(val page: Page) {
  * Remote behaviour, as in the reference:
  * - Moving focus onto a tab switches the section.
  * - Back from inside a page goes to the tabs; Back on the tabs leaves the app.
- * - A rail item opens its page over the section; Back closes it.
+ * - A rail item opens its page over the section; Back closes it. Main menu closes every page and returns to the tabs.
  */
 @Composable
 fun WtvApp() {
     var section by rememberSaveable { mutableStateOf(Section.Home) }
-    var railPage by rememberSaveable { mutableStateOf<RailItem?>(null) }
     // Pages opened over the section (grid, title, person), in order; Back pops one.
     val stack = remember { mutableStateListOf<Entry>() }
     var tabsHaveFocus by remember { mutableStateOf(false) }
@@ -265,32 +270,31 @@ fun WtvApp() {
     // the page now on top gets the focus it had (the card a title was opened
     // from); going forward, the new page's first item.
     val depth = stack.size
-    val railOpen = railPage != null
-    var shown by remember { mutableStateOf<Pair<Int, Boolean>?>(null) }
+    var shown by remember { mutableStateOf<Int?>(null) }
+    // Main menu: the tabs take the focus once the pages are closed.
+    var toTabs by remember { mutableStateOf(false) }
     // The top entry too: the next episode replaces the player at the same depth.
-    LaunchedEffect(depth, railOpen, stack.lastOrNull()) {
-        val (fromDepth, fromRail) = shown ?: (-1 to false)
-        shown = depth to railOpen
-        if (!railOpen) {
-            val top = stack.lastOrNull()
-            when {
-                top == null && (fromDepth < 0 || fromRail) -> selectedTab.requestFocus()
-                top == null -> baseMemory.restore(fallback = page)
-                depth > fromDepth && !fromRail -> runCatching { top.first.requestFocus() }
-                else -> top.memory.restore(fallback = top.first)
-            }
+    LaunchedEffect(depth, stack.lastOrNull()) {
+        val fromDepth = shown ?: -1
+        shown = depth
+        val top = stack.lastOrNull()
+        when {
+            top == null && (fromDepth < 0 || toTabs) -> selectedTab.requestFocus()
+            top == null -> baseMemory.restore(fallback = page)
+            depth > fromDepth -> runCatching { top.first.requestFocus() }
+            else -> top.memory.restore(fallback = top.first)
         }
+        toTabs = false
         parking = false
     }
 
-    BackHandler(enabled = !railOpen && stack.isEmpty() && !tabsHaveFocus) { selectedTab.requestFocus() }
+    BackHandler(enabled = stack.isEmpty() && !tabsHaveFocus) { selectedTab.requestFocus() }
     // Back on the tabs asks before leaving.
     var askExit by remember { mutableStateOf(false) }
-    BackHandler(enabled = !railOpen && stack.isEmpty() && tabsHaveFocus) { askExit = true }
+    BackHandler(enabled = stack.isEmpty() && tabsHaveFocus) { askExit = true }
     val activity = LocalActivity.current
     if (askExit) ExitDialog(onYes = { activity?.finish() }, onNo = { askExit = false })
-    BackHandler(enabled = !railOpen && stack.isNotEmpty()) { close { stack.removeAt(stack.lastIndex) } }
-    BackHandler(enabled = railOpen) { close { railPage = null } }
+    BackHandler(enabled = stack.isNotEmpty()) { close { stack.removeAt(stack.lastIndex) } }
 
     // A card held down opens its menu, over whatever page it is on.
     var menuFor by remember { mutableStateOf<Title?>(null) }
@@ -306,7 +310,7 @@ fun WtvApp() {
     CompositionLocalProvider(LocalTitleMenu provides { menuFor = it }) {
         Box(Modifier.fillMaxSize()) {
             Box(Modifier.size(1.dp).focusRequester(parked).focusProperties { canFocus = parking }.focusable())
-            Layer(blocked = railOpen || stack.isNotEmpty(), hidden = stack.isNotEmpty(), memory = baseMemory) {
+            Layer(blocked = stack.isNotEmpty(), hidden = stack.isNotEmpty(), memory = baseMemory) {
                 val source = when (section) {
                     Section.Home -> BrowseSource.Home
                     Section.Movies -> BrowseSource.Section(Kind.Movie)
@@ -370,7 +374,7 @@ fun WtvApp() {
             stack.forEachIndexed { i, entry ->
                 // Keyed by the entry, so a page keeps its state while pages open over it.
                 key(entry) {
-                    Layer(blocked = railOpen || i != stack.lastIndex, hidden = i != stack.lastIndex, memory = entry.memory) {
+                    Layer(blocked = i != stack.lastIndex, hidden = i != stack.lastIndex, memory = entry.memory) {
                         when (val p = entry.page) {
                             is Page.Grid -> GridScreen(p.category, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
                             is Page.TitlePage -> TitleScreen(
@@ -387,6 +391,7 @@ fun WtvApp() {
                                 onOpen = { open(Page.TitlePage(it)) },
                                 onProgressCleared = { progressVersion++ },
                             )
+                            is Page.Categories -> CategoriesScreen(p.kind, firstFocus = entry.first, onOpen = { open(Page.Grid(it)) })
                             is Page.Person -> PersonScreen(p.person, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
                             Page.Search -> SearchScreen(field = entry.first, onOpen = { open(Page.TitlePage(it)) })
                             // Read again after a watchlist change (a title removed from its page, say).
@@ -409,8 +414,6 @@ fun WtvApp() {
                     }
                 }
             }
-            val railFocus = remember { FocusRequester() }
-            railPage?.let { Placeholder(stringResource(it.label), railFocus) }
             // Not over the video: the player is the whole screen.
             if (stack.lastOrNull()?.page.let { it !is Page.Player && it !is Page.Live }) SideRail(
                 onSelect = {
@@ -418,31 +421,29 @@ fun WtvApp() {
                     tabsHaveFocus = false
                     // Search and Settings are pages like the others: Back returns from them.
                     when (it) {
-                        RailItem.Search -> {
-                            railPage = null
-                            open(Page.Search)
-                        }
-                        RailItem.Settings -> {
-                            railPage = null
-                            open(Page.Settings())
-                        }
-                        RailItem.Watchlist -> {
-                            railPage = null
-                            open(Page.Watchlist)
-                        }
-                        else -> railPage = it
+                        RailItem.Search -> open(Page.Search)
+                        RailItem.Categories -> open(Page.Categories(if (section == Section.Series) Kind.Series else Kind.Movie))
+                        RailItem.MainMenu ->
+                            if (stack.isEmpty()) selectedTab.requestFocus()
+                            else {
+                                toTabs = true
+                                close { stack.clear() }
+                            }
+                        RailItem.Watchlist -> open(Page.Watchlist)
+                        RailItem.Settings -> open(Page.Settings())
                     }
                 },
                 onLeave = {
                     val top = stack.lastOrNull()
                     when {
-                        railOpen -> runCatching { railFocus.requestFocus() }
                         top != null -> top.memory.restore(fallback = top.first)
                         lastOnTabs -> runCatching { selectedTab.requestFocus() }
                         else -> baseMemory.restore(fallback = page)
                     }
                 },
                 modifier = Modifier.align(Alignment.CenterStart),
+                // Categories lists movie or series tags: not on Home or Live TV.
+                showCategories = section == Section.Movies || section == Section.Series,
             )
         }
     }
@@ -487,16 +488,4 @@ private fun ExitDialog(onYes: () -> Unit, onNo: () -> Unit) {
         }
     }
     LaunchedEffect(Unit) { runCatching { yes.requestFocus() } }
-}
-
-/** Stands in for a page that is not built yet. Opaque; focusable, so Down from the tabs lands somewhere; brightens when focused. */
-@Composable
-private fun Placeholder(title: String, focus: FocusRequester) {
-    var focused by remember { mutableStateOf(false) }
-    Box(
-        Modifier.fillMaxSize().background(WtvColors.Background).focusRequester(focus).onFocusChanged { focused = it.isFocused }.focusable(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(title, style = MaterialTheme.typography.headlineMedium, color = if (focused) WtvColors.TextPrimary else WtvColors.TextMuted)
-    }
 }

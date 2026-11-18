@@ -17,7 +17,8 @@ import org.json.JSONObject
 
 enum class Kind(val db: String) { Movie("movie"), Series("series") }
 
-data class Category(val id: Int, val kind: Kind, val name: String, val nameEn: String?, val nameHe: String?) {
+/** A provider category, or with `genre` a TMDB genre (side bar → Categories): both open the same grid. */
+data class Category(val id: Int, val kind: Kind, val name: String, val nameEn: String?, val nameHe: String?, val genre: Boolean = false) {
     fun label(hebrew: Boolean): String = (if (hebrew) nameHe else nameEn) ?: name
 }
 
@@ -132,6 +133,12 @@ class Catalog(private val api: Api) {
             .map { Category(it.getInt("ext_id"), kind, it.getString("name"), it.text("name_en"), it.text("name_he")) }
             .also { categories[kind] = it }
     }
+
+    /** A kind's genres as categories, by name: the side bar's second group of tags. */
+    suspend fun genreCategories(kind: Kind, hebrew: Boolean): List<Category> =
+        genres().filterKeys { it.first == kind }
+            .map { (key, g) -> Category(key.second, kind, g.nameEn, g.nameEn, g.nameHe, genre = true) }
+            .sortedBy { it.label(hebrew) }
 
     suspend fun genres(): Map<Pair<Kind, Int>, Genre> = genresLock.withLock {
         genres ?: api.get("genres?select=kind,id,name_en,name_he").objects()
@@ -334,18 +341,18 @@ class Catalog(private val api: Api) {
  * Rows and grids show cards: one title per group of copies (#56). A card's
  * categories and date are those of all its copies.
  */
-private fun cards(kind: Kind, category: Int?): String =
+private fun cards(kind: Kind, category: Int?, genre: Boolean = false): String =
     "titles?select=$TITLE_COLUMNS&kind=eq.${kind.db}&available=is.true&is_primary=is.true" +
-        (category?.let { "&group_category_ids=cs.%7B$it%7D" } ?: "")
+        (category?.let { if (genre) "&tmdb_genre_ids=cs.%7B$it%7D" else "&group_category_ids=cs.%7B$it%7D" } ?: "")
 
 internal fun latestPath(kind: Kind, category: Int?, limit: Int): String =
     cards(kind, category) + "&order=${Sort.Added.order(hebrew = false)}&limit=$limit"
 
 internal fun recommendedPath(category: Category, offset: Int, limit: Int): String =
-    "rpc/recommended_page?select=$TITLE_COLUMNS&p_kind=${category.kind.db}&p_category=${category.id}&p_offset=$offset&p_limit=$limit"
+    "rpc/recommended_page?select=$TITLE_COLUMNS&p_kind=${category.kind.db}&${if (category.genre) "p_genre" else "p_category"}=${category.id}&p_offset=$offset&p_limit=$limit"
 
 internal fun pagePath(category: Category, sort: Sort, hebrew: Boolean, offset: Int, limit: Int): String =
-    cards(category.kind, category.id) + "&order=${sort.order(hebrew)}&offset=$offset&limit=$limit"
+    cards(category.kind, category.id, category.genre) + "&order=${sort.order(hebrew)}&offset=$offset&limit=$limit"
 
 private const val TITLE_COLUMNS = "id,ext_id,container_ext,kind,name,title_en,title_he,year,plot,overview_en,overview_he,tmdb_genre_ids,certification," +
     "tmdb_backdrop,tmdb_poster,backdrop_url,poster_url,runtime_min,tmdb_runtime_min,director,cast_names,tmdb_rating,original_language,group_id"

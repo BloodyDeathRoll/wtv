@@ -93,15 +93,23 @@ class NavigationTest {
     }
 
     @Test
-    fun railPageClosesOnBackAndSurvivesRecreation() {
-        startOn(R.string.tab_home)
+    fun categoriesOpenFromTheSideBarAndCloseOnBack() {
+        // Categories lists movie or series tags, so it is offered on Movies.
+        startOn(R.string.tab_movies)
         val categories = text(R.string.rail_categories)
         // TV buttons ignore touch, so the click goes through the accessibility action.
         rule.onNodeWithContentDescription(categories).performSemanticsAction(SemanticsActions.OnClick)
-        waitFor(hasText(categories))
-        rule.activityRule.scenario.recreate()
-        waitFor(hasText(categories))
+        waitFor(hasText(categories) and !hasClickAction())
         press(KeyEvent.KEYCODE_BACK)
-        rule.waitUntil(5_000) { rule.onAllNodes(hasText(categories)).fetchSemanticsNodes().isEmpty() }
+        rule.waitUntil(5_000) { rule.onAllNodes(hasText(categories) and !hasClickAction()).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun mainMenuClosesPagesAndReturnsToTheTabs() {
+        startOn(R.string.tab_movies)
+        rule.onNodeWithContentDescription(text(R.string.rail_categories)).performSemanticsAction(SemanticsActions.OnClick)
+        waitFor(hasText(text(R.string.rail_categories)) and !hasClickAction())
+        rule.onNodeWithContentDescription(text(R.string.rail_main_menu)).performSemanticsAction(SemanticsActions.OnClick)
+        waitFor(tab(R.string.tab_movies) and isFocused())
     }
 }
