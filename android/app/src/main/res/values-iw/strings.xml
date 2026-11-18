@@ -55,6 +55,14 @@
     <string name="searching">מחפש…</string>
     <string name="no_results">לא נמצא דבר עבור „%1$s”</string>
     <string name="setting_language">שפה</string>
+    <string name="setting_account">חשבון</string>
+    <string name="account_signed_out">התחברו עם Google כדי לקבל המלצות מ-WTW</string>
+    <string name="sign_in_google">התחברות עם Google</string>
+    <string name="sign_in_code">בטלפון, פתחו את %1$s והזינו את הקוד:</string>
+    <string name="signed_in">מחובר:</string>
+    <string name="sign_out">התנתקות</string>
+    <string name="sign_in_failed">ההתחברות נכשלה: %1$s</string>
+    <string name="cancel">ביטול</string>
     <string name="setting_provider">פרטי הספק</string>
     <string name="provider_server">שרת</string>
     <string name="provider_user">שם משתמש</string>

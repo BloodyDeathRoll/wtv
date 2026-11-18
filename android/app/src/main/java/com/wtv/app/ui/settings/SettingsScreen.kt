@@ -15,10 +15,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,18 +56,23 @@ import androidx.tv.material3.Text
 import com.wtv.app.AppLanguage
 import com.wtv.app.R
 import com.wtv.app.WtvApplication
+import com.wtv.app.data.ApiException
 import com.wtv.app.data.Channel
+import com.wtv.app.data.GoogleSignIn
 import com.wtv.app.data.LiveCategory
 import com.wtv.app.data.LiveFilters
 import com.wtv.app.player.ProviderLogin
 import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.components.Sideways
 import com.wtv.app.ui.theme.WtvColors
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
- * Settings: the app language, Live TV (radio switch, hidden channels and
- * groups) and the provider login. The account comes with P6-1. `providerFirst` opens the page on the login (Play
+ * Settings: the app language, the Google account, Live TV (radio switch,
+ * hidden channels and groups) and the provider login. `providerFirst` opens the page on the login (Play
  * sends the user here when there is none).
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -73,7 +80,7 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(firstFocus: FocusRequester, providerFirst: Boolean = false) {
     val context = LocalContext.current
     val current = remember { AppLanguage.current(context) }
-    Column(Modifier.fillMaxSize().padding(start = 88.dp, top = 48.dp)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 88.dp, top = 48.dp, bottom = 48.dp)) {
         Text(stringResource(R.string.rail_settings), style = MaterialTheme.typography.displayMedium, color = WtvColors.TextPrimary)
         Spacer(Modifier.height(32.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -105,6 +112,8 @@ fun SettingsScreen(firstFocus: FocusRequester, providerFirst: Boolean = false) {
                 }
             }
         }
+        Spacer(Modifier.height(32.dp))
+        AccountSection()
         Spacer(Modifier.height(32.dp))
         LiveSection()
         Spacer(Modifier.height(32.dp))
@@ -195,6 +204,114 @@ private fun LiveSection() {
         }
     }
     Text(stringResource(R.string.setting_hidden_hint), style = MaterialTheme.typography.bodySmall, color = WtvColors.TextMuted, modifier = Modifier.padding(start = 140.dp, top = 4.dp))
+}
+
+/**
+ * Google sign-in: a code to enter on the phone, then a WTV and a WTW session.
+ * The page is rebuilt afterwards, so every screen reads as the new user.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun AccountSection() {
+    val context = LocalContext.current
+    val app = context.applicationContext as WtvApplication
+    val scope = rememberCoroutineScope()
+    // Signed in only when both sessions exist; a half-done sign-in shows the button again.
+    val email = remember { app.session.email?.takeIf { app.wtw.email != null } }
+    var code by remember { mutableStateOf<GoogleSignIn.Code?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var job by remember { mutableStateOf<Job?>(null) }
+    // Set once the phone has approved: the sign-ins then finish whatever Cancel says.
+    var finishing by remember { mutableStateOf(false) }
+    val signInFocus = remember { FocusRequester() }
+    val cancelFocus = remember { FocusRequester() }
+    var codeShown by remember { mutableStateOf(false) }
+    // The focused button leaves the screen when the code appears or goes; focus follows to the new one.
+    LaunchedEffect(code) {
+        if (code != null) {
+            codeShown = true
+            cancelFocus.requestFocus()
+        } else if (codeShown) {
+            signInFocus.requestFocus()
+        }
+    }
+
+    Text(stringResource(R.string.setting_account), style = MaterialTheme.typography.titleMedium, color = WtvColors.TextPrimary)
+    Spacer(Modifier.height(12.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        val shown = code
+        when {
+            email != null -> {
+                Text(stringResource(R.string.signed_in), style = MaterialTheme.typography.bodyLarge, color = WtvColors.TextSecondary)
+                Spacer(Modifier.width(8.dp))
+                Text(email, style = MaterialTheme.typography.bodyLarge, color = WtvColors.TextPrimary)
+                Spacer(Modifier.width(24.dp))
+                Button(onClick = {
+                    scope.launch(NonCancellable) {
+                        app.session.signOut()
+                        app.wtw.signOut()
+                        (context as? Activity)?.recreate()
+                    }
+                }) { Text(stringResource(R.string.sign_out)) }
+            }
+            shown == null -> {
+                Button(
+                    onClick = {
+                        if (job?.isActive == true || finishing) return@Button
+                        error = null
+                        job = scope.launch {
+                            try {
+                                val started = app.google.start()
+                                code = started
+                                val idToken = app.google.awaitIdToken(started)
+                                // Cancel stops the wait only: once approved, both sign-ins run to the end.
+                                // WTV first: if it fails, nothing has changed on this device. If WTW
+                                // then fails, signing in again finishes it (WTV is already the account).
+                                finishing = true
+                                withContext(NonCancellable) {
+                                    app.session.signInWithGoogle(idToken, link = true)
+                                    app.wtw.signInWithGoogle(idToken, link = false)
+                                    (context as? Activity)?.recreate()
+                                }
+                            } catch (e: ApiException) {
+                                error = e.message
+                                code = null
+                            } finally {
+                                finishing = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.focusRequester(signInFocus),
+                ) { Text(stringResource(R.string.sign_in_google)) }
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    error?.let { stringResource(R.string.sign_in_failed, it) } ?: stringResource(R.string.account_signed_out),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = WtvColors.TextSecondary,
+                )
+            }
+            else -> {
+                Column {
+                    Text(
+                        stringResource(R.string.sign_in_code, shown.url.removePrefix("https://").removePrefix("www.")),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = WtvColors.TextSecondary,
+                    )
+                    Text(shown.userCode, style = MaterialTheme.typography.displaySmall, color = WtvColors.Accent)
+                }
+                Spacer(Modifier.width(24.dp))
+                Button(
+                    onClick = {
+                        if (!finishing) {
+                            job?.cancel()
+                            code = null
+                        }
+                    },
+                    modifier = Modifier.focusRequester(cancelFocus),
+                ) { Text(stringResource(R.string.cancel)) }
+            }
+        }
+    }
 }
 
 /** Server, user name and password of the provider, saved encrypted on this device. */
