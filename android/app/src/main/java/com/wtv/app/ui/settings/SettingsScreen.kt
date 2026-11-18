@@ -247,6 +247,8 @@ private fun AccountSection() {
     fun start(signIn: suspend (String) -> Unit) {
         if (job?.isActive == true || finishing) return
         error = null
+        // Every Connect WTW attempt is confirmed again, also after a cancel or an error.
+        confirmWtw = false
         job = scope.launch {
             try {
                 val started = app.google.start()
