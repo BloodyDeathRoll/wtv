@@ -192,7 +192,12 @@ fun WtvApp() {
     // The next episode replaces the player on top: Back still returns to the series page.
     fun playNext(p: Page.Player) {
         val e = p.next ?: return
-        val login = ProviderLogin.load(context)?.takeIf { it.isComplete } ?: return
+        val login = ProviderLogin.load(context)?.takeIf { it.isComplete }
+        if (login == null) {
+            Toast.makeText(context, noLogin, Toast.LENGTH_LONG).show()
+            stack[stack.lastIndex] = Entry(Page.Settings(providerFirst = true))
+            return
+        }
         val url = streamUrl(login, StreamKind.Episode, e.extId, e.containerExt)
         stack[stack.lastIndex] = Entry(p.copy(url = url, title = episodeTitle(p.series.orEmpty(), e), episodeId = e.id, startSecs = 0))
     }
