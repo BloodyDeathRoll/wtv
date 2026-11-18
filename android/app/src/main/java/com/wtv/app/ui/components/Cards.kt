@@ -101,7 +101,10 @@ fun ImageCard(
                     label,
                     style = MaterialTheme.typography.labelLarge,
                     color = WtvColors.TextPrimary,
-                    modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
+                    // Two lines at most: a cast card is narrow.
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(10.dp),
                 )
             }
             if (progress != null) {
@@ -143,7 +146,8 @@ fun PersonCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     onFocused: () -> Unit = {},
-) = ImageCard(imageUrl, name, onClick, width = 96.dp, aspectRatio = 3f / 4f, modifier, onFocused = onFocused)
+    label: String? = null,
+) = ImageCard(imageUrl, name, onClick, width = 96.dp, aspectRatio = 3f / 4f, modifier, label = label, onFocused = onFocused)
 
 /**
  * A live channel: its logo (or its name, when there is none) on a plain
