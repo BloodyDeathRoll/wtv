@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Db, Row } from './db.ts'
-import { matchWtw, parseVector, sameVector } from './wtw-match.ts'
+import { matchWtw, parseVector, sameJson, sameVector, trimCrew } from './wtw-match.ts'
 
 test('parseVector reads pgvector text and rejects anything else', () => {
   assert.deepEqual(parseVector('[-0.34307024,0.25,0]'), [-0.34307024, 0.25, 0])
@@ -45,12 +45,38 @@ function fakeDb(tables: Record<string, Row[]>) {
 const vecText = (first: number) => `[${[first, ...Array(24).fill(0)].join(',')}]`
 const vec = (first: number) => [first, ...Array(24).fill(0)]
 
-const none = { wtw_title_id: null, wtw_taste_vec: null, wtw_taste_version: null }
+/** A WTW crew snapshot with more than the ranking reads; `crew` below is it trimmed. */
+const wtwCrew = {
+  directors: [{ tmdb_person_id: '1', name: 'D', job: 'Director' }],
+  writers: [],
+  cinematographers: [{ tmdb_person_id: 2, name: 'C' }],
+  cast: [1, 2, 3, 4, 5].map(i => ({ tmdb_person_id: `a${i}`, name: `A${i}`, order: i - 1, character: 'x' })),
+  producers: [{ tmdb_person_id: '9', name: 'P' }],
+}
+const crew = {
+  directors: [{ tmdb_person_id: '1', name: 'D' }],
+  writers: [],
+  cinematographers: [{ tmdb_person_id: '2', name: 'C' }],
+  cast: [1, 2, 3].map(i => ({ tmdb_person_id: `a${i}`, name: `A${i}`, order: i - 1 })),
+}
+const ratings = { tmdb_rating: 7.4, omdb_rating: 0.81 }
+
+test('trimCrew keeps what the ranking reads, in a fixed key order', () => {
+  assert.deepEqual(trimCrew(wtwCrew), crew)
+  assert.equal(trimCrew(null), null)
+  assert.equal(trimCrew('x'), null)
+  // jsonb returns its own key order: still the same crew.
+  const reordered = { cast: crew.cast, writers: [], directors: crew.directors, cinematographers: crew.cinematographers }
+  assert.ok(sameJson(reordered, crew))
+  assert.ok(!sameJson({ ...crew, writers: [{ tmdb_person_id: '3', name: 'W' }] }, crew))
+})
+
+const none = { wtw_title_id: null, wtw_taste_vec: null, wtw_taste_version: null, wtw_crew: null, wtw_tmdb_rating: null, wtw_omdb_rating: null }
 
 test('titles are matched by kind and TMDB id; coverage is counted per kind', async () => {
   const wtw = fakeDb({
     titles: [
-      { id: 1, tmdb_id: '1185344', type: 'movie', taste_vec: vecText(0.5), taste_version: 1 },
+      { id: 1, tmdb_id: '1185344', type: 'movie', taste_vec: vecText(0.5), taste_version: 1, crew: wtwCrew, ...ratings },
       { id: 2, tmdb_id: '22', type: 'tv', taste_vec: null, taste_version: null },
       // Same TMDB id as the movie, but a series: must not match the movie.
       { id: 3, tmdb_id: '1185344', type: 'tv', taste_vec: vecText(1), taste_version: 1 },
@@ -74,31 +100,37 @@ test('titles are matched by kind and TMDB id; coverage is counted per kind', asy
   })
   // The unknown movie had nothing and still has nothing: not written.
   assert.deepEqual(wtv.upserts, [[
-    { provider_id: 7, kind: 'movie', ext_id: 387982, name: 'החיה', wtw_title_id: 1, wtw_taste_vec: vec(0.5), wtw_taste_version: 1 },
-    { provider_id: 7, kind: 'series', ext_id: 5829, name: 'דוקטור X', wtw_title_id: 2, wtw_taste_vec: null, wtw_taste_version: null },
+    { provider_id: 7, kind: 'movie', ext_id: 387982, name: 'החיה', wtw_title_id: 1, wtw_taste_vec: vec(0.5), wtw_taste_version: 1, wtw_crew: crew, wtw_tmdb_rating: 7.4, wtw_omdb_rating: 0.81 },
+    // No crew or ratings on the WTW row: copied as null.
+    { provider_id: 7, kind: 'series', ext_id: 5829, name: 'דוקטור X', wtw_title_id: 2, wtw_taste_vec: null, wtw_taste_version: null, wtw_crew: null, wtw_tmdb_rating: null, wtw_omdb_rating: null },
   ]])
   // WTW is only read.
   assert.deepEqual(wtw.upserts, [])
   assert.deepEqual(wtv.calls, [
-    'titles?id,kind,ext_id,name,tmdb_id,wtw_title_id,wtw_taste_vec,wtw_taste_version&provider_id=eq.7&or=(tmdb_id.not.is.null,wtw_title_id.not.is.null)',
+    'titles?id,kind,ext_id,name,tmdb_id,wtw_title_id,wtw_taste_vec,wtw_taste_version,wtw_crew,wtw_tmdb_rating,wtw_omdb_rating&provider_id=eq.7&or=(tmdb_id.not.is.null,wtw_title_id.not.is.null)',
   ])
 })
 
 test('unchanged titles are not written; a lost TMDB id clears the match', async () => {
-  const wtw = fakeDb({ titles: [{ id: 1, tmdb_id: '100', type: 'movie', taste_vec: vecText(0.5), taste_version: 1 }] })
-  const kept = { tmdb_id: 100, wtw_title_id: 1, wtw_taste_vec: vec(0.5), wtw_taste_version: 1 }
+  const wtw = fakeDb({ titles: [{ id: 1, tmdb_id: '100', type: 'movie', taste_vec: vecText(0.5), taste_version: 1, crew: wtwCrew, ...ratings }] })
+  const kept = { tmdb_id: 100, wtw_title_id: 1, wtw_taste_vec: vec(0.5), wtw_taste_version: 1, wtw_crew: crew, wtw_tmdb_rating: 7.4, wtw_omdb_rating: 0.81 }
   const wtv = fakeDb({
     titles: [
       { id: 10, kind: 'movie', ext_id: 1, name: 'same', ...kept },
       { id: 12, kind: 'movie', ext_id: 3, name: 'same too', ...kept },
       { id: 11, kind: 'movie', ext_id: 2, name: 'lost id', ...kept, tmdb_id: null },
+      // Only the rating changed in WTW: written.
+      { id: 13, kind: 'movie', ext_id: 4, name: 'new rating', ...kept, wtw_tmdb_rating: 7.1 },
     ],
   })
   const report = await matchWtw(wtv.db, wtw.db, 'prov1')
-  assert.equal(report.updated, 1)
+  assert.equal(report.updated, 2)
   // The title without a TMDB id is not counted in coverage.
-  assert.deepEqual(report.movie, { withTmdbId: 2, inWtw: 2, scored: 2 })
-  assert.deepEqual(wtv.upserts, [[{ provider_id: 7, kind: 'movie', ext_id: 2, name: 'lost id', ...none }]])
+  assert.deepEqual(report.movie, { withTmdbId: 3, inWtw: 3, scored: 3 })
+  assert.deepEqual(wtv.upserts, [[
+    { provider_id: 7, kind: 'movie', ext_id: 2, name: 'lost id', ...none },
+    { provider_id: 7, kind: 'movie', ext_id: 4, name: 'new rating', wtw_title_id: 1, wtw_taste_vec: vec(0.5), wtw_taste_version: 1, wtw_crew: crew, wtw_tmdb_rating: 7.4, wtw_omdb_rating: 0.81 },
+  ]])
 })
 
 test('of two WTW rows for one title, the scored one is used and the duplicate counted', async () => {
