@@ -111,4 +111,7 @@
     <string name="live_archive_failed">לא ניתן לטעון תוכניות קודמות</string>
     <string name="live_no_archive">אין עדיין תוכניות קודמות לצפייה</string>
     <string name="remove_from_watchlist">הסרה מרשימת הצפייה</string>
+    <string name="setting_about">אודות</string>
+    <string name="about_tmdb">מוצר זה משתמש ב-API של TMDB אך אינו מאושר או מוסמך על ידי TMDB.</string>
+    <string name="about_version">גרסה %1$s</string>
 </resources>

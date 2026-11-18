@@ -1,6 +1,11 @@
 package com.wtv.app.ui.settings
 
 import android.app.Activity
+import com.wtv.app.BuildConfig
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -118,6 +123,30 @@ fun SettingsScreen(firstFocus: FocusRequester, providerFirst: Boolean = false) {
         LiveSection()
         Spacer(Modifier.height(32.dp))
         ProviderSection(focus = if (providerFirst) firstFocus else null)
+        Spacer(Modifier.height(32.dp))
+        AboutSection()
+    }
+}
+
+/** TMDB's required credit (logo and notice) and the app version. Focusable so the remote can scroll it into view. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun AboutSection() {
+    var focused by remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .onFocusChanged { focused = it.isFocused }
+            .focusable()
+            .border(BorderStroke(2.dp, if (focused) WtvColors.TextPrimary else Color.Transparent), RoundedCornerShape(8.dp))
+            .padding(16.dp),
+    ) {
+        Text(stringResource(R.string.setting_about), style = MaterialTheme.typography.titleMedium, color = WtvColors.TextSecondary)
+        Spacer(Modifier.height(12.dp))
+        Image(painterResource(R.drawable.tmdb_logo), contentDescription = "TMDB", modifier = Modifier.height(20.dp))
+        Spacer(Modifier.height(8.dp))
+        Text(stringResource(R.string.about_tmdb), style = MaterialTheme.typography.bodyMedium, color = WtvColors.TextSecondary)
+        Spacer(Modifier.height(8.dp))
+        Text(stringResource(R.string.about_version, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodyMedium, color = WtvColors.TextSecondary)
     }
 }
 
