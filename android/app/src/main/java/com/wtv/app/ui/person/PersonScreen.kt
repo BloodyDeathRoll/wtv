@@ -46,6 +46,7 @@ import com.wtv.app.WtvApplication
 import com.wtv.app.data.CastMember
 import com.wtv.app.data.Title
 import com.wtv.app.ui.browse.isHebrew
+import com.wtv.app.ui.components.Backdrop
 import com.wtv.app.ui.components.PosterCard
 import com.wtv.app.ui.theme.WtvColors
 import kotlinx.coroutines.CancellationException
@@ -119,32 +120,45 @@ fun TitlesPage(
     // poster) holds `firstFocus`; replacing a state clears the focus, so it is
     // requested again on every change, unless the user pressed a key meanwhile.
     LaunchedEffect(state) { if (!moved) runCatching { firstFocus.requestFocus() } }
+    // The focused poster's name under the header, as on a category's page.
+    var focused by remember(key) { mutableStateOf<Title?>(null) }
 
-    Column(Modifier.fillMaxSize().padding(start = 88.dp, end = 48.dp, top = 48.dp)) {
-        header((state as? Load.Ready)?.titles?.size)
-        Spacer(Modifier.height(24.dp))
-        when (val s = state) {
-            Load.Loading -> Message(stringResource(R.string.loading), firstFocus, onKey = { moved = true })
-            is Load.Failed -> Message(stringResource(R.string.load_failed, s.message), firstFocus, onKey = { moved = true }, onRetry = { moved = false; attempt++ })
-            is Load.Ready ->
-                if (s.titles.isEmpty()) Message(stringResource(R.string.nothing_here), firstFocus, onKey = { moved = true })
-                else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(6),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(18.dp),
-                        contentPadding = PaddingValues(top = 6.dp, bottom = 48.dp),
-                    ) {
-                        itemsIndexed(s.titles, key = { _, t -> t.id }) { i, t ->
-                            PosterCard(
-                                imageUrl = t.posterImage,
-                                title = t.displayName(hebrew),
-                                onClick = { onOpen(t) },
-                                modifier = if (i == 0) Modifier.focusRequester(firstFocus) else Modifier,
-                            )
+    Box(Modifier.fillMaxSize()) {
+        Backdrop(focused?.heroImage)
+        Column(Modifier.fillMaxSize().padding(start = 88.dp, end = 48.dp, top = 48.dp)) {
+            header((state as? Load.Ready)?.titles?.size)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                focused?.let { t -> listOfNotNull(t.displayName(hebrew), t.year?.toString(), t.certification).joinToString("   ") } ?: " ",
+                style = MaterialTheme.typography.titleSmall,
+                color = WtvColors.TextSecondary,
+                maxLines = 1,
+            )
+            Spacer(Modifier.height(16.dp))
+            when (val s = state) {
+                Load.Loading -> Message(stringResource(R.string.loading), firstFocus, onKey = { moved = true })
+                is Load.Failed -> Message(stringResource(R.string.load_failed, s.message), firstFocus, onKey = { moved = true }, onRetry = { moved = false; attempt++ })
+                is Load.Ready ->
+                    if (s.titles.isEmpty()) Message(stringResource(R.string.nothing_here), firstFocus, onKey = { moved = true })
+                    else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(6),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(18.dp),
+                            contentPadding = PaddingValues(top = 6.dp, bottom = 48.dp),
+                        ) {
+                            itemsIndexed(s.titles, key = { _, t -> t.id }) { i, t ->
+                                PosterCard(
+                                    imageUrl = t.posterImage,
+                                    title = t.displayName(hebrew),
+                                    onClick = { onOpen(t) },
+                                    onFocused = { focused = t },
+                                    modifier = if (i == 0) Modifier.focusRequester(firstFocus) else Modifier,
+                                )
+                            }
                         }
                     }
-                }
+            }
         }
     }
 }

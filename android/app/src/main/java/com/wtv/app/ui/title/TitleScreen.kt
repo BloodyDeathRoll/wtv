@@ -376,7 +376,8 @@ fun TitleScreen(
                                         contentPadding = PaddingValues(end = 48.dp, top = 6.dp, bottom = 6.dp),
                                     ) {
                                         items(extras.alsoLiked, key = { it.id }) { t ->
-                                            LandscapeCard(imageUrl = t.cardImage, title = t.displayName(hebrew), onClick = { onOpen(t) })
+                                            // The name on the image: the picture alone does not tell titles apart.
+                                            LandscapeCard(imageUrl = t.cardImage, title = t.displayName(hebrew), onClick = { onOpen(t) }, label = t.displayName(hebrew))
                                         }
                                     }
                                 }
@@ -393,7 +394,7 @@ fun TitleScreen(
                                         contentPadding = PaddingValues(end = 48.dp, top = 6.dp, bottom = 6.dp),
                                     ) {
                                         items(extras.cast, key = { it.personId }) { c ->
-                                            PersonCard(imageUrl = c.photo, name = c.name, onClick = { onPerson(c) })
+                                            PersonCard(imageUrl = c.photo, name = c.name, onClick = { onPerson(c) }, label = c.name)
                                         }
                                     }
                                 }
