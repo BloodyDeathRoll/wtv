@@ -120,4 +120,7 @@
     <string name="exit_question">לצאת מהאפליקציה?</string>
     <string name="yes">כן</string>
     <string name="no">לא</string>
+    <string name="rail_main_menu">תפריט ראשי</string>
+    <string name="categories_providers">קטגוריות</string>
+    <string name="categories_genres">ז׳אנרים</string>
 </resources>

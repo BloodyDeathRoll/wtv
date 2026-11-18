@@ -121,4 +121,7 @@
     <string name="exit_question">Exit the app?</string>
     <string name="yes">Yes</string>
     <string name="no">No</string>
+    <string name="rail_main_menu">Main menu</string>
+    <string name="categories_providers">Categories</string>
+    <string name="categories_genres">Genres</string>
 </resources>
