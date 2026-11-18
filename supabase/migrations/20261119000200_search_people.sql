@@ -5,7 +5,7 @@
 -- themselves.
 create index if not exists people_name_trgm_idx on public.people using gin (name extensions.gin_trgm_ops);
 
-create function public.search_people(p_query text, p_kind text default null, p_limit integer default 12)
+create or replace function public.search_people(p_query text, p_kind text default null, p_limit integer default 12)
 returns table (tmdb_id integer, name text, profile text)
 language sql stable security invoker set search_path = public
 as $$
@@ -29,7 +29,7 @@ as $$
   where titles > 0
   -- Names starting with the query, then the actors with the most titles here.
   order by starts desc, titles desc, name
-  limit least(p_limit, 50)
+  limit least(greatest(p_limit, 0), 50)
 $$;
 
 revoke execute on function public.search_people(text, text, integer) from public, anon;

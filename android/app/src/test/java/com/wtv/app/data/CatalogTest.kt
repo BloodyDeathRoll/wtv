@@ -93,6 +93,13 @@ class CatalogTest {
         assertTrue(searchPath("שוטר", hebrew = true, prefix = false).contains("&order=sort_name_he.asc,id"))
     }
 
+    @Test fun `a section search keeps to its kind and actors are searched by an encoded name`() {
+        assertTrue(searchPath("x", hebrew = false, prefix = false, kind = Kind.Movie).contains("&kind=eq.movie&"))
+        assertFalse(searchPath("x", hebrew = false, prefix = false).contains("&kind="))
+        assertEquals("rpc/search_people?p_query=tom%20h%26a&p_kind=series", peopleSearchPath("tom h&a", Kind.Series))
+        assertEquals("rpc/search_people?p_query=brad", peopleSearchPath("brad", null))
+    }
+
     @Test fun `a prefix search has no leading wildcard`() {
         assertTrue(decodedOr(searchPath("bad", hebrew = false, prefix = true)).startsWith("(sort_name_en.ilike.\"bad*\","))
     }

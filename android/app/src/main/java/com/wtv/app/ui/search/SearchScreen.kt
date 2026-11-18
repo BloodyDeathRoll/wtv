@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
@@ -116,7 +117,13 @@ fun SearchScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var results by remember { mutableStateOf<Results>(Results.Idle) }
     var fieldFocused by remember { mutableStateOf(false) }
-    val firstBelow = remember { FocusRequester() }
+    // The first suggestion (Down from the field) and the first result (the keyboard's Search key).
+    val firstSuggestion = remember { FocusRequester() }
+    val firstResult = remember { FocusRequester() }
+    // The Search key was pressed before the results were in: move to them when they arrive.
+    var toResults by remember { mutableStateOf(false) }
+    // Suggestions show while the field or a suggestion has focus; in the results they make room.
+    var nearField by remember { mutableStateOf(true) }
     // Live TV searches the channel list, read once.
     var channels by remember { mutableStateOf<List<Channel>?>(null) }
 
@@ -133,7 +140,9 @@ fun SearchScreen(
         results = try {
             if (scope == SearchScope.Live) {
                 val all = channels ?: catalog.channels().also { channels = it }
-                Results.Found(q, emptyList(), emptyList(), all.filter { it.name.contains(q, ignoreCase = true) })
+                val hits = all.filter { it.name.contains(q, ignoreCase = true) }
+                // Names starting with the query first, as titles and actors are ordered.
+                Results.Found(q, emptyList(), emptyList(), hits.sortedByDescending { it.name.startsWith(q, ignoreCase = true) })
             } else coroutineScope {
                 val titles = async { catalog.search(q, hebrew, scope.kind) }
                 // Actors are a nicety: without them the titles still show.
@@ -149,9 +158,10 @@ fun SearchScreen(
 
     val shown = results
     val actorTag = stringResource(R.string.search_actor)
-    val suggestions = remember(shown, query, hebrew) {
+    // The last results' suggestions stay while the next ones load: no jump on every key.
+    val suggestions = remember(shown, query.isBlank(), hebrew) {
         val r = shown as? Results.Found
-        if (r == null || r.query != query.trim()) emptyList()
+        if (r == null || query.isBlank()) emptyList()
         else (
             r.people.take(2).map { p -> Suggestion(p.name, actorTag, { onPerson(p) }) } +
                 r.titles.map { t -> Suggestion(t.displayName(hebrew), t.year?.toString(), { onOpen(t) }) } +
@@ -163,61 +173,75 @@ fun SearchScreen(
     var opened by remember { mutableStateOf(!grow) }
     LaunchedEffect(Unit) { opened = true }
     val fieldWidth by animateDpAsState(if (opened) 900.dp else 56.dp, label = "field")
+    val showSuggestions = nearField && suggestions.isNotEmpty()
+
+    LaunchedEffect(shown) {
+        val r = shown as? Results.Found ?: return@LaunchedEffect
+        if (toResults && !r.empty) {
+            toResults = false
+            delay(50) // let the results lay out first
+            runCatching { firstResult.requestFocus() }
+        }
+    }
 
     Column(Modifier.fillMaxSize().padding(start = 88.dp, end = 48.dp, top = 48.dp)) {
         Box(Modifier.fillMaxWidth(), contentAlignment = if (grow) Alignment.TopEnd else Alignment.TopStart) {
-            BasicTextField(
-                value = query,
-                onValueChange = { query = it },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.headlineMedium.copy(color = WtvColors.TextPrimary),
-                cursorBrush = SolidColor(WtvColors.TextPrimary),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                // The keyboard's Search key moves on to the suggestions.
-                keyboardActions = KeyboardActions(onSearch = { runCatching { firstBelow.requestFocus() } }),
-                modifier = Modifier
-                    .width(fieldWidth)
-                    .focusRequester(field)
-                    // A text field keeps Down for its cursor; on a TV Down means "to what is below".
-                    .onPreviewKeyEvent {
-                        if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionDown) {
-                            runCatching { firstBelow.requestFocus() }.getOrDefault(false)
-                        } else {
-                            false
+            Column(Modifier.onFocusChanged { nearField = it.hasFocus }) {
+                BasicTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.headlineMedium.copy(color = WtvColors.TextPrimary),
+                    cursorBrush = SolidColor(WtvColors.TextPrimary),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    // The keyboard's Search key moves on to the results, now or when they arrive.
+                    keyboardActions = KeyboardActions(onSearch = {
+                        if (runCatching { firstResult.requestFocus() }.isFailure) toResults = true
+                    }),
+                    modifier = Modifier
+                        .width(fieldWidth)
+                        .focusRequester(field)
+                        // A text field keeps Down for its cursor; on a TV Down means "to what is below".
+                        .onPreviewKeyEvent {
+                            if (it.type == KeyEventType.KeyDown && it.key == Key.DirectionDown) {
+                                runCatching { (if (showSuggestions) firstSuggestion else firstResult).requestFocus() }.isSuccess
+                            } else {
+                                false
+                            }
                         }
-                    }
-                    .onFocusChanged { fieldFocused = it.isFocused }
-                    .background(WtvColors.Surface, RoundedCornerShape(8.dp))
-                    .border(BorderStroke(2.dp, if (fieldFocused) WtvColors.Focus else WtvColors.Surface), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                decorationBox = { inner ->
-                    Box {
-                        if (query.isEmpty() && opened) {
-                            Text(stringResource(scope.hint), style = MaterialTheme.typography.headlineMedium, color = WtvColors.TextMuted, maxLines = 1)
+                        .onFocusChanged { fieldFocused = it.isFocused }
+                        .background(WtvColors.Surface, RoundedCornerShape(8.dp))
+                        .border(BorderStroke(2.dp, if (fieldFocused) WtvColors.Focus else WtvColors.Surface), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    decorationBox = { inner ->
+                        Box {
+                            if (query.isEmpty() && opened) {
+                                Text(stringResource(scope.hint), style = MaterialTheme.typography.headlineMedium, color = WtvColors.TextMuted, maxLines = 1)
+                            }
+                            inner()
                         }
-                        inner()
-                    }
-                },
-            )
-        }
-        if (suggestions.isNotEmpty()) {
-            Spacer(Modifier.height(8.dp))
-            Column(Modifier.width(640.dp)) {
-                suggestions.forEachIndexed { i, s ->
-                    Button(
-                        onClick = s.pick,
-                        modifier = Modifier.fillMaxWidth().then(if (i == 0) Modifier.focusRequester(firstBelow) else Modifier),
-                        shape = ButtonDefaults.shape(RoundedCornerShape(6.dp)),
-                        colors = ButtonDefaults.colors(
-                            containerColor = WtvColors.Background,
-                            contentColor = WtvColors.TextSecondary,
-                            focusedContainerColor = WtvColors.TextPrimary,
-                            focusedContentColor = WtvColors.Background,
-                        ),
-                    ) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(s.text, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                            if (s.tag != null) Text(s.tag, style = MaterialTheme.typography.labelMedium)
+                    },
+                )
+                if (showSuggestions) {
+                    Spacer(Modifier.height(8.dp))
+                    Column(Modifier.width(fieldWidth)) {
+                        suggestions.forEachIndexed { i, s ->
+                            Button(
+                                onClick = s.pick,
+                                modifier = Modifier.fillMaxWidth().then(if (i == 0) Modifier.focusRequester(firstSuggestion) else Modifier),
+                                shape = ButtonDefaults.shape(RoundedCornerShape(6.dp)),
+                                colors = ButtonDefaults.colors(
+                                    containerColor = WtvColors.Background,
+                                    contentColor = WtvColors.TextSecondary,
+                                    focusedContainerColor = WtvColors.TextPrimary,
+                                    focusedContentColor = WtvColors.Background,
+                                ),
+                            ) {
+                                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(s.text, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                                    if (s.tag != null) Text(s.tag, style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
                         }
                     }
                 }
@@ -230,7 +254,7 @@ fun SearchScreen(
             is Results.Failed -> Note(stringResource(R.string.load_failed, r.message))
             is Results.Found ->
                 if (r.empty) Note(stringResource(R.string.no_results, r.query))
-                else Found(r, hebrew, focusFirst = suggestions.isEmpty(), firstBelow, onOpen, onPerson, onWatch)
+                else Found(r, hebrew, field, firstResult, onOpen, onPerson, onWatch)
         }
     }
 }
@@ -240,14 +264,16 @@ fun SearchScreen(
 private fun Found(
     r: Results.Found,
     hebrew: Boolean,
-    focusFirst: Boolean,
-    firstBelow: FocusRequester,
+    field: FocusRequester,
+    firstResult: FocusRequester,
     onOpen: (Title) -> Unit,
     onPerson: (CastMember) -> Unit,
     onWatch: (List<Channel>, Int) -> Unit,
 ) {
-    // Down from the field lands on the first suggestion, or on the first result when there are none.
-    fun first(i: Int) = if (focusFirst && i == 0) Modifier.focusRequester(firstBelow) else Modifier
+    // The first result takes the Search key; the top row goes back Up to the field.
+    fun first(i: Int, topRow: Boolean) =
+        (if (i == 0) Modifier.focusRequester(firstResult) else Modifier)
+            .then(if (topRow) Modifier.focusProperties { up = field } else Modifier)
     if (r.channels.isNotEmpty()) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(5),
@@ -256,7 +282,7 @@ private fun Found(
             contentPadding = PaddingValues(top = 6.dp, bottom = 48.dp),
         ) {
             itemsIndexed(r.channels, key = { _, c -> c.id }) { i, c ->
-                ChannelCard(logo = c.logo, name = c.name, number = c.num, favorite = false, onClick = { onWatch(r.channels, i) }, onLongClick = {}, modifier = first(i))
+                ChannelCard(logo = c.logo, name = c.name, number = c.num, favorite = false, onClick = { onWatch(r.channels, i) }, onLongClick = {}, modifier = first(i, i < 5))
             }
         }
         return
@@ -265,7 +291,7 @@ private fun Found(
         if (r.people.isNotEmpty()) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp), contentPadding = PaddingValues(top = 6.dp, bottom = 12.dp)) {
                 items(r.people, key = { it.personId }) { p ->
-                    PersonCard(imageUrl = p.photo, name = p.name, onClick = { onPerson(p) }, label = p.name, modifier = first(r.people.indexOf(p)))
+                    PersonCard(imageUrl = p.photo, name = p.name, onClick = { onPerson(p) }, label = p.name, modifier = first(r.people.indexOf(p), topRow = true))
                 }
             }
         }
@@ -281,7 +307,7 @@ private fun Found(
                     title = t.displayName(hebrew),
                     onClick = { onOpen(t) },
                     onLongClick = LocalTitleMenu.current.let { menu -> { menu(t) } },
-                    modifier = if (r.people.isEmpty()) first(i) else Modifier,
+                    modifier = if (r.people.isEmpty()) first(i, i < 6) else Modifier,
                 )
             }
         }
