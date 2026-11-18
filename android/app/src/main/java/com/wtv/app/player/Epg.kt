@@ -40,16 +40,19 @@ internal fun programmes(json: String): List<Programme> {
         val title = decode(p.optString("title")) ?: return@mapNotNull null
         val start = p.optString("start_timestamp").toLongOrNull() ?: return@mapNotNull null
         val end = p.optString("stop_timestamp").toLongOrNull() ?: return@mapNotNull null
-        Programme(title, decode(p.optString("description")), start, end)
+        Programme(title, decode(p.optString("description")), start, end).takeIf { end > start }
     }.sortedBy { it.start }
 }
 
 private fun decode(s: String?): String? {
     val text = s?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    // The provider pads its base64; unpadded or invalid text was sent plain.
+    if (text.length % 4 != 0) return text
     val bytes = runCatching { Base64.getDecoder().decode(text) }.getOrNull() ?: return text
-    // Valid base64 that is not valid UTF-8 ("News" decodes to bytes) was sent plain.
-    val decoder = Charsets.UTF_8.newDecoder()
-    return runCatching { decoder.decode(java.nio.ByteBuffer.wrap(bytes)).toString().trim() }.getOrNull()?.takeIf { it.isNotEmpty() } ?: text
+    // Text that decodes to bytes that are not readable UTF-8 ("News"), or to control
+    // characters ("AAAA"), was sent plain too.
+    val decoded = runCatching { Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString().trim() }.getOrNull()
+    return decoded?.takeIf { it.isNotEmpty() && it.none(Char::isISOControl) } ?: text
 }
 
 /** What is on at `now` (Unix seconds), and what follows it. */

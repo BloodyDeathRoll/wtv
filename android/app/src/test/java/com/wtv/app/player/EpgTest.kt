@@ -44,4 +44,20 @@ class EpgTest {
         assertEquals(null to c, nowAndNext(list, 350))
         assertEquals(null to null, nowAndNext(list, 600))
     }
+
+    @Test fun `plain titles that look like base64 are kept, and empty programmes dropped`() {
+        val json = JSONObject().put(
+            "epg_listings",
+            JSONArray()
+                .put(listing("AAAA", 100, 200)) // decodes to control characters
+                .put(listing("abc", 200, 300)) // unpadded
+                .put(listing(b64("x"), 300, 300)), // no length
+        ).toString()
+        assertEquals(listOf("AAAA", "abc"), programmes(json).map { it.title })
+    }
+
+    @Test fun `the server address gets https when it has no scheme, and loses a trailing slash`() {
+        assertEquals("https://tv.example:8080", serverBase(ProviderLogin("tv.example:8080/", "u", "p")))
+        assertEquals("http://tv.example", serverBase(ProviderLogin(" http://tv.example ", "u", "p")))
+    }
 }

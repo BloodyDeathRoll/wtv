@@ -1,5 +1,6 @@
 package com.wtv.app.player
 
+import android.util.Log
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
@@ -21,6 +22,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -79,6 +81,9 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
     var buffering by remember { mutableStateOf(false) }
     // The channel's guide, read again each time the banner shows: what is on changes.
     var guide by remember { mutableStateOf(emptyList<Programme>()) }
+    var guideFor by remember { mutableStateOf<Long?>(null) }
+    // The banner's clock: ticks while the banner is up (on radio it stays), so the line and bar move on.
+    var now by remember { mutableLongStateOf(System.currentTimeMillis() / 1000) }
     val http = (context.applicationContext as WtvApplication).http
 
     val player = remember {
@@ -99,10 +104,23 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
             banner = true
         }
     }
-    LaunchedEffect(channel.id) { guide = emptyList() }
     LaunchedEffect(channel.id, bannerAt) {
+        if (guideFor != channel.id) {
+            guide = emptyList()
+            guideFor = channel.id
+        }
         // A nicety: without a guide the banner shows the channel only.
-        runCatching { shortEpg(http, login, channel.extId) }.onSuccess { guide = it }
+        runCatching { shortEpg(http, login, channel.extId) }
+            .onSuccess { guide = it }
+            .onFailure { Log.d("WtvGuide", "No guide for channel ${channel.extId}: ${it.message}") }
+    }
+    LaunchedEffect(banner) {
+        while (banner) {
+            now = System.currentTimeMillis() / 1000
+            // The programme on air ended: read the guide again for the one after.
+            if (guide.isNotEmpty() && nowAndNext(guide, now).first == null) bannerAt++
+            delay(CLOCK_TICK_MS)
+        }
     }
     LaunchedEffect(channel.id, bannerAt) {
         banner = true
@@ -181,13 +199,13 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
             },
             modifier = Modifier.fillMaxSize(),
         )
-        if (banner || error != null) Banner(channel, error, nowAndNext(guide, System.currentTimeMillis() / 1000))
+        if (banner || error != null) Banner(channel, error, nowAndNext(guide, now), now)
     }
 }
 
 /** The channel strip along the bottom: number, logo, name, and the error if the channel failed. */
 @Composable
-private fun BoxScope.Banner(channel: Channel, error: String?, onAir: Pair<Programme?, Programme?>) {
+private fun BoxScope.Banner(channel: Channel, error: String?, onAir: Pair<Programme?, Programme?>, now: Long) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -208,16 +226,14 @@ private fun BoxScope.Banner(channel: Channel, error: String?, onAir: Pair<Progra
                 if (error != null) {
                     Text(stringResource(R.string.live_failed) + " ($error)", style = MaterialTheme.typography.bodyMedium, color = WtvColors.TextSecondary)
                 }
-                val (now, next) = onAir
-                if (now != null) {
-                    Text(
-                        "${clock(now.start)}–${clock(now.end)}   ${now.title}",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = WtvColors.TextPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    val elapsed = ((System.currentTimeMillis() / 1000 - now.start).toFloat() / (now.end - now.start)).coerceIn(0f, 1f)
+                val (onNow, next) = onAir
+                if (onNow != null) {
+                    // Times and title apart: in one line, a Hebrew title turns the line right-to-left and swaps the times.
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Text("${clock(onNow.start)}–${clock(onNow.end)}", style = MaterialTheme.typography.titleMedium, color = WtvColors.TextPrimary)
+                        Text(onNow.title, style = MaterialTheme.typography.titleMedium, color = WtvColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    val elapsed = ((now - onNow.start).toFloat() / (onNow.end - onNow.start)).coerceIn(0f, 1f)
                     Box(Modifier.padding(vertical = 6.dp).width(420.dp).height(3.dp).background(WtvColors.Surface)) {
                         Box(Modifier.fillMaxWidth(elapsed).height(3.dp).background(WtvColors.Accent))
                     }
@@ -242,5 +258,6 @@ private fun clock(unixSeconds: Long): String =
 
 private val CLOCK = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
 private const val BANNER_MS = 4_000L
+private const val CLOCK_TICK_MS = 30_000L
 private const val STALL_MS = 20_000L
 private const val STALLED = "TIMEOUT"
