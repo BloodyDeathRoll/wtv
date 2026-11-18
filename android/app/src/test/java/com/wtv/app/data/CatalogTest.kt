@@ -58,6 +58,8 @@ class CatalogTest {
         assertEquals("Pilot", e.displayName(hebrew = true))
         assertEquals("EN", e.synopsis(hebrew = false))
         assertEquals("PROVIDER", e.synopsis(hebrew = true))
+        val onlyHebrew = episode(JSONObject().put("id", 7).put("ext_id", 2).put("season", 1).put("episode", 5).put("overview_he", "HE"))
+        assertEquals("HE", onlyHebrew.synopsis(hebrew = false))
         assertEquals("https://image.tmdb.org/t/p/w300/s.jpg", e.image)
         assertNull(episode(JSONObject().put("id", 6).put("ext_id", 1).put("season", 1).put("episode", 4)).displayName(hebrew = false))
     }
