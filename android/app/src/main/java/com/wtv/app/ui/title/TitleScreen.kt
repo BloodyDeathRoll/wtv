@@ -90,7 +90,8 @@ fun TitleScreen(
     play: FocusRequester,
     progressVersion: Int,
     onPlay: (Copy, Int) -> Unit,
-    onPlayEpisode: (Episode, Int) -> Unit,
+    /** The episode, the second to start at, and the series' episodes in order (for the next one). */
+    onPlayEpisode: (Episode, Int, List<Episode>) -> Unit,
     onPerson: (CastMember) -> Unit,
 ) {
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
@@ -148,7 +149,7 @@ fun TitleScreen(
     LaunchedEffect(episodes, progress, episodePending) {
         if (episodes != null && progress != null && episodePending) {
             episodePending = false
-            next?.let { onPlayEpisode(it.episode, it.startSecs) }
+            next?.let { onPlayEpisode(it.episode, it.startSecs, allEpisodes) }
         }
     }
     // What the Play button says: Resume, "Play S1 E4" for the next episode, or Play.
@@ -201,7 +202,7 @@ fun TitleScreen(
                                     when {
                                         title.kind != Kind.Series -> if (extras.loaded && progress != null) play(movieStart) else playPending = -1
                                         episodes == null || progress == null -> episodePending = true
-                                        else -> next?.let { onPlayEpisode(it.episode, it.startSecs) }
+                                        else -> next?.let { onPlayEpisode(it.episode, it.startSecs, allEpisodes) }
                                     }
                                 },
                                 modifier = Modifier.focusRequester(play),
@@ -212,7 +213,7 @@ fun TitleScreen(
                                     Icons.Outlined.Replay,
                                     stringResource(R.string.start_over),
                                     onClick = {
-                                        if (title.kind == Kind.Series) next?.let { onPlayEpisode(it.episode, 0) }
+                                        if (title.kind == Kind.Series) next?.let { onPlayEpisode(it.episode, 0, allEpisodes) }
                                         else if (extras.loaded) play(0) else playPending = 0
                                     },
                                 )
@@ -261,7 +262,7 @@ fun TitleScreen(
                                                     title = e.displayName(hebrew) ?: stringResource(R.string.episode_number, e.number),
                                                     label = stringResource(R.string.episode_number, e.number),
                                                     progress = saved?.fraction,
-                                                    onClick = { onPlayEpisode(e, saved?.resumeSecs ?: 0) },
+                                                    onClick = { onPlayEpisode(e, saved?.resumeSecs ?: 0, allEpisodes) },
                                                     onFocused = { episode = e },
                                                 )
                                             }
