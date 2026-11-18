@@ -175,10 +175,14 @@ fun SearchScreen(
     val fieldWidth by animateDpAsState(if (opened) 900.dp else 56.dp, label = "field")
     val showSuggestions = nearField && suggestions.isNotEmpty()
 
+    // The Search key waits for this query's results: then it moves to them, or gives up when there are none.
     LaunchedEffect(shown) {
+        if (!toResults) return@LaunchedEffect
+        if (shown is Results.Failed) toResults = false
         val r = shown as? Results.Found ?: return@LaunchedEffect
-        if (toResults && !r.empty) {
-            toResults = false
+        if (r.query != query.trim()) return@LaunchedEffect
+        toResults = false
+        if (!r.empty) {
             delay(50) // let the results lay out first
             runCatching { firstResult.requestFocus() }
         }
@@ -189,14 +193,19 @@ fun SearchScreen(
             Column(Modifier.onFocusChanged { nearField = it.hasFocus }) {
                 BasicTextField(
                     value = query,
-                    onValueChange = { query = it },
+                    onValueChange = {
+                        query = it
+                        toResults = false
+                    },
                     singleLine = true,
                     textStyle = MaterialTheme.typography.headlineMedium.copy(color = WtvColors.TextPrimary),
                     cursorBrush = SolidColor(WtvColors.TextPrimary),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     // The keyboard's Search key moves on to the results, now or when they arrive.
                     keyboardActions = KeyboardActions(onSearch = {
-                        if (runCatching { firstResult.requestFocus() }.isFailure) toResults = true
+                        // Results for an earlier query may still be on screen: wait for this one's.
+                        val current = (shown as? Results.Found)?.query == query.trim()
+                        if (!current || runCatching { firstResult.requestFocus() }.isFailure) toResults = true
                     }),
                     modifier = Modifier
                         .width(fieldWidth)
