@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -79,7 +81,8 @@ fun Backdrop(imageUrl: String?, modifier: Modifier = Modifier) {
             // once it has loaded; the old one goes when the fade ends.
             var shown by remember { mutableStateOf(imageUrl) }
             var previous by remember { mutableStateOf<String?>(null) }
-            var loaded by remember { mutableStateOf<String?>(null) }
+            // URLs whose image is composed and has loaded (or failed); one going from old to new keeps its entry.
+            val loaded = remember { mutableStateListOf<String>() }
             val fade = remember { Animatable(1f) }
             LaunchedEffect(imageUrl) {
                 if (imageUrl == shown) return@LaunchedEffect
@@ -88,8 +91,8 @@ fun Backdrop(imageUrl: String?, modifier: Modifier = Modifier) {
                 shown = imageUrl
                 fade.snapTo(0f)
             }
-            LaunchedEffect(shown, loaded) {
-                if (fade.value < 1f && (shown == null || loaded == shown)) {
+            LaunchedEffect(shown, shown in loaded) {
+                if (fade.value < 1f && (shown == null || shown in loaded)) {
                     fade.animateTo(1f, tween(FadeMillis))
                     previous = null
                 }
@@ -97,7 +100,8 @@ fun Backdrop(imageUrl: String?, modifier: Modifier = Modifier) {
             // One call site, so an image keeps its composition (and painter) as it goes from new to old.
             for (url in listOfNotNull(previous, shown).distinct()) {
                 key(url) {
-                    BackdropImage(url, onLoaded = { loaded = url }) {
+                    DisposableEffect(Unit) { onDispose { loaded.remove(url) } }
+                    BackdropImage(url, onLoaded = { if (url !in loaded) loaded.add(url) }) {
                         when {
                             url == shown && url != previous -> fade.value
                             shown == null -> 1f - fade.value // fading out to nothing
