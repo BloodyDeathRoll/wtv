@@ -55,6 +55,9 @@ jobs:
       - run: npm ci
       - run: npm run type-check
       - run: npm test
+      # The edge functions run on Deno: check them, and the shared WTW copy they import, with Deno.
+      - name: Check edge functions
+        run: docker run --rm -v "$GITHUB_WORKSPACE":/app -w /app denoland/deno:2.1.4 deno check supabase/functions/rank/index.ts
 
   android:
     runs-on: ubuntu-latest

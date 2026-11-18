@@ -1,6 +1,7 @@
 /**
  * Copies what WTW knows about the provider's titles into WTV (P1-5): WTW's
- * title id and taste vector, matched by TMDB id. Reads WTW's catalog with its
+ * title id and taste vector, matched by TMDB id, and what the ranking reads
+ * besides (P4-3): the crew and the public ratings. Reads WTW's catalog with its
  * public key; nothing is written to WTW.
  *
  * Run: node --env-file=<env file> src/wtw-match.ts
@@ -15,6 +16,23 @@ interface WtwTitle {
   /** pgvector text, e.g. "[0.1,-0.2,...]". */
   taste_vec: string | null
   taste_version: number | null
+  crew: unknown
+  tmdb_rating: number | null
+  omdb_rating: number | null
+}
+
+interface Person {
+  tmdb_person_id: string
+  name: string
+}
+
+/** WTW's crew snapshot, trimmed to what its ranking reads (crew affinity and lineage boost). */
+export interface Crew {
+  directors: Person[]
+  writers: Person[]
+  cinematographers: Person[]
+  /** The first 3 in WTW's order: crew affinity reads only those. */
+  cast: (Person & { order: number })[]
 }
 
 interface OurTitle {
@@ -26,6 +44,9 @@ interface OurTitle {
   wtw_title_id: number | null
   wtw_taste_vec: number[] | null
   wtw_taste_version: number | null
+  wtw_crew: Crew | null
+  wtw_tmdb_rating: number | null
+  wtw_omdb_rating: number | null
 }
 
 export interface Coverage {
@@ -76,11 +97,37 @@ export function parseVector(v: string | null): number[] | null {
   }
 }
 
+/** WTW's crew snapshot trimmed (see Crew); null when it is not one. Key order is fixed, so equal crews compare equal. */
+export function trimCrew(crew: unknown): Crew | null {
+  if (crew === null || typeof crew !== 'object') return null
+  const c = crew as Record<string, unknown>
+  const valid = (list: unknown): Record<string, unknown>[] =>
+    Array.isArray(list) ? list.filter(p => p && typeof p === 'object' && (p as Person).tmdb_person_id != null) : []
+  const person = (p: Record<string, unknown>): Person => ({ tmdb_person_id: String(p.tmdb_person_id), name: String(p.name ?? '') })
+  // `order` is read from each entry itself, after the entries without an id are dropped.
+  const cast = valid(c.cast).slice(0, 3).map((p, i) => ({ ...person(p), order: Number(p.order ?? i) }))
+  return {
+    directors: valid(c.directors).map(person),
+    writers: valid(c.writers).map(person),
+    cinematographers: valid(c.cinematographers).map(person),
+    cast,
+  }
+}
+
+/** Same JSON value, whatever the key order (jsonb comes back with its own order). */
+export function sameJson(a: unknown, b: unknown): boolean {
+  const canon = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(canon)
+      : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, canon((v as Record<string, unknown>)[k])]))
+        : v
+  return JSON.stringify(canon(a)) === JSON.stringify(canon(b))
+}
+
 export async function matchWtw(wtv: Db, wtw: Db, providerName: string): Promise<WtwReport> {
   const [provider] = await wtv.select<{ id: number }>('providers', `name=eq.${encodeURIComponent(providerName)}&select=id`)
   if (!provider) throw new Error(`Unknown provider ${providerName}: run the sync first`)
 
-  const wtwTitles = await wtw.selectAll<WtwTitle>('titles', 'id,tmdb_id,type,taste_vec,taste_version')
+  const wtwTitles = await wtw.selectAll<WtwTitle>('titles', 'id,tmdb_id,type,taste_vec,taste_version,crew,tmdb_rating,omdb_rating')
   // Row level security or a wrong key answers with no rows, not an error.
   if (wtwTitles.length === 0) throw new Error('WTW returned no titles: nothing is cleared')
 
@@ -100,7 +147,7 @@ export async function matchWtw(wtv: Db, wtw: Db, providerName: string): Promise<
   // that went away must not leave a stale match behind).
   const ours = await wtv.selectAll<OurTitle>(
     'titles',
-    'id,kind,ext_id,name,tmdb_id,wtw_title_id,wtw_taste_vec,wtw_taste_version',
+    'id,kind,ext_id,name,tmdb_id,wtw_title_id,wtw_taste_vec,wtw_taste_version,wtw_crew,wtw_tmdb_rating,wtw_omdb_rating',
     `provider_id=eq.${provider.id}&or=(tmdb_id.not.is.null,wtw_title_id.not.is.null)`,
   )
   const empty = (): Coverage => ({ withTmdbId: 0, inWtw: 0, scored: 0 })
@@ -129,6 +176,9 @@ export async function matchWtw(wtv: Db, wtw: Db, providerName: string): Promise<
       wtw_title_id: match?.id ?? null,
       wtw_taste_vec: vec,
       wtw_taste_version: vec ? match?.taste_version ?? null : null,
+      wtw_crew: match ? trimCrew(match.crew) : null,
+      wtw_tmdb_rating: match?.tmdb_rating ?? null,
+      wtw_omdb_rating: match?.omdb_rating ?? null,
     }
     if (t.tmdb_id !== null) {
       const coverage = report[t.kind]
@@ -144,7 +194,10 @@ export async function matchWtw(wtv: Db, wtw: Db, providerName: string): Promise<
     const same =
       t.wtw_title_id === next.wtw_title_id &&
       t.wtw_taste_version === next.wtw_taste_version &&
-      sameVector(t.wtw_taste_vec, next.wtw_taste_vec)
+      sameVector(t.wtw_taste_vec, next.wtw_taste_vec) &&
+      sameJson(t.wtw_crew, next.wtw_crew) &&
+      t.wtw_tmdb_rating === next.wtw_tmdb_rating &&
+      t.wtw_omdb_rating === next.wtw_omdb_rating
     if (!same) rows.push({ provider_id: provider.id, kind: t.kind, ext_id: t.ext_id, name: t.name, ...next })
   }
   const tooMany = (lost: number, before: number) => before > 0 && lost > before * MAX_CLEARED_SHARE
