@@ -138,6 +138,9 @@ class CatalogTest {
         assertEquals("PROVIDER", onlyProvider.synopsis(hebrew = true))
         val onlyEnglish = title(row("overview_en" to "EN"))
         assertEquals("EN", onlyEnglish.synopsis(hebrew = true))
+        // The database drops the provider's plot when TMDB has a Hebrew overview.
+        val onlyHebrew = title(row("overview_he" to "HE"))
+        assertEquals("HE", onlyHebrew.synopsis(hebrew = false))
     }
 
     @Test fun `images use the TMDB backdrop first and provider images after`() {
