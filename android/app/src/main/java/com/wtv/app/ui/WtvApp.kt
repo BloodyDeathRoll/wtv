@@ -469,7 +469,7 @@ private fun ExitDialog(onYes: () -> Unit, onNo: () -> Unit) {
             }
         }
     }
-    LaunchedEffect(Unit) { yes.requestFocus() }
+    LaunchedEffect(Unit) { runCatching { yes.requestFocus() } }
 }
 
 /** Stands in for a page that is not built yet. Opaque; focusable, so Down from the tabs lands somewhere; brightens when focused. */
