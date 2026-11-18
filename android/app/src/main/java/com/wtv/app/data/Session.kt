@@ -59,8 +59,21 @@ class Session(
         auth("token?grant_type=id_token", body())
     }
 
-    /** Forgets the session; WTV starts again as a new anonymous user. */
-    suspend fun signOut() = lock.withLock { prefs.edit().clear().apply() }
+    /** Ends the session on the server (best effort) and forgets it; WTV starts again as a new anonymous user. */
+    suspend fun signOut() = lock.withLock {
+        prefs.getString(ACCESS, null)?.let { token ->
+            withContext(Dispatchers.IO) {
+                val request = Request.Builder()
+                    .url("$url/auth/v1/logout")
+                    .header("apikey", key)
+                    .header("Authorization", "Bearer $token")
+                    .post(ByteArray(0).toRequestBody(JSON))
+                    .build()
+                runCatching { http.newCall(request).execute().close() }
+            }
+        }
+        prefs.edit().clear().apply()
+    }
 
     /**
      * The server refused `rejected`: forget it, so the next call refreshes. A
@@ -149,7 +162,7 @@ internal fun isFresh(expiresAtSeconds: Long, nowSeconds: Long): Boolean = nowSec
 /** A build without the database settings (local.properties) fails with a clear message, not a crash. */
 internal fun requireConfigured(url: String, key: String) {
     if (url.isBlank() || key.isBlank()) {
-        throw ApiException("This build has no database settings (SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, WTW_SUPABASE_URL, WTW_SUPABASE_ANON_KEY in local.properties)")
+        throw ApiException("This build has no database settings for $url (SUPABASE_* or WTW_SUPABASE_* in local.properties)")
     }
 }
 

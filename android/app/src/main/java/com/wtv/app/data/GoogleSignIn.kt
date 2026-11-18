@@ -41,17 +41,24 @@ class GoogleSignIn(private val http: OkHttpClient) {
     /** Waits until the user approves on the phone and returns the ID token. Throws when declined or expired. */
     suspend fun awaitIdToken(code: Code): String {
         var interval = code.intervalSeconds
+        var offline = 0
         while (System.currentTimeMillis() < code.expiresAtMillis) {
             delay(interval * 1000)
-            val (status, json) = post(
-                "token",
-                FormBody.Builder()
-                    .add("client_id", BuildConfig.GOOGLE_TV_CLIENT_ID)
-                    .add("client_secret", BuildConfig.GOOGLE_TV_CLIENT_SECRET)
-                    .add("device_code", code.deviceCode)
-                    .add("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
-                    .build(),
-            )
+            // The user may take minutes on the phone: a short network drop must not end the sign-in.
+            val (status, json) = try {
+                post(
+                    "token",
+                    FormBody.Builder()
+                        .add("client_id", BuildConfig.GOOGLE_TV_CLIENT_ID)
+                        .add("client_secret", BuildConfig.GOOGLE_TV_CLIENT_SECRET)
+                        .add("device_code", code.deviceCode)
+                        .add("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
+                        .build(),
+                ).also { offline = 0 }
+            } catch (e: ApiException) {
+                if (++offline >= 6) throw e
+                continue
+            }
             when (val result = pollResult(status, json)) {
                 is Poll.Token -> return result.idToken
                 Poll.Pending -> Unit

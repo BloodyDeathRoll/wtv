@@ -13,14 +13,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,7 +66,9 @@ import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.components.Sideways
 import com.wtv.app.ui.theme.WtvColors
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Settings: the app language, the Google account, Live TV (radio switch,
@@ -260,9 +262,13 @@ private fun AccountSection() {
                                 val started = app.google.start()
                                 code = started
                                 val idToken = app.google.awaitIdToken(started)
-                                // WTV first: if it fails, nothing has changed on this device.
-                                app.session.signInWithGoogle(idToken, link = true)
-                                app.wtw.signInWithGoogle(idToken, link = false)
+                                // Cancel stops the wait only: once approved, both sign-ins run to the end.
+                                // WTV first: if it fails, nothing has changed on this device. If WTW
+                                // then fails, signing in again finishes it (WTV is already the account).
+                                withContext(NonCancellable) {
+                                    app.session.signInWithGoogle(idToken, link = true)
+                                    app.wtw.signInWithGoogle(idToken, link = false)
+                                }
                                 (context as? Activity)?.recreate()
                             } catch (e: ApiException) {
                                 error = e.message
