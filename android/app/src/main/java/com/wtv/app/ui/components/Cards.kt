@@ -3,6 +3,7 @@ package com.wtv.app.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -167,6 +168,8 @@ fun ChannelCard(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The programme on now, under the name; null while unknown or without a guide. */
+    onNow: String? = null,
 ) {
     Card(
         onClick = onClick,
@@ -187,16 +190,14 @@ fun ChannelCard(
                     contentDescription = name,
                     contentScale = ContentScale.Fit,
                     onError = { failed = true },
-                    modifier = Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 30.dp),
+                    modifier = Modifier.fillMaxSize().padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = if (onNow != null) 46.dp else 30.dp),
                 )
-                Text(
-                    name,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = WtvColors.TextSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 8.dp, vertical = 6.dp),
-                )
+                Column(Modifier.align(Alignment.BottomCenter).padding(horizontal = 8.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(name, style = MaterialTheme.typography.labelMedium, color = WtvColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (onNow != null) {
+                        Text(onNow, style = MaterialTheme.typography.labelSmall, color = WtvColors.Accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
             } else {
                 Text(
                     name,
@@ -207,6 +208,16 @@ fun ChannelCard(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.align(Alignment.Center).padding(12.dp),
                 )
+                if (onNow != null) {
+                    Text(
+                        onNow,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = WtvColors.Accent,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 8.dp, vertical = 6.dp),
+                    )
+                }
             }
             if (number != null) {
                 Text(

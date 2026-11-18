@@ -52,10 +52,13 @@ import com.wtv.app.data.Channel
 import com.wtv.app.data.LiveCategory
 import com.wtv.app.data.LiveFilters
 import com.wtv.app.data.liveGroups
+import com.wtv.app.player.OnNow
+import com.wtv.app.player.ProviderLogin
 import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.components.ignoresOpeningPress
 import com.wtv.app.ui.components.ChannelCard
 import com.wtv.app.ui.theme.WtvColors
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private sealed interface Load {
@@ -75,7 +78,10 @@ private sealed interface Load {
 @Composable
 fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Channel>, Int) -> Unit) {
     val context = LocalContext.current
-    val catalog = (context.applicationContext as WtvApplication).catalog
+    val app = context.applicationContext as WtvApplication
+    val catalog = app.catalog
+    // For what is on now on each card; without a login the cards show the channel only.
+    val providerLogin = remember { ProviderLogin.load(context)?.takeIf { it.isComplete } }
     val hebrew = isHebrew()
     val scope = rememberCoroutineScope()
     var attempt by remember { mutableIntStateOf(0) }
@@ -177,7 +183,19 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
             contentPadding = PaddingValues(top = 6.dp, bottom = 48.dp),
         ) {
             itemsIndexed(shown.channels, key = { _, c -> c.id }) { i, c ->
+                // Asked for each card as it comes on screen; the answer is kept until the programme ends.
+                // A card left on screen moves on when its programme ends.
+                val onNow by produceState(OnNow.cached(c.extId, nowSecs()).second, c.extId) {
+                    val login = providerLogin ?: return@produceState
+                    while (true) {
+                        val p = OnNow.fetch(app.http, login, c.extId, nowSecs())
+                        value = p
+                        // No guide, or a failed call: OnNow's own wait decides when asking again is worth it.
+                        delay(((p?.end ?: (nowSecs() + 60)) - nowSecs()).coerceAtLeast(5) * 1000)
+                    }
+                }
                 ChannelCard(
+                    onNow = onNow?.title?.takeIf { it.isNotBlank() },
                     logo = c.logo,
                     name = c.name,
                     number = c.num,
@@ -269,6 +287,8 @@ private fun ChannelMenu(
 }
 
 private const val COLUMNS = 5
+
+private fun nowSecs() = System.currentTimeMillis() / 1000
 
 /** Loading, empty or error message; with `onRetry`, a Retry button takes the focus. */
 @Composable
