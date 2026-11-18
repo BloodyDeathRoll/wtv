@@ -98,6 +98,7 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
         Message(
             if (state is Load.Failed) stringResource(R.string.load_failed, state.message) else stringResource(R.string.loading),
             firstFocus,
+            up,
             onRetry = if (state is Load.Failed) ({ attempt++ }) else null,
         )
         return
@@ -106,7 +107,7 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
     val favoritesLabel = stringResource(R.string.live_favorites)
     val groups = remember(state, favorites, filters, hebrew) { liveGroups(state.channels, state.categories, favorites, favoritesLabel, hebrew, filters) }
     if (groups.isEmpty()) {
-        Message(stringResource(R.string.nothing_here), firstFocus)
+        Message(stringResource(R.string.nothing_here), firstFocus, up)
         return
     }
     // The shown group, by label: it survives a favourites change that adds or drops the Favourites group.
@@ -270,14 +271,16 @@ private const val COLUMNS = 5
 
 /** Loading, empty or error message; with `onRetry`, a Retry button takes the focus. */
 @Composable
-private fun Message(text: String, focus: FocusRequester, onRetry: (() -> Unit)? = null) {
-    val box = if (onRetry == null) Modifier.focusRequester(focus).focusable() else Modifier
+private fun Message(text: String, focus: FocusRequester, up: FocusRequester, onRetry: (() -> Unit)? = null) {
+    // Up goes to the selected tab, not whichever tab sits above the middle (that would switch the section).
+    val toTab = Modifier.focusRequester(focus).focusProperties { this.up = up }
+    val box = if (onRetry == null) toTab.focusable() else Modifier
     Box(Modifier.fillMaxSize().then(box), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(text, style = MaterialTheme.typography.titleMedium, color = WtvColors.TextMuted)
             if (onRetry != null) {
                 Spacer(Modifier.height(16.dp))
-                Button(onClick = onRetry, modifier = Modifier.focusRequester(focus)) { Text(stringResource(R.string.retry)) }
+                Button(onClick = onRetry, modifier = toTab) { Text(stringResource(R.string.retry)) }
             }
         }
     }
