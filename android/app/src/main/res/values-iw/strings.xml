@@ -115,4 +115,9 @@
     <string name="setting_about">אודות</string>
     <string name="about_tmdb">מוצר זה משתמש ב-API של TMDB אך אינו מאושר או מוסמך על ידי TMDB.</string>
     <string name="about_version">גרסה %1$s</string>
+    <string name="edit">עריכה</string>
+    <string name="sign_out_wtw">ניתוק WTW</string>
+    <string name="exit_question">לצאת מהאפליקציה?</string>
+    <string name="yes">כן</string>
+    <string name="no">לא</string>
 </resources>
