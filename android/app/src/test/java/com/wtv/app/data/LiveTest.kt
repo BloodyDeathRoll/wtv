@@ -40,4 +40,26 @@ class LiveTest {
     @Test fun `the favourite body names the channel and the flag only`() {
         assertEquals("""{"channel_id":5,"favorite":true}""", favoriteBody(5, true))
     }
+
+    @Test fun `hidden channels and groups and radio are left out, but a favourite in a hidden group stays`() {
+        val radioChannel = Channel(9, 1009, "Radio 9", 9, null, 0, true, listOf(20))
+        val channels = listOf(ch(1, 1), ch(2, 1), ch(3, 30), radioChannel)
+        val filters = LiveFilters(hiddenChannels = setOf(2), hiddenGroups = setOf(30), showRadio = false)
+        val groups = liveGroups(channels, listOf(israel, sport, radio), setOf(3, 2, 9), "Favourites", hebrew = false, filters = filters)
+        assertEquals(listOf("Favourites", "Israel"), groups.map { it.label })
+        assertEquals(listOf(3L), groups[0].channels.map { it.id })
+        assertEquals(listOf(1L), groups[1].channels.map { it.id })
+    }
+
+    @Test fun `the hide bodies name one flag each`() {
+        // Key order in JSON is not fixed: compare the fields.
+        val hide = JSONObject(hiddenBody(5, true))
+        assertEquals(setOf("channel_id", "hidden"), hide.keys().asSequence().toSet())
+        assertEquals(5, hide.getInt("channel_id"))
+        assertEquals(true, hide.getBoolean("hidden"))
+        val group = JSONObject(groupBody(20, false))
+        assertEquals(setOf("category_id", "hidden"), group.keys().asSequence().toSet())
+        assertEquals(20, group.getInt("category_id"))
+        assertEquals(false, group.getBoolean("hidden"))
+    }
 }

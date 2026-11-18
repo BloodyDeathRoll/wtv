@@ -233,7 +233,24 @@ class Catalog(private val api: Api) {
         api.get("channel_prefs?select=channel_id&favorite=is.true").objects().mapTo(HashSet()) { it.getLong("channel_id") }
 
     suspend fun setFavorite(channelId: Long, favorite: Boolean) =
-        api.post("channel_prefs?on_conflict=user_id,channel_id", favoriteBody(channelId, favorite), prefer = "resolution=merge-duplicates,return=minimal")
+        api.post("channel_prefs?on_conflict=user_id,channel_id", favoriteBody(channelId, favorite), prefer = UPSERT)
+
+    /** What the user hid on the Live TV page. */
+    suspend fun liveFilters(): LiveFilters = coroutineScope {
+        val channels = async { api.get("channel_prefs?select=channel_id&hidden=is.true").objects().mapTo(HashSet()) { it.getLong("channel_id") } }
+        val groups = async { api.get("live_group_prefs?select=category_id&hidden=is.true").objects().mapTo(HashSet()) { it.getInt("category_id") } }
+        val radio = async { api.get("user_settings?select=show_radio").objects().firstOrNull()?.optBoolean("show_radio", true) ?: true }
+        LiveFilters(channels.await(), groups.await(), radio.await())
+    }
+
+    suspend fun setChannelHidden(channelId: Long, hidden: Boolean) =
+        api.post("channel_prefs?on_conflict=user_id,channel_id", hiddenBody(channelId, hidden), prefer = UPSERT)
+
+    suspend fun setGroupHidden(categoryId: Int, hidden: Boolean) =
+        api.post("live_group_prefs?on_conflict=user_id,category_id", groupBody(categoryId, hidden), prefer = UPSERT)
+
+    suspend fun setShowRadio(show: Boolean) =
+        api.post("user_settings?on_conflict=user_id", JSONObject().put("show_radio", show).toString(), prefer = UPSERT)
 
     /** One row per provider category, newest first; empty categories left out. */
     suspend fun rows(kind: Kind, perRow: Int = 10): List<Pair<Category, List<Title>>> = coroutineScope {
@@ -399,3 +416,5 @@ internal fun JSONArray.objects(): List<JSONObject> = List(length()) { getJSONObj
 
 /** The string at `key`, or null for a missing, null or blank value. */
 internal fun JSONObject.text(key: String): String? = if (isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
+
+private const val UPSERT = "resolution=merge-duplicates,return=minimal"

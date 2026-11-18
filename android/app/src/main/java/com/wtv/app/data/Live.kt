@@ -37,15 +37,37 @@ internal fun channel(o: JSONObject): Channel {
     )
 }
 
+/** What the user hid on the Live TV page: single channels, whole groups, and all radio channels when `showRadio` is off. */
+data class LiveFilters(val hiddenChannels: Set<Long> = emptySet(), val hiddenGroups: Set<Int> = emptySet(), val showRadio: Boolean = true)
+
 /**
  * The page's groups: Favourites first when there are any, then each category
- * in the provider's order. Channels keep the given order; empty groups are left out.
+ * in the provider's order, without what `filters` hides. A favourite in a
+ * hidden group still shows under Favourites. Channels keep the given order;
+ * empty groups are left out.
  */
-fun liveGroups(channels: List<Channel>, categories: List<LiveCategory>, favorites: Set<Long>, favoritesLabel: String, hebrew: Boolean): List<LiveGroup> {
-    val favorite = LiveGroup(null, favoritesLabel, channels.filter { it.id in favorites })
-    val byCategory = categories.map { c -> LiveGroup(c, c.label(hebrew), channels.filter { c.id in it.categoryIds }) }
+fun liveGroups(
+    channels: List<Channel>,
+    categories: List<LiveCategory>,
+    favorites: Set<Long>,
+    favoritesLabel: String,
+    hebrew: Boolean,
+    filters: LiveFilters = LiveFilters(),
+): List<LiveGroup> {
+    val shown = channels.filter { it.id !in filters.hiddenChannels && (filters.showRadio || !it.isRadio) }
+    val favorite = LiveGroup(null, favoritesLabel, shown.filter { it.id in favorites })
+    val byCategory = categories.filter { it.id !in filters.hiddenGroups }
+        .map { c -> LiveGroup(c, c.label(hebrew), shown.filter { c.id in it.categoryIds }) }
     return (listOf(favorite) + byCategory).filter { it.channels.isNotEmpty() }
 }
+
+/** The JSON body that hides or shows a channel; the favourite flag is left as it is. */
+internal fun hiddenBody(channelId: Long, hidden: Boolean): String =
+    JSONObject().put("channel_id", channelId).put("hidden", hidden).toString()
+
+/** The JSON body that hides or shows a live group. */
+internal fun groupBody(categoryId: Int, hidden: Boolean): String =
+    JSONObject().put("category_id", categoryId).put("hidden", hidden).toString()
 
 /** The JSON body that sets a channel's favourite flag. The user is the database's: the signed-in one. */
 internal fun favoriteBody(channelId: Long, favorite: Boolean): String =

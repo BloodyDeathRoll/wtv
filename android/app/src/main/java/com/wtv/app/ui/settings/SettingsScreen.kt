@@ -6,20 +6,25 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,12 +53,19 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.wtv.app.AppLanguage
 import com.wtv.app.R
+import com.wtv.app.WtvApplication
+import com.wtv.app.data.Channel
+import com.wtv.app.data.LiveCategory
+import com.wtv.app.data.LiveFilters
 import com.wtv.app.player.ProviderLogin
+import com.wtv.app.ui.browse.isHebrew
+import com.wtv.app.ui.components.Sideways
 import com.wtv.app.ui.theme.WtvColors
+import kotlinx.coroutines.launch
 
 /**
- * Settings: the app language and the provider login. The account and hidden
- * channels come with P6-1. `providerFirst` opens the page on the login (Play
+ * Settings: the app language, Live TV (radio switch, hidden channels and
+ * groups) and the provider login. The account comes with P6-1. `providerFirst` opens the page on the login (Play
  * sends the user here when there is none).
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -93,9 +105,88 @@ fun SettingsScreen(firstFocus: FocusRequester, providerFirst: Boolean = false) {
                 }
             }
         }
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(32.dp))
+        LiveSection()
+        Spacer(Modifier.height(32.dp))
         ProviderSection(focus = if (providerFirst) firstFocus else null)
     }
+}
+
+/** The radio switch, and what is hidden on the Live TV page; selecting a hidden item shows it again. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun LiveSection() {
+    val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
+    val hebrew = isHebrew()
+    val scope = rememberCoroutineScope()
+    var filters by remember { mutableStateOf<LiveFilters?>(null) }
+    var channels by remember { mutableStateOf(emptyList<Channel>()) }
+    var categories by remember { mutableStateOf(emptyList<LiveCategory>()) }
+    LaunchedEffect(Unit) {
+        // Names for the hidden items are a nicety; the switch needs only the filters.
+        runCatching { catalog.liveFilters() }.onSuccess { filters = it }
+        runCatching { channels = catalog.channels(); categories = catalog.liveCategories() }
+    }
+    // A chip that goes takes the focus with it: it moves first to a neighbour, or the radio switch.
+    val radio = remember { FocusRequester() }
+    val chips = remember { mutableMapOf<String, FocusRequester>() }
+    // Saved at once, put back if the save fails.
+    fun change(to: LiveFilters, save: suspend () -> Unit) {
+        val before = filters
+        filters = to
+        scope.launch { runCatching { save() }.onFailure { filters = before } }
+    }
+
+    Text(stringResource(R.string.setting_live), style = MaterialTheme.typography.titleMedium, color = WtvColors.TextPrimary)
+    Spacer(Modifier.height(12.dp))
+    val f = filters ?: return
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.setting_radio), style = MaterialTheme.typography.bodyLarge, color = WtvColors.TextSecondary, modifier = Modifier.width(140.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            for (on in listOf(true, false)) {
+                FilterChip(
+                    selected = f.showRadio == on,
+                    onClick = { if (f.showRadio != on) change(f.copy(showRadio = on)) { catalog.setShowRadio(on) } },
+                    modifier = if (on) Modifier.focusRequester(radio) else Modifier,
+                ) { Text(stringResource(if (on) R.string.setting_on else R.string.setting_off)) }
+            }
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.setting_hidden), style = MaterialTheme.typography.bodyLarge, color = WtvColors.TextSecondary, modifier = Modifier.width(140.dp))
+        val groups = categories.filter { it.id in f.hiddenGroups }
+        val hiddenChannels = channels.filter { it.id in f.hiddenChannels }
+        val keys = groups.map { "g${it.id}" } + hiddenChannels.map { "c${it.id}" }
+        fun leave(key: String) {
+            val i = keys.indexOf(key)
+            val next = keys.getOrNull(i + 1) ?: keys.getOrNull(i - 1)
+            if (next == null || runCatching { chips.getValue(next).requestFocus() }.isFailure) runCatching { radio.requestFocus() }
+        }
+        if (groups.isEmpty() && hiddenChannels.isEmpty()) {
+            Text(stringResource(R.string.setting_hidden_none), style = MaterialTheme.typography.bodyMedium, color = WtvColors.TextMuted)
+        } else {
+            Sideways {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(end = 48.dp)) {
+                    items(groups, key = { "g${it.id}" }) { c ->
+                        val key = "g${c.id}"
+                        FilterChip(selected = false, modifier = Modifier.focusRequester(chips.getOrPut(key) { FocusRequester() }), onClick = {
+                            leave(key)
+                            change(f.copy(hiddenGroups = f.hiddenGroups - c.id)) { catalog.setGroupHidden(c.id, false) }
+                        }) { Text(c.label(hebrew)) }
+                    }
+                    items(hiddenChannels, key = { "c${it.id}" }) { c ->
+                        val key = "c${c.id}"
+                        FilterChip(selected = false, modifier = Modifier.focusRequester(chips.getOrPut(key) { FocusRequester() }), onClick = {
+                            leave(key)
+                            change(f.copy(hiddenChannels = f.hiddenChannels - c.id)) { catalog.setChannelHidden(c.id, false) }
+                        }) { Text(c.name) }
+                    }
+                }
+            }
+        }
+    }
+    Text(stringResource(R.string.setting_hidden_hint), style = MaterialTheme.typography.bodySmall, color = WtvColors.TextMuted, modifier = Modifier.padding(start = 140.dp, top = 4.dp))
 }
 
 /** Server, user name and password of the provider, saved encrypted on this device. */
