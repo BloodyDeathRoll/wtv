@@ -89,3 +89,15 @@ fun streamUrl(login: ProviderLogin, kind: StreamKind, extId: Long, containerExt:
 /** The server as saved, without a trailing slash; https when it names no scheme. */
 internal fun serverBase(login: ProviderLogin): String =
     login.server.trim().trimEnd('/').let { if (Regex("^https?://", RegexOption.IGNORE_CASE).containsMatchIn(it)) it else "https://$it" }
+
+/**
+ * A catch-up address for a past programme: `<server>/timeshift/<user>/<password>/<minutes>/<YYYY-MM-DD:HH-MM>/<id>.ts`.
+ * The start is the provider's own text (its server's time), so no time zone is guessed. Null without it.
+ */
+fun timeshiftUrl(login: ProviderLogin, streamId: Long, programme: Programme): String? {
+    val m = Regex("""^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})""").find(programme.providerStart ?: return null) ?: return null
+    val (day, hour, minute) = m.destructured
+    val minutes = ((programme.end - programme.start + 59) / 60).coerceAtLeast(1)
+    fun seg(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+    return "${serverBase(login)}/timeshift/${seg(login.user.trim())}/${seg(login.password)}/$minutes/$day:$hour-$minute/$streamId.ts"
+}

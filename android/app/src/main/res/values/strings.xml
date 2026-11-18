@@ -90,4 +90,8 @@
     <string name="setting_hidden_none">Nothing hidden</string>
     <string name="setting_hidden_hint">Select one to show it again</string>
     <string name="live_next">Next  %1$s  %2$s</string>
+    <string name="live_earlier">Earlier programmes</string>
+    <string name="live_earlier_hint">◀  Earlier programmes</string>
+    <string name="live_catchup">Catch-up · Back returns to live</string>
+    <string name="live_archive_failed">Earlier programmes could not be loaded</string>
 </resources>
