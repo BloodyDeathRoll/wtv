@@ -116,19 +116,30 @@ fun BrowseScreen(
     val recentSeries = stringResource(R.string.row_recent_series)
     val forYou = HomeLabels(stringResource(R.string.row_top_picks), stringResource(R.string.row_new_for_you), stringResource(R.string.row_watch_again))
     var attempt by remember { mutableIntStateOf(0) }
+    // A reload for a new ranking keeps the rows on screen until the new ones are in.
+    var quiet by remember { mutableStateOf(false) }
     val load by produceState<Load>(Load.Loading, source, hebrew, attempt) {
-        value = Load.Loading
-        value = runCatching {
+        val keep = quiet && value is Load.Ready
+        quiet = false
+        if (!keep) value = Load.Loading
+        val next = runCatching {
             val rows = loadRows(catalog, source, hebrew, recentMovies, recentSeries, forYou)
             // Genre names are a nicety: without them the meta line just has no genres.
             Load.Ready(rows, runCatching { catalog.genres() }.getOrDefault(emptyMap()))
         }.getOrElse { Load.Failed(it.message ?: it.toString()) }
+        // A failed quiet reload leaves what is shown.
+        if (!(keep && next is Load.Failed)) value = next
     }
 
     // Home shows its rows at once; with WTW connected it then has the server rank,
     // and reloads only when a new ranking was made (the server keeps one for an hour).
     if (source == BrowseSource.Home) {
-        LaunchedEffect(Unit) { if (refreshRanking(app)) attempt++ }
+        LaunchedEffect(Unit) {
+            if (refreshRanking(app)) {
+                quiet = true
+                attempt++
+            }
+        }
     }
 
     when (val state = load) {

@@ -124,6 +124,7 @@ fun GridScreen(category: Category, firstFocus: FocusRequester, onOpen: (Title) -
                 )
                 Spacer(Modifier.padding(start = 24.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Recommended (null) is not a Sort: it is a server function, not a REST order.
                     (listOf<Sort?>(null) + Sort.entries).forEachIndexed { i, s ->
                         FilterChip(
                             selected = s == sort,
