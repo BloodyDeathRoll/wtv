@@ -112,6 +112,7 @@
     <string name="live_archive_failed">Earlier programmes could not be loaded</string>
     <string name="live_no_archive">No earlier programmes to play back yet</string>
     <string name="remove_from_watchlist">Remove from watchlist</string>
+    <string name="remove_from_continue">Remove from Continue watching</string>
     <string name="setting_about">About</string>
     <string name="about_tmdb">This product uses the TMDB API but is not endorsed or certified by TMDB.</string>
     <string name="about_version">Version %1$s</string>
