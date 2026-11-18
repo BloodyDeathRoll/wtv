@@ -38,8 +38,26 @@ android {
         buildConfigField("String", "GOOGLE_TV_CLIENT_SECRET", "\"${setting("GOOGLE_TV_CLIENT_SECRET")}\"")
     }
 
+    // The sideload release key lives outside the repo (WTV_KEYSTORE in local.properties).
+    // Without it the release build is unsigned and cannot be installed.
+    val keystore = setting("WTV_KEYSTORE")
+    if (keystore.isNotBlank()) {
+        signingConfigs.create("release") {
+            storeFile = file(keystore)
+            storePassword = setting("WTV_KEYSTORE_PASSWORD")
+            keyAlias = setting("WTV_KEY_ALIAS")
+            keyPassword = setting("WTV_KEYSTORE_PASSWORD")
+        }
+    }
+
     buildTypes {
+        // Debug builds use the same key when it is present, so a test build installs
+        // over the Play or sideloaded app on a TV without uninstalling (and losing its data).
+        debug {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
+        }
         release {
+            signingConfig = signingConfigs.findByName("release")
             // Drops unused code, e.g. most of the Material icon set.
             isMinifyEnabled = true
             isShrinkResources = true
