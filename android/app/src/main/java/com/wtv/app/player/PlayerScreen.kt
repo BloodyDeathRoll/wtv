@@ -1,5 +1,6 @@
 package com.wtv.app.player
 
+import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
@@ -36,6 +37,8 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -55,6 +58,9 @@ import kotlinx.coroutines.delay
  * Starts at `startSecs`. Reports the position (seconds, and the length when
  * known) every [SAVE_EVERY_MS] while playing, on pause, at the end, when the
  * app goes to the background, and, with `final`, when the page closes.
+ *
+ * The controls offer subtitles and, in the settings, the audio track. The
+ * subtitle choice is kept for the next video ([Subtitles]).
  *
  * `next` names the episode that follows, if any. When the episode ends, an
  * Up next card counts down [UP_NEXT_SECS] and then calls `onNext`; OK on it
@@ -84,6 +90,7 @@ fun PlayerScreen(
             .setMediaSourceFactory(DefaultMediaSourceFactory(http))
             .build()
             .apply {
+                trackSelectionParameters = withSubtitles(trackSelectionParameters, Subtitles.load(context))
                 setMediaItem(MediaItem.fromUri(url), startSecs * 1000L)
                 prepare()
                 playWhenReady = true
@@ -122,6 +129,17 @@ fun PlayerScreen(
                 if (isPlaying) started = true else if (player.playbackState == Player.STATE_READY) save(final = false)
             }
 
+            // Only a choice the viewer made is kept, not a file's own default.
+            var chosen = false
+
+            override fun onTrackSelectionParametersChanged(parameters: TrackSelectionParameters) {
+                chosen = true
+            }
+
+            override fun onTracksChanged(tracks: Tracks) {
+                if (chosen) Subtitles.save(context, subtitleChoice(tracks))
+            }
+
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_ENDED) {
                     save(final = false)
@@ -137,6 +155,10 @@ fun PlayerScreen(
         }
     }
 
+    // The view itself must hold the Android focus: the remote's keys show its
+    // controls and move between them. The Compose focus alone does not pass them in.
+    var view by remember { mutableStateOf<PlayerView?>(null) }
+    LaunchedEffect(view) { view?.requestFocus() }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             factory = { ctx ->
@@ -145,6 +167,15 @@ fun PlayerScreen(
                     this.player = player
                     keepScreenOn = true
                     setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS)
+                    setShowSubtitleButton(true)
+                    // Hidden controls take their focused button with them: the view takes the focus back.
+                    setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { if (it != View.VISIBLE) requestFocus() })
+                    // Focus search does not cross the Compose wrapper: the bar and the buttons under it are linked by hand.
+                    findViewById<View>(androidx.media3.ui.R.id.exo_progress)?.nextFocusDownId = androidx.media3.ui.R.id.exo_subtitle
+                    for (id in listOf(androidx.media3.ui.R.id.exo_subtitle, androidx.media3.ui.R.id.exo_settings)) {
+                        findViewById<View>(id)?.nextFocusUpId = androidx.media3.ui.R.id.exo_progress
+                    }
+                    view = this
                 }
             },
             modifier = Modifier.fillMaxSize().focusRequester(firstFocus),
@@ -162,7 +193,7 @@ fun PlayerScreen(
             }
             BackHandler {
                 upNext = false
-                runCatching { firstFocus.requestFocus() }
+                view?.requestFocus() ?: runCatching { firstFocus.requestFocus() }
             }
             Column(
                 Modifier.align(Alignment.BottomEnd).padding(48.dp)
