@@ -12,6 +12,8 @@ val localProperties = Properties().apply {
 fun setting(name: String): String = localProperties.getProperty(name) ?: System.getenv(name) ?: ""
 
 android {
+    // Media3's track classes call android.text.TextUtils; the stub returns defaults instead of throwing.
+    testOptions.unitTests.isReturnDefaultValues = true
     namespace = "com.wtv.app"
     compileSdk = 37
 
