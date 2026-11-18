@@ -72,8 +72,20 @@
     <string name="up_next">הפרק הבא</string>
     <string name="play_next_in">הפעלה עכשיו (%1$d)</string>
     <string name="live_favorites">מועדפים</string>
-    <string name="live_hint">לחיצה ארוכה על OK מוסיפה או מסירה ממועדפים</string>
+    <string name="live_hint">לחיצה ארוכה על OK: מועדפים והסתרה</string>
     <string name="live_favorite_added">נוסף למועדפים</string>
     <string name="live_favorite_removed">הוסר מהמועדפים</string>
     <string name="live_failed">הערוץ לא זמין כרגע</string>
+    <string name="live_hidden">הוסתר. אפשר להחזיר בהגדרות.</string>
+    <string name="live_menu_favorite">הוספה למועדפים</string>
+    <string name="live_menu_unfavorite">הסרה מהמועדפים</string>
+    <string name="live_menu_hide">הסתרת הערוץ</string>
+    <string name="live_menu_hide_group">הסתרת הקבוצה „%1$s”</string>
+    <string name="setting_live">טלוויזיה חיה</string>
+    <string name="setting_radio">ערוצי רדיו</string>
+    <string name="setting_on">מופעל</string>
+    <string name="setting_off">כבוי</string>
+    <string name="setting_hidden">מוסתרים</string>
+    <string name="setting_hidden_none">לא הוסתר דבר</string>
+    <string name="setting_hidden_hint">בחירה מחזירה את הפריט</string>
 </resources>

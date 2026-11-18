@@ -1,6 +1,7 @@
 package com.wtv.app.ui.live
 
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,12 +10,16 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -25,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -34,6 +40,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.FilterChip
@@ -43,6 +50,7 @@ import com.wtv.app.R
 import com.wtv.app.WtvApplication
 import com.wtv.app.data.Channel
 import com.wtv.app.data.LiveCategory
+import com.wtv.app.data.LiveFilters
 import com.wtv.app.data.liveGroups
 import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.components.ChannelCard
@@ -59,7 +67,8 @@ private sealed interface Load {
  * The Live TV page: a chip per group (Favourites, then the provider's
  * categories) over a grid of channel cards. Moving onto a chip shows its
  * group. OK on a card watches the channel, with the group as the channel
- * list; holding OK adds or removes a favourite.
+ * list; holding OK opens a menu: favourite, hide the channel, hide its group.
+ * Hidden things come back in Settings.
  */
 @OptIn(ExperimentalTvMaterial3Api::class) // FilterChip
 @Composable
@@ -73,9 +82,16 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
         value = runCatching { Load.Ready(catalog.channels(), catalog.liveCategories()) }
             .getOrElse { Load.Failed(it.message ?: it.toString()) }
     }
-    // Favourites load on their own: without them the page still works.
+    // Favourites and what is hidden load on their own: without them the page still works.
     var favorites by remember { mutableStateOf(emptySet<Long>()) }
+    var filters by remember { mutableStateOf(LiveFilters()) }
     LaunchedEffect(Unit) { runCatching { catalog.favoriteChannels() }.onSuccess { favorites = it } }
+    LaunchedEffect(Unit) { runCatching { catalog.liveFilters() }.onSuccess { filters = it } }
+    var menu by remember { mutableStateOf<Channel?>(null) }
+    // A hide chosen in the menu, run once the menu has closed (see below).
+    var pendingHide by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var parking by remember { mutableStateOf(false) }
+    val parked = remember { FocusRequester() }
 
     val state = load
     if (state !is Load.Ready) {
@@ -88,7 +104,7 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
     }
 
     val favoritesLabel = stringResource(R.string.live_favorites)
-    val groups = remember(state, favorites, hebrew) { liveGroups(state.channels, state.categories, favorites, favoritesLabel, hebrew) }
+    val groups = remember(state, favorites, filters, hebrew) { liveGroups(state.channels, state.categories, favorites, favoritesLabel, hebrew, filters) }
     if (groups.isEmpty()) {
         Message(stringResource(R.string.nothing_here), firstFocus)
         return
@@ -102,6 +118,23 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
 
     val added = stringResource(R.string.live_favorite_added)
     val removed = stringResource(R.string.live_favorite_removed)
+    val hiddenMessage = stringResource(R.string.live_hidden)
+    fun hideChannel(c: Channel) {
+        filters = filters.copy(hiddenChannels = filters.hiddenChannels + c.id)
+        Toast.makeText(context, hiddenMessage, Toast.LENGTH_LONG).show()
+        scope.launch {
+            runCatching { catalog.setChannelHidden(c.id, true) }
+                .onFailure { filters = filters.copy(hiddenChannels = filters.hiddenChannels - c.id) }
+        }
+    }
+    fun hideGroup(category: LiveCategory) {
+        filters = filters.copy(hiddenGroups = filters.hiddenGroups + category.id)
+        Toast.makeText(context, hiddenMessage, Toast.LENGTH_LONG).show()
+        scope.launch {
+            runCatching { catalog.setGroupHidden(category.id, true) }
+                .onFailure { filters = filters.copy(hiddenGroups = filters.hiddenGroups - category.id) }
+        }
+    }
     fun toggle(c: Channel) {
         val now = c.id !in favorites
         favorites = if (now) favorites + c.id else favorites - c.id
@@ -115,6 +148,7 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
     }
 
     Column(Modifier.fillMaxSize().padding(start = 88.dp, end = 48.dp, top = 96.dp)) {
+        Box(Modifier.size(1.dp).focusRequester(parked).focusProperties { canFocus = parking }.focusable())
         Row(verticalAlignment = Alignment.CenterVertically) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 groups.forEach { g ->
@@ -147,12 +181,88 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
                     number = c.num,
                     favorite = c.id in favorites,
                     onClick = { onWatch(shown.channels, i) },
-                    onLongClick = { toggle(c) },
+                    onLongClick = { menu = c },
                     // Up from the first row goes to the shown group's chip.
                     modifier = if (i < COLUMNS) Modifier.focusProperties { this.up = chip } else Modifier,
                 )
             }
         }
+    }
+    // Hiding removes the focused card (or its whole group), and Android would then give the
+    // focus to the first focusable item: the Home tab, which switches the section. So the focus
+    // parks on a holder that is focusable only meanwhile, and then goes to the shown group's chip.
+    LaunchedEffect(pendingHide) {
+        val hide = pendingHide ?: return@LaunchedEffect
+        try {
+            withFrameNanos { } // the menu has closed
+            parking = true
+            withFrameNanos { } // the holder can take the focus
+            runCatching { parked.requestFocus() }
+            hide()
+            withFrameNanos { } // the groups are redrawn: `chip` is on the shown group's chip
+            withFrameNanos { }
+            runCatching { chip.requestFocus() }
+        } finally {
+            // Also when cancelled (the last group hidden ends the page): never run twice, never stay parked.
+            parking = false
+            pendingHide = null
+        }
+    }
+
+    menu?.let { c ->
+        ChannelMenu(
+            channel = c,
+            favorite = c.id in favorites,
+            group = shown.category,
+            groupLabel = shown.label,
+            onFavorite = { menu = null; toggle(c) },
+            onHide = { menu = null; pendingHide = { hideChannel(c) } },
+            onHideGroup = {
+                menu = null
+                shown.category?.let { category ->
+                    // Then a neighbour group is shown, and its chip takes the focus.
+                    val i = groups.indexOf(shown)
+                    val next = groups.getOrNull(i + 1) ?: groups.getOrNull(i - 1)
+                    pendingHide = {
+                        next?.let { shownLabel = it.label }
+                        hideGroup(category)
+                    }
+                }
+            },
+            onDismiss = { menu = null },
+        )
+    }
+}
+
+/** Held OK on a channel: favourite, hide it, or hide the group it is shown in (not Favourites). Back closes. */
+@Composable
+private fun ChannelMenu(
+    channel: Channel,
+    favorite: Boolean,
+    group: LiveCategory?,
+    groupLabel: String,
+    onFavorite: () -> Unit,
+    onHide: () -> Unit,
+    onHideGroup: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        val first = remember { FocusRequester() }
+        Column(
+            Modifier.background(WtvColors.Surface, RoundedCornerShape(12.dp)).padding(28.dp).width(420.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(channel.name, style = MaterialTheme.typography.titleLarge, color = WtvColors.TextPrimary)
+            Spacer(Modifier.height(4.dp))
+            Button(onClick = onFavorite, modifier = Modifier.fillMaxWidth().focusRequester(first)) {
+                Text(stringResource(if (favorite) R.string.live_menu_unfavorite else R.string.live_menu_favorite))
+            }
+            Button(onClick = onHide, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.live_menu_hide)) }
+            if (group != null) {
+                Button(onClick = onHideGroup, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.live_menu_hide_group, groupLabel)) }
+            }
+        }
+        LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
     }
 }
 

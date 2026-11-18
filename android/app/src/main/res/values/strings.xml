@@ -73,8 +73,20 @@
     <string name="up_next">Up next</string>
     <string name="play_next_in">Play now (%1$d)</string>
     <string name="live_favorites">Favourites</string>
-    <string name="live_hint">Hold OK to add or remove a favourite</string>
+    <string name="live_hint">Hold OK for favourites and hiding</string>
     <string name="live_favorite_added">Added to favourites</string>
     <string name="live_favorite_removed">Removed from favourites</string>
     <string name="live_failed">This channel is not available right now</string>
+    <string name="live_hidden">Hidden. Bring it back in Settings.</string>
+    <string name="live_menu_favorite">Add to favourites</string>
+    <string name="live_menu_unfavorite">Remove from favourites</string>
+    <string name="live_menu_hide">Hide this channel</string>
+    <string name="live_menu_hide_group">Hide the group “%1$s”</string>
+    <string name="setting_live">Live TV</string>
+    <string name="setting_radio">Radio channels</string>
+    <string name="setting_on">On</string>
+    <string name="setting_off">Off</string>
+    <string name="setting_hidden">Hidden</string>
+    <string name="setting_hidden_none">Nothing hidden</string>
+    <string name="setting_hidden_hint">Select one to show it again</string>
 </resources>
