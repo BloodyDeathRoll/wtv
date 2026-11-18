@@ -57,9 +57,11 @@ fun ImageCard(
     label: String? = null,
     onFocused: () -> Unit = {},
     progress: Float? = null,
+    onLongClick: (() -> Unit)? = null,
 ) {
     Card(
         onClick = onClick,
+        onLongClick = onLongClick,
         modifier = modifier
             .remembersFocus()
             .width(width)
@@ -126,7 +128,8 @@ fun LandscapeCard(
     label: String? = null,
     onFocused: () -> Unit = {},
     progress: Float? = null,
-) = ImageCard(imageUrl, title, onClick, width = 200.dp, aspectRatio = 16f / 9f, modifier, label, onFocused, progress)
+    onLongClick: (() -> Unit)? = null,
+) = ImageCard(imageUrl, title, onClick, width = 200.dp, aspectRatio = 16f / 9f, modifier, label, onFocused, progress, onLongClick)
 
 /** 2:3 card for the full category grid and posters. */
 @Composable
@@ -136,7 +139,8 @@ fun PosterCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     onFocused: () -> Unit = {},
-) = ImageCard(imageUrl, title, onClick, width = 120.dp, aspectRatio = 2f / 3f, modifier, onFocused = onFocused)
+    onLongClick: (() -> Unit)? = null,
+) = ImageCard(imageUrl, title, onClick, width = 120.dp, aspectRatio = 2f / 3f, modifier, onFocused = onFocused, onLongClick = onLongClick)
 
 /** Portrait card for a cast member. */
 @Composable

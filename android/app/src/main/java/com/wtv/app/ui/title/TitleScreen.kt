@@ -67,6 +67,7 @@ import com.wtv.app.data.asCopy
 import com.wtv.app.data.copyLabels
 import com.wtv.app.data.nextEpisode
 import com.wtv.app.ui.browse.isHebrew
+import com.wtv.app.ui.components.LocalTitleMenu
 import com.wtv.app.ui.components.ActionDivider
 import com.wtv.app.ui.components.ActionIcon
 import com.wtv.app.ui.components.Backdrop
@@ -106,6 +107,8 @@ private data class Extras(
 @Composable
 fun TitleScreen(
     title: Title,
+    /** Press Play as soon as the page opens (Play from a card's menu). */
+    autoPlay: Boolean = false,
     play: FocusRequester,
     progressVersion: Int,
     onPlay: (Copy, Int) -> Unit,
@@ -216,6 +219,15 @@ fun TitleScreen(
             stringResource(R.string.play_episode, stringResource(R.string.season_episode, next.episode.season, next.episode.number))
         else -> stringResource(R.string.play)
     }
+    // Play: what is not loaded yet is waited for (the pending flags), then played.
+    fun pressPlay() {
+        when {
+            title.kind != Kind.Series -> if (extras.loaded && progress != null) play(movieStart) else playPending = -1
+            episodes == null || progress == null -> episodePending = true
+            else -> next?.let { onPlayEpisode(it.episode, it.startSecs, allEpisodes) }
+        }
+    }
+    LaunchedEffect(title.id) { if (autoPlay) pressPlay() }
     var episode by remember(title.id) { mutableStateOf<Episode?>(null) }
     // Focus outside the episodes row: the header is the title's again.
     val showsTitle = Modifier.onFocusChanged { if (it.hasFocus) episode = null }
@@ -254,13 +266,7 @@ fun TitleScreen(
                         Row(showsTitle, verticalAlignment = Alignment.CenterVertically) {
                             PlayButton(
                                 playLabel,
-                                onClick = {
-                                    when {
-                                        title.kind != Kind.Series -> if (extras.loaded && progress != null) play(movieStart) else playPending = -1
-                                        episodes == null || progress == null -> episodePending = true
-                                        else -> next?.let { onPlayEpisode(it.episode, it.startSecs, allEpisodes) }
-                                    }
-                                },
+                                onClick = ::pressPlay,
                                 modifier = Modifier.focusRequester(play),
                             )
                             Spacer(Modifier.width(12.dp))
@@ -377,7 +383,7 @@ fun TitleScreen(
                                     ) {
                                         items(extras.alsoLiked, key = { it.id }) { t ->
                                             // The name on the image: the picture alone does not tell titles apart.
-                                            LandscapeCard(imageUrl = t.cardImage, title = t.displayName(hebrew), onClick = { onOpen(t) }, label = t.displayName(hebrew))
+                                            LandscapeCard(imageUrl = t.cardImage, title = t.displayName(hebrew), onClick = { onOpen(t) }, label = t.displayName(hebrew), onLongClick = LocalTitleMenu.current.let { menu -> { menu(t) } })
                                         }
                                     }
                                 }

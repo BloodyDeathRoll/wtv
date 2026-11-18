@@ -66,6 +66,8 @@ import com.wtv.app.player.streamUrl
 import com.wtv.app.ui.browse.BrowseScreen
 import com.wtv.app.ui.browse.BrowseSource
 import com.wtv.app.ui.browse.isHebrew
+import com.wtv.app.ui.components.LocalTitleMenu
+import com.wtv.app.ui.components.TitleMenu
 import com.wtv.app.ui.components.RailItem
 import com.wtv.app.ui.components.SideRail
 import com.wtv.app.ui.grid.GridScreen
@@ -97,7 +99,8 @@ private sealed interface Page {
         override val id get() = "grid:${category.kind}:${category.id}"
     }
 
-    data class TitlePage(val title: Title) : Page {
+    /** `autoPlay`: opened from a card's menu with Play, so Play is pressed once the page is in. */
+    data class TitlePage(val title: Title, val autoPlay: Boolean = false) : Page {
         override val id get() = "title:${title.id}"
     }
 
@@ -289,145 +292,159 @@ fun WtvApp() {
     BackHandler(enabled = !railOpen && stack.isNotEmpty()) { close { stack.removeAt(stack.lastIndex) } }
     BackHandler(enabled = railOpen) { close { railPage = null } }
 
-    Box(Modifier.fillMaxSize()) {
-        Box(Modifier.size(1.dp).focusRequester(parked).focusProperties { canFocus = parking }.focusable())
-        Layer(blocked = railOpen || stack.isNotEmpty(), hidden = stack.isNotEmpty(), memory = baseMemory) {
-            val source = when (section) {
-                Section.Home -> BrowseSource.Home
-                Section.Movies -> BrowseSource.Section(Kind.Movie)
-                Section.Series -> BrowseSource.Section(Kind.Series)
-                Section.LiveTv -> null
-            }
-            Box(Modifier.onFocusChanged { if (it.hasFocus) lastOnTabs = false }) {
-                if (source == null) LiveScreen(firstFocus = page, up = selectedTab, onWatch = ::watch)
-                else BrowseScreen(
-                    source,
-                    firstFocus = page,
-                    up = selectedTab,
-                    progressVersion = progressVersion,
-                    tabsFocused = tabsHaveFocus,
-                    onMore = { open(Page.Grid(it)) },
-                    onOpen = { open(Page.TitlePage(it)) },
-                )
-            }
-            TabRow(
-                selectedTabIndex = section.ordinal,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 88.dp, top = 18.dp)
-                    .onFocusChanged {
-                        tabsHaveFocus = it.hasFocus
-                        if (it.hasFocus) lastOnTabs = true
+    // A card held down opens its menu, over whatever page it is on.
+    var menuFor by remember { mutableStateOf<Title?>(null) }
+    menuFor?.let { t ->
+        TitleMenu(
+            t,
+            onInfo = { menuFor = null; open(Page.TitlePage(t)) },
+            onPlay = { menuFor = null; open(Page.TitlePage(t, autoPlay = true)) },
+            onDismiss = { menuFor = null },
+        )
+    }
+
+    CompositionLocalProvider(LocalTitleMenu provides { menuFor = it }) {
+        Box(Modifier.fillMaxSize()) {
+            Box(Modifier.size(1.dp).focusRequester(parked).focusProperties { canFocus = parking }.focusable())
+            Layer(blocked = railOpen || stack.isNotEmpty(), hidden = stack.isNotEmpty(), memory = baseMemory) {
+                val source = when (section) {
+                    Section.Home -> BrowseSource.Home
+                    Section.Movies -> BrowseSource.Section(Kind.Movie)
+                    Section.Series -> BrowseSource.Section(Kind.Series)
+                    Section.LiveTv -> null
+                }
+                Box(Modifier.onFocusChanged { if (it.hasFocus) lastOnTabs = false }) {
+                    if (source == null) LiveScreen(firstFocus = page, up = selectedTab, onWatch = ::watch)
+                    else BrowseScreen(
+                        source,
+                        firstFocus = page,
+                        up = selectedTab,
+                        progressVersion = progressVersion,
+                        tabsFocused = tabsHaveFocus,
+                        onMore = { open(Page.Grid(it)) },
+                        onOpen = { open(Page.TitlePage(it)) },
+                    )
+                }
+                TabRow(
+                    selectedTabIndex = section.ordinal,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 88.dp, top = 18.dp)
+                        .onFocusChanged {
+                            tabsHaveFocus = it.hasFocus
+                            if (it.hasFocus) lastOnTabs = true
+                        },
+                    indicator = { positions, rowHasFocus ->
+                        positions.getOrNull(section.ordinal)?.let {
+                            TabRowDefaults.PillIndicator(
+                                currentTabPosition = it,
+                                doesTabRowHaveFocus = rowHasFocus,
+                                activeColor = WtvColors.TextPrimary,
+                                inactiveColor = WtvColors.Surface,
+                            )
+                        }
                     },
-                indicator = { positions, rowHasFocus ->
-                    positions.getOrNull(section.ordinal)?.let {
-                        TabRowDefaults.PillIndicator(
-                            currentTabPosition = it,
-                            doesTabRowHaveFocus = rowHasFocus,
-                            activeColor = WtvColors.TextPrimary,
-                            inactiveColor = WtvColors.Surface,
-                        )
+                ) {
+                    Section.entries.forEach { s ->
+                        Tab(
+                            selected = s == section,
+                            onFocus = { section = s },
+                            // Set on each tab: focus moves from the tab, not the row.
+                            modifier = Modifier.focusRequester(tabs.getValue(s)).focusProperties { down = page },
+                            colors = TabDefaults.pillIndicatorTabColors(
+                                contentColor = WtvColors.TextSecondary,
+                                selectedContentColor = WtvColors.TextPrimary,
+                                focusedContentColor = WtvColors.Background,
+                                focusedSelectedContentColor = WtvColors.Background,
+                            ),
+                        ) {
+                            Text(
+                                stringResource(s.label),
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                            )
+                        }
+                    }
+                }
+            }
+            stack.forEachIndexed { i, entry ->
+                // Keyed by the entry, so a page keeps its state while pages open over it.
+                key(entry) {
+                    Layer(blocked = railOpen || i != stack.lastIndex, hidden = i != stack.lastIndex, memory = entry.memory) {
+                        when (val p = entry.page) {
+                            is Page.Grid -> GridScreen(p.category, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
+                            is Page.TitlePage -> TitleScreen(
+                                p.title,
+                                autoPlay = p.autoPlay,
+                                play = entry.first,
+                                progressVersion = progressVersion,
+                                onPlay = { copy, start -> play(StreamKind.Movie, copy.id, null, copy.extId, copy.containerExt, p.title.displayName(hebrew), start) },
+                                onPlayEpisode = { e, start, episodes ->
+                                    val series = p.title.displayName(hebrew)
+                                    play(StreamKind.Episode, p.title.id, e.id, e.extId, e.containerExt, episodeTitle(series, e), start, series, episodes)
+                                },
+                                onPerson = { open(Page.Person(it)) },
+                                onOpen = { open(Page.TitlePage(it)) },
+                                onProgressCleared = { progressVersion++ },
+                            )
+                            is Page.Person -> PersonScreen(p.person, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
+                            Page.Search -> SearchScreen(field = entry.first, onOpen = { open(Page.TitlePage(it)) })
+                            // Read again after a watchlist change (a title removed from its page, say).
+                            Page.Watchlist -> TitlesPage(catalog.watchlistVersion, { catalog.watchlist() }, entry.first, onOpen = { open(Page.TitlePage(it)) }) {
+                                Text(stringResource(R.string.rail_watchlist), style = MaterialTheme.typography.displayMedium, color = WtvColors.TextPrimary)
+                            }
+                            is Page.Settings -> SettingsScreen(firstFocus = entry.first, providerFirst = p.providerFirst)
+                            is Page.Live -> LivePlayerScreen(p.channels, p.index, p.login, firstFocus = entry.first)
+                            is Page.Player -> PlayerScreen(
+                                p.url,
+                                p.title,
+                                startSecs = p.startSecs,
+                                firstFocus = entry.first,
+                                next = p.next?.let { e -> listOfNotNull(seasonEpisode.format(e.season, e.number), e.displayName(hebrew)).joinToString(" · ") },
+                                onNext = { playNext(p) },
+                                onProgress = { position, duration, final -> saveProgress(p, position, duration, final) },
+                                onClose = { close { stack.removeAt(stack.lastIndex) } },
+                            )
+                        }
+                    }
+                }
+            }
+            val railFocus = remember { FocusRequester() }
+            railPage?.let { Placeholder(stringResource(it.label), railFocus) }
+            // Not over the video: the player is the whole screen.
+            if (stack.lastOrNull()?.page.let { it !is Page.Player && it !is Page.Live }) SideRail(
+                onSelect = {
+                    // The tabs' focus flag would go stale under the page.
+                    tabsHaveFocus = false
+                    // Search and Settings are pages like the others: Back returns from them.
+                    when (it) {
+                        RailItem.Search -> {
+                            railPage = null
+                            open(Page.Search)
+                        }
+                        RailItem.Settings -> {
+                            railPage = null
+                            open(Page.Settings())
+                        }
+                        RailItem.Watchlist -> {
+                            railPage = null
+                            open(Page.Watchlist)
+                        }
+                        else -> railPage = it
                     }
                 },
-            ) {
-                Section.entries.forEach { s ->
-                    Tab(
-                        selected = s == section,
-                        onFocus = { section = s },
-                        // Set on each tab: focus moves from the tab, not the row.
-                        modifier = Modifier.focusRequester(tabs.getValue(s)).focusProperties { down = page },
-                        colors = TabDefaults.pillIndicatorTabColors(
-                            contentColor = WtvColors.TextSecondary,
-                            selectedContentColor = WtvColors.TextPrimary,
-                            focusedContentColor = WtvColors.Background,
-                            focusedSelectedContentColor = WtvColors.Background,
-                        ),
-                    ) {
-                        Text(
-                            stringResource(s.label),
-                            style = MaterialTheme.typography.titleSmall,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                        )
+                onLeave = {
+                    val top = stack.lastOrNull()
+                    when {
+                        railOpen -> runCatching { railFocus.requestFocus() }
+                        top != null -> top.memory.restore(fallback = top.first)
+                        lastOnTabs -> runCatching { selectedTab.requestFocus() }
+                        else -> baseMemory.restore(fallback = page)
                     }
-                }
-            }
+                },
+                modifier = Modifier.align(Alignment.CenterStart),
+            )
         }
-        stack.forEachIndexed { i, entry ->
-            // Keyed by the entry, so a page keeps its state while pages open over it.
-            key(entry) {
-                Layer(blocked = railOpen || i != stack.lastIndex, hidden = i != stack.lastIndex, memory = entry.memory) {
-                    when (val p = entry.page) {
-                        is Page.Grid -> GridScreen(p.category, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
-                        is Page.TitlePage -> TitleScreen(
-                            p.title,
-                            play = entry.first,
-                            progressVersion = progressVersion,
-                            onPlay = { copy, start -> play(StreamKind.Movie, copy.id, null, copy.extId, copy.containerExt, p.title.displayName(hebrew), start) },
-                            onPlayEpisode = { e, start, episodes ->
-                                val series = p.title.displayName(hebrew)
-                                play(StreamKind.Episode, p.title.id, e.id, e.extId, e.containerExt, episodeTitle(series, e), start, series, episodes)
-                            },
-                            onPerson = { open(Page.Person(it)) },
-                            onOpen = { open(Page.TitlePage(it)) },
-                            onProgressCleared = { progressVersion++ },
-                        )
-                        is Page.Person -> PersonScreen(p.person, firstFocus = entry.first, onOpen = { open(Page.TitlePage(it)) })
-                        Page.Search -> SearchScreen(field = entry.first, onOpen = { open(Page.TitlePage(it)) })
-                        // Read again after a watchlist change (a title removed from its page, say).
-                        Page.Watchlist -> TitlesPage(catalog.watchlistVersion, { catalog.watchlist() }, entry.first, onOpen = { open(Page.TitlePage(it)) }) {
-                            Text(stringResource(R.string.rail_watchlist), style = MaterialTheme.typography.displayMedium, color = WtvColors.TextPrimary)
-                        }
-                        is Page.Settings -> SettingsScreen(firstFocus = entry.first, providerFirst = p.providerFirst)
-                        is Page.Live -> LivePlayerScreen(p.channels, p.index, p.login, firstFocus = entry.first)
-                        is Page.Player -> PlayerScreen(
-                            p.url,
-                            p.title,
-                            startSecs = p.startSecs,
-                            firstFocus = entry.first,
-                            next = p.next?.let { e -> listOfNotNull(seasonEpisode.format(e.season, e.number), e.displayName(hebrew)).joinToString(" · ") },
-                            onNext = { playNext(p) },
-                            onProgress = { position, duration, final -> saveProgress(p, position, duration, final) },
-                            onClose = { close { stack.removeAt(stack.lastIndex) } },
-                        )
-                    }
-                }
-            }
-        }
-        val railFocus = remember { FocusRequester() }
-        railPage?.let { Placeholder(stringResource(it.label), railFocus) }
-        // Not over the video: the player is the whole screen.
-        if (stack.lastOrNull()?.page.let { it !is Page.Player && it !is Page.Live }) SideRail(
-            onSelect = {
-                // The tabs' focus flag would go stale under the page.
-                tabsHaveFocus = false
-                // Search and Settings are pages like the others: Back returns from them.
-                when (it) {
-                    RailItem.Search -> {
-                        railPage = null
-                        open(Page.Search)
-                    }
-                    RailItem.Settings -> {
-                        railPage = null
-                        open(Page.Settings())
-                    }
-                    RailItem.Watchlist -> {
-                        railPage = null
-                        open(Page.Watchlist)
-                    }
-                    else -> railPage = it
-                }
-            },
-            onLeave = {
-                val top = stack.lastOrNull()
-                when {
-                    railOpen -> runCatching { railFocus.requestFocus() }
-                    top != null -> top.memory.restore(fallback = top.first)
-                    lastOnTabs -> runCatching { selectedTab.requestFocus() }
-                    else -> baseMemory.restore(fallback = page)
-                }
-            },
-            modifier = Modifier.align(Alignment.CenterStart),
-        )
     }
 }
 

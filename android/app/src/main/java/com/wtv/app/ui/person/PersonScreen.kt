@@ -47,6 +47,7 @@ import com.wtv.app.data.CastMember
 import com.wtv.app.data.Title
 import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.components.Backdrop
+import com.wtv.app.ui.components.LocalTitleMenu
 import com.wtv.app.ui.components.PosterCard
 import com.wtv.app.ui.theme.WtvColors
 import kotlinx.coroutines.CancellationException
@@ -152,6 +153,7 @@ fun TitlesPage(
                                     imageUrl = t.posterImage,
                                     title = t.displayName(hebrew),
                                     onClick = { onOpen(t) },
+                                    onLongClick = LocalTitleMenu.current.let { menu -> { menu(t) } },
                                     onFocused = { focused = t },
                                     modifier = if (i == 0) Modifier.focusRequester(firstFocus) else Modifier,
                                 )

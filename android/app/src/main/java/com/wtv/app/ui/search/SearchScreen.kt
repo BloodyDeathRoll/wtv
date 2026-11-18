@@ -49,6 +49,7 @@ import com.wtv.app.R
 import com.wtv.app.WtvApplication
 import com.wtv.app.data.Title
 import com.wtv.app.ui.browse.isHebrew
+import com.wtv.app.ui.components.LocalTitleMenu
 import com.wtv.app.ui.components.PosterCard
 import com.wtv.app.ui.theme.WtvColors
 import kotlinx.coroutines.CancellationException
@@ -178,6 +179,7 @@ fun SearchScreen(field: FocusRequester, onOpen: (Title) -> Unit) {
                             imageUrl = t.posterImage,
                             title = t.displayName(hebrew),
                             onClick = { onOpen(t) },
+                            onLongClick = LocalTitleMenu.current.let { menu -> { menu(t) } },
                             modifier = Modifier
                                 .then(if (i == 0) Modifier.focusRequester(firstResult) else Modifier)
                                 // Up from the first row goes back to the field.

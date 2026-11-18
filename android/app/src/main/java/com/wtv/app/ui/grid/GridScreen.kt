@@ -43,6 +43,7 @@ import com.wtv.app.data.Category
 import com.wtv.app.data.Sort
 import com.wtv.app.data.Title
 import com.wtv.app.ui.browse.isHebrew
+import com.wtv.app.ui.components.LocalTitleMenu
 import com.wtv.app.ui.components.Backdrop
 import com.wtv.app.ui.components.PosterCard
 import com.wtv.app.ui.theme.WtvColors
@@ -158,6 +159,7 @@ fun GridScreen(category: Category, firstFocus: FocusRequester, onOpen: (Title) -
                             imageUrl = t.posterImage,
                             title = t.displayName(hebrew),
                             onClick = { onOpen(t) },
+                            onLongClick = LocalTitleMenu.current.let { menu -> { menu(t) } },
                             onFocused = {
                                 focused = t
                                 if (i >= titles.size - PRELOAD) loadMore()

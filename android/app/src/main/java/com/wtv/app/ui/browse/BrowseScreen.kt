@@ -42,6 +42,7 @@ import com.wtv.app.data.ContinueItem
 import com.wtv.app.data.Genre
 import com.wtv.app.data.Kind
 import com.wtv.app.data.Title
+import com.wtv.app.ui.components.LocalTitleMenu
 import com.wtv.app.ui.components.Backdrop
 import com.wtv.app.ui.components.HeroText
 import com.wtv.app.ui.components.LandscapeCard
@@ -291,6 +292,7 @@ private fun Rows(
                                             label = episode,
                                             progress = watched,
                                             onClick = { onOpen(t) },
+                                            onLongClick = LocalTitleMenu.current.let { menu -> { menu(t) } },
                                             onFocused = { focused = t },
                                             modifier = rowModifier.then(if (rowIndex == 0 && i == 0) Modifier.focusRequester(firstFocus) else Modifier),
                                         )
