@@ -192,3 +192,19 @@ test('a failed sign-in stops the sync before anything is written', async () => {
   await assert.rejects(syncCatalog(xtream, db, 'prov1', now), /not active/)
   assert.deepEqual(calls, [])
 })
+
+test('titles in a skipped category are left out and deleted, with the category', async () => {
+  const turkish = { ...title('series', 11), categoryIds: [73, 1] }
+  const withTurkish = {
+    ...lists,
+    categories: [...lists.categories, { kind: 'series', extId: 73, name: 'סדרות טורקיות', position: 1 }] satisfies Category[],
+    series: [title('series', 10), turkish],
+  }
+  const { db, calls } = fakeDb()
+  const report = await syncCatalog(fakeXtream(withTurkish), db, 'prov1', now)
+  assert.equal(report.series, 1)
+  const seriesRows = calls.filter(c => c.op === 'upsert' && c.table === 'titles')[1]?.rows
+  assert.deepEqual(seriesRows?.map(r => r.ext_id), [10])
+  assert.deepEqual(calls.filter(c => c.op === 'upsert' && c.table === 'categories')[1]?.rows, [])
+  assert.ok(calls.some(c => c.op === 'remove' && c.table === 'titles' && c.filter === 'provider_id=eq.7&kind=eq.series&category_ids=ov.{73}'))
+})

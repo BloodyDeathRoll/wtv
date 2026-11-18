@@ -22,6 +22,14 @@ import { createXtream, type Category, type Channel, type Title, type Xtream } fr
  */
 const MIN_SHARE_TO_TRUST = 0.5
 
+/**
+ * Provider categories left out of WTV, by English name: the user does not
+ * watch them, and Turkish series alone were about a fifth of all episodes.
+ * Their titles are not stored, and titles already stored are deleted (their
+ * episodes and progress go with them).
+ */
+const SKIPPED_CATEGORIES = new Set(['Turkish Series'])
+
 export interface Distrusted {
   list: string
   stored: number
@@ -94,9 +102,13 @@ export async function syncCatalog(xtream: Xtream, db: Db, providerName: string, 
   // Everything is fetched before anything is written: a list that fails
   // leaves the database as it was.
   const kinds = ['movie', 'series', 'live'] as const
-  const categoryLists = await Promise.all(kinds.map(kind => xtream.categories(kind)))
-  const movies = await xtream.movies()
-  const series = await xtream.series()
+  const allCategoryLists = await Promise.all(kinds.map(kind => xtream.categories(kind)))
+  const isSkipped = (c: Category) => SKIPPED_CATEGORIES.has(categoryNames(c.name).en ?? '')
+  const skipped = allCategoryLists.flat().filter(isSkipped)
+  const categoryLists = allCategoryLists.map(list => list.filter(c => !isSkipped(c)))
+  const kept = (t: Title) => !skipped.some(c => c.kind === t.kind && t.categoryIds.includes(c.extId))
+  const movies = (await xtream.movies()).filter(kept)
+  const series = (await xtream.series()).filter(kept)
   const channels = await xtream.channels()
 
   const provider = await db.upsertOne<{ id: number }>('providers', 'name', { name: providerName, kind: 'xtream' })
@@ -135,6 +147,11 @@ export async function syncCatalog(xtream: Xtream, db: Db, providerName: string, 
     if (trusted(`${kind} categories`, stored, list.length) && list.length > 0) {
       await db.remove('categories', `${scope}&ext_id=not.in.(${list.map(c => c.extId).join(',')})`)
     }
+  }
+
+  // Before the lists are written, so the share check compares against what stays.
+  for (const c of skipped) {
+    await db.remove('titles', `${byProvider}&kind=eq.${c.kind}&category_ids=ov.{${c.extId}}`)
   }
 
   await replace('movies', 'titles', 'provider_id,kind,ext_id', `${byProvider}&kind=eq.movie`, movies.map(titleRow(provider.id, seenAt)))
