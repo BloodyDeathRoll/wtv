@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -55,6 +56,8 @@ import androidx.tv.material3.Text
 import com.wtv.app.R
 import com.wtv.app.WtvApplication
 import com.wtv.app.data.Channel
+import com.wtv.app.data.allShown
+import com.wtv.app.data.channelByNumber
 import com.wtv.app.data.LiveCategory
 import com.wtv.app.data.LiveFilters
 import com.wtv.app.data.liveGroups
@@ -84,7 +87,7 @@ private sealed interface Load {
  */
 @OptIn(ExperimentalTvMaterial3Api::class) // FilterChip
 @Composable
-fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Channel>, Int) -> Unit) {
+fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Channel>, Int, List<Channel>) -> Unit) {
     val context = LocalContext.current
     val app = context.applicationContext as WtvApplication
     val catalog = app.catalog
@@ -163,6 +166,14 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
         }
     }
 
+    // A channel number typed on the remote opens that channel, as on a TV box.
+    val all = remember(groups) { allShown(groups) }
+    val numbers = rememberNumberEntry { num ->
+        val found = channelByNumber(num, emptyList(), all) ?: return@rememberNumberEntry false
+        onWatch(found.first, found.second, all)
+        true
+    }
+    Box(Modifier.fillMaxSize().onKeyEvent { numbers.key(it.nativeKeyEvent) }) {
     Column(Modifier.fillMaxSize().padding(start = 88.dp, end = 48.dp, top = 96.dp)) {
         Box(Modifier.size(1.dp).focusRequester(parked).focusProperties { canFocus = parking }.focusable())
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -208,13 +219,15 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
                     name = c.name,
                     number = c.num,
                     favorite = c.id in favorites,
-                    onClick = { onWatch(shown.channels, i) },
+                    onClick = { onWatch(shown.channels, i, all) },
                     onLongClick = { menu = c },
                     // Up from the first row goes to the shown group's chip.
                     modifier = if (i < COLUMNS) Modifier.focusProperties { this.up = chip } else Modifier,
                 )
             }
         }
+    }
+    NumberOverlay(numbers)
     }
     // Hiding removes the focused card (or its whole group), and Android would then give the
     // focus to the first focusable item: the Home tab, which switches the section. So the focus

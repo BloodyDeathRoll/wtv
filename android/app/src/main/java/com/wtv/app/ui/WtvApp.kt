@@ -136,7 +136,7 @@ private sealed interface Page {
     }
 
     /** Live TV, full screen: `channels` is the group it was opened from, for channel up / down. */
-    data class Live(val channels: List<Channel>, val index: Int, val login: ProviderLogin) : Page {
+    data class Live(val channels: List<Channel>, val index: Int, val login: ProviderLogin, val all: List<Channel> = channels) : Page {
         override val id get() = "live"
     }
 
@@ -227,13 +227,14 @@ fun WtvApp() {
             open(Page.Player(streamUrl(login, kind, extId, containerExt), title, titleId, episodeId, startSecs, series, episodes))
         }
     }
-    fun watch(channels: List<Channel>, index: Int) {
+    /** `all`: every channel the user can watch, for a number typed that is not in `channels`. */
+    fun watch(channels: List<Channel>, index: Int, all: List<Channel> = channels) {
         val login = ProviderLogin.load(context)?.takeIf { it.isComplete }
         if (login == null) {
             Toast.makeText(context, noLogin, Toast.LENGTH_LONG).show()
             open(Page.Settings(providerFirst = true))
         } else {
-            open(Page.Live(channels, index, login))
+            open(Page.Live(channels, index, login, all))
         }
     }
     fun episodeTitle(series: String, e: Episode) = "$series · ${seasonEpisode.format(e.season, e.number)}"
@@ -342,7 +343,7 @@ fun WtvApp() {
                     Section.LiveTv -> null
                 }
                 Box(Modifier.onFocusChanged { if (it.hasFocus) lastOnTabs = false }) {
-                    if (source == null) LiveScreen(firstFocus = page, up = selectedTab, onWatch = ::watch)
+                    if (source == null) LiveScreen(firstFocus = page, up = selectedTab, onWatch = { list, i, all -> watch(list, i, all) })
                     else BrowseScreen(
                         source,
                         firstFocus = page,
@@ -440,7 +441,7 @@ fun WtvApp() {
                                 Text(stringResource(R.string.rail_watchlist), style = MaterialTheme.typography.displayMedium, color = WtvColors.TextPrimary)
                             }
                             is Page.Settings -> SettingsScreen(firstFocus = entry.first, providerFirst = p.providerFirst)
-                            is Page.Live -> LivePlayerScreen(p.channels, p.index, p.login, firstFocus = entry.first)
+                            is Page.Live -> LivePlayerScreen(p.channels, p.index, p.login, firstFocus = entry.first, all = p.all)
                             is Page.Player -> PlayerScreen(
                                 p.url,
                                 p.title,

@@ -106,8 +106,8 @@
     <string name="setting_hidden_hint">בחירה מחזירה את הפריט</string>
     <string name="live_next">בהמשך  %1$s  %2$s</string>
     <string name="live_earlier">תוכניות קודמות</string>
-    <string name="live_earlier_hint">▲  תוכניות קודמות    ▼  לוח שידורים    ◀ ▶  ערוצים</string>
-    <string name="live_guide_hint">▼  לוח שידורים    ◀ ▶  ערוצים</string>
+    <string name="live_earlier_hint">▲  תוכניות קודמות    ▼  לוח שידורים    ◀ ▶  ערוצים    OK  רשימת ערוצים</string>
+    <string name="live_guide_hint">▼  לוח שידורים    ◀ ▶  ערוצים    OK  רשימת ערוצים</string>
     <string name="live_guide">בהמשך בערוץ</string>
     <string name="live_guide_failed">לא ניתן לטעון את לוח השידורים</string>
     <string name="live_no_guide">אין לוח שידורים לערוץ הזה</string>
@@ -137,4 +137,6 @@
     <string name="search_hint_movies">חיפוש סרטים ושחקנים</string>
     <string name="search_hint_series">חיפוש סדרות ושחקנים</string>
     <string name="search_hint_live">חיפוש ערוצים</string>
+    <string name="live_no_channel">אין ערוץ %1$d</string>
+    <string name="live_channels">ערוצים</string>
 </resources>
