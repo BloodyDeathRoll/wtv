@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Db, Row } from './db.ts'
 import { fetchDetails, matchSeries, type Pending } from './details.ts'
-import type { Tmdb, TmdbCredit } from './tmdb.ts'
+import type { Tmdb, TmdbCredit, TmdbSeries } from './tmdb.ts'
 import type { Xtream } from './xtream.ts'
 
 /** A TMDB with fixed answers; records which series were looked up. */
@@ -11,13 +11,15 @@ function fakeTmdb(data: {
   seasons?: Record<number, number[]>
   people?: Record<string, number>
   credits?: Record<number, TmdbCredit[]>
+  /** Name, years and seasons of a series, for matching without season ids. */
+  shows?: Record<number, Omit<TmdbSeries, 'id'>>
 }) {
   const looked: number[] = []
   const tmdb: Tmdb = {
     searchSeries: async (name, year) => data.search?.[`${name}|${year ?? ''}`] ?? [],
     series: async id => {
       looked.push(id)
-      return { id, seasons: (data.seasons?.[id] ?? []).map(s => ({ id: s })) }
+      return data.shows?.[id] ? { id, ...data.shows[id] } : { id, seasons: (data.seasons?.[id] ?? []).map(s => ({ id: s })) }
     },
     searchPerson: async name => data.people?.[name] ?? null,
     personSeries: async id => data.credits?.[id] ?? [],
@@ -50,17 +52,57 @@ test('match: falls back to any year, then to the cast, nearest year first', asyn
   assert.deepEqual(byCast.looked, [71])
 })
 
-test('match: dummy season ids are ignored', async () => {
-  const { tmdb, looked } = fakeTmdb({ search: { 'דוקטור X|2026': [11] }, seasons: { 11: [1, 2] } })
+test('match: dummy season ids are ignored; nothing to check gives null without a lookup', async () => {
+  const { tmdb, looked } = fakeTmdb({ search: { 'דוקטור X|2026': [11], 'דוקטור X|': [11] }, seasons: { 11: [1, 2] } })
   assert.equal(await matchSeries(tmdb, doctorX, [1, 2]), null)
+  assert.equal(await matchSeries(tmdb, doctorX, []), null)
   assert.deepEqual(looked, [])
 })
 
-test('match: no season ids or no confirmed hit gives null; a candidate is looked up once', async () => {
+test('match: no confirmed hit gives null; a candidate is looked up once', async () => {
   const { tmdb, looked } = fakeTmdb({ search: { 'דוקטור X|2026': [11], 'דוקטור X|': [11] }, seasons: { 11: [1] } })
-  assert.equal(await matchSeries(tmdb, doctorX, []), null)
   assert.equal(await matchSeries(tmdb, doctorX, [460408]), null)
   assert.deepEqual(looked, [11])
+})
+
+const office = { name: 'המשרד ארה"ב - The Office US', year: 2013, castNames: null }
+const officeShow = (name: string, first: string, last: string, episodes: number[]) => ({
+  name,
+  original_name: name,
+  first_air_date: first,
+  last_air_date: last,
+  seasons: [{ id: 1, season_number: 0, episode_count: 3 }, ...episodes.map((n, i) => ({ id: 100 + i, season_number: i + 1, episode_count: n }))],
+})
+
+test('match without season ids: each name is searched; name, years and seasons must agree', async () => {
+  const { tmdb } = fakeTmdb({
+    search: { 'The Office US|': [8, 9, 2316] },
+    shows: {
+      8: officeShow('The Office', '2001-07-09', '2003-12-27', [6, 6]), // years do not cover 2013
+      9: officeShow('The Officer', '2005-03-24', '2013-05-16', [6, 22]), // another name
+      2316: officeShow('The Office', '2005-03-24', '2013-05-16', [6, 22]),
+    },
+  })
+  assert.equal(await matchSeries(tmdb, office, [1, 2], { 1: 6, 2: 22 }), 2316)
+})
+
+test('match without season ids: a provider season TMDB lacks, or with more episodes, rejects the hit', async () => {
+  const show = { 2316: officeShow('The Office', '2005-03-24', '2013-05-16', [6, 22]) }
+  const { tmdb } = fakeTmdb({ search: { 'The Office US|': [2316] }, shows: show })
+  assert.equal(await matchSeries(tmdb, office, [], { 1: 6, 3: 10 }), null)
+  const more = fakeTmdb({ search: { 'The Office US|': [2316] }, shows: show })
+  assert.equal(await matchSeries(more.tmdb, office, [], { 1: 6, 2: 24 }), null)
+  // One episode more than TMDB lists is allowed (a special, a double episode).
+  const one = fakeTmdb({ search: { 'The Office US|': [2316] }, shows: show })
+  assert.equal(await matchSeries(one.tmdb, office, [], { 1: 6, 2: 23 }), 2316)
+})
+
+test('match without season ids: the Hebrew name can match the original name', async () => {
+  const { tmdb } = fakeTmdb({
+    search: { 'שטיסל|2013': [56017] },
+    shows: { 56017: { ...officeShow('Shtisel', '2013-06-29', '2021-03-25', [12, 12, 9]), original_name: 'שטיסל' } },
+  })
+  assert.equal(await matchSeries(tmdb, { name: 'שטיסל', year: 2013, castNames: null }, [], { 1: 12, 2: 12, 3: 9 }), 56017)
 })
 
 const movie = (ext_id: number): Pending => ({ id: ext_id, kind: 'movie', ext_id, name: `m${ext_id}`, year: 2020, cast_names: null, tmdb_id: null, details_at: null })

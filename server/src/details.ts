@@ -3,8 +3,9 @@
  * provider changed since:
  * - movies: the TMDB id and backdrop the provider gives;
  * - series: the episodes, and a TMDB id found by search. The provider gives no
- *   TMDB id for a series, only for its seasons; a search hit counts only when
- *   one of its seasons has one of those ids.
+ *   TMDB id for a series, only for its seasons (and most often dummies): a
+ *   search hit counts when one of its seasons has one of those ids, or else
+ *   when its name, years and seasons agree with the provider's.
  *
  * Resumable: results are written every chunk, and a run stops at its time budget.
  *
@@ -14,7 +15,7 @@
 import { createDb, type Db, type Row } from './db.ts'
 import { refreshGroupsOrNull } from './groups.ts'
 import { pool } from './pool.ts'
-import { createTmdb, type Tmdb } from './tmdb.ts'
+import { createTmdb, type Tmdb, type TmdbSeries } from './tmdb.ts'
 import { createXtream, type Xtream } from './xtream.ts'
 
 export interface Pending {
@@ -62,35 +63,58 @@ const MIN_SEASON_ID = 1000
 const MAX_FAILURES_IN_A_ROW = 25
 
 /**
- * The TMDB id of a series, or null. Tries title search for the year, then for
- * any year, then the TV credits of the first cast members (nearest year first).
- * A candidate counts only when one of its seasons has a provider season id.
+ * The TMDB id of a series, or null. Searches each name the provider gives
+ * ("המשרד ארה"ב - The Office US" is two), for the year, then for any year.
+ *
+ * With real provider season ids, a hit counts when one of its seasons has one,
+ * and the TV credits of the first cast members are searched too (nearest year
+ * first). Without them (most series), a hit counts only when its name or
+ * original name is one of the provider's names, its air years cover the
+ * provider's year, and every provider season exists with at least as many
+ * episodes (one fewer allowed).
  */
 export async function matchSeries(
   tmdb: Tmdb,
   title: { name: string; year: number | null; castNames: string | null },
   seasonIds: number[],
+  episodeCounts: Record<number, number> = {},
 ): Promise<number | null> {
   // Any one real season id is enough: the provider may list seasons TMDB lacks (and back).
   const want = new Set(seasonIds.filter(id => id >= MIN_SEASON_ID))
-  if (want.size === 0) return null
+  const counts = Object.entries(episodeCounts).map(([season, n]) => [Number(season), n] as const).filter(([season]) => season > 0)
+  if (want.size === 0 && counts.length === 0) return null
+  const names = seriesNames(title.name)
+  const keys = new Set(names.map(nameKey))
   const tried = new Set<number>()
+
+  function agrees(s: TmdbSeries): boolean {
+    if (![s.name, s.original_name].some(n => n !== undefined && keys.has(nameKey(n)))) return false
+    const first = Number(s.first_air_date?.slice(0, 4)) || null
+    const last = Number(s.last_air_date?.slice(0, 4)) || first
+    if (title.year !== null && first !== null && (title.year < first - 1 || title.year > (last ?? first) + 1)) return false
+    const episodes = new Map(s.seasons.map(x => [x.season_number, x.episode_count ?? 0]))
+    return counts.every(([season, n]) => (episodes.get(season) ?? -1) >= n - 1)
+  }
 
   async function confirm(candidates: number[]): Promise<number | null> {
     for (const id of candidates) {
       if (tried.has(id)) continue
       tried.add(id)
-      if ((await tmdb.series(id)).seasons.some(s => want.has(s.id))) return id
+      const s = await tmdb.series(id)
+      if (want.size > 0 ? s.seasons.some(x => want.has(x.id)) : agrees(s)) return id
     }
     return null
   }
 
-  const found =
-    (title.year !== null ? await confirm(await tmdb.searchSeries(title.name, title.year, TITLE_HITS)) : null) ??
-    (await confirm(await tmdb.searchSeries(title.name, null, TITLE_HITS)))
-  if (found !== null) return found
+  for (const name of names) {
+    const found =
+      (title.year !== null ? await confirm(await tmdb.searchSeries(name, title.year, TITLE_HITS)) : null) ??
+      (await confirm(await tmdb.searchSeries(name, null, TITLE_HITS)))
+    if (found !== null) return found
+  }
+  if (want.size === 0) return null
 
-  const cast = (title.castNames ?? '').split(',').map(n => n.trim()).filter(Boolean).slice(0, CAST_TRIED)
+  const cast = (title.castNames ?? '').split(/,|\s{2,}/).map(n => n.trim()).filter(Boolean).slice(0, CAST_TRIED)
   for (const name of cast) {
     const personId = await tmdb.searchPerson(name)
     if (personId === null) continue
@@ -100,6 +124,27 @@ export async function matchSeries(
     if (match !== null) return match
   }
   return null
+}
+
+/** Episodes per season number. */
+function episodeCounts(episodes: { season: number }[]): Record<number, number> {
+  const out: Record<number, number> = {}
+  for (const e of episodes) out[e.season] = (out[e.season] ?? 0) + 1
+  return out
+}
+
+/** The names in a provider series name: the whole, then each side of " - " ("Shtisel - שטיסל"). */
+export function seriesNames(name: string): string[] {
+  return [...new Set([name, ...name.split(/\s+-\s+/)].map(n => n.trim()).filter(Boolean))]
+}
+
+/** A name for comparing: lower case, letters and digits only, no "the", no country tag ("US", "ארה"ב"). */
+export function nameKey(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\((?:us|uk|il)\)|\b(?:us|uk)\b|ארה"ב/g, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+    .replace(/^the/, '')
 }
 
 const describe = (err: unknown) => (err instanceof Error ? err.message : String(err))
@@ -161,7 +206,7 @@ export async function fetchDetails(
         // row's `details_at` is cleared by hand.
         const tmdbId = t.details_at !== null
           ? t.tmdb_id
-          : await matchSeries(tmdb, { name: t.name, year: t.year, castNames: t.cast_names }, Object.values(info.tmdbSeasonIds))
+          : await matchSeries(tmdb, { name: t.name, year: t.year, castNames: t.cast_names }, Object.values(info.tmdbSeasonIds), episodeCounts(info.episodes))
         titleRows.push({ ...base(t), tmdb_id: tmdbId, details_at: detailsAt })
         for (const e of info.episodes) {
           episodeRows.push({
