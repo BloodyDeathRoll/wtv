@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,13 +45,16 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -79,8 +83,10 @@ import kotlinx.coroutines.delay
  *
  * Catch-up, on channels that keep an archive: Left opens the earlier
  * programmes; one chosen plays from its start in place of the live picture.
- * Then OK pauses or plays, the fast-forward and rewind keys move 30 s, and
- * Back (or a channel change) returns to live.
+ * Then Left and Right (and the rewind and fast-forward keys) move 30 s, or
+ * 2 minutes a step while held; OK pauses or plays; the banner shows where in
+ * the programme it is, and stays while paused. Back (or a channel change)
+ * returns to live.
  */
 @OptIn(UnstableApi::class)
 @Composable
@@ -104,6 +110,10 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
     var panel by remember { mutableStateOf<List<Programme>?>(null) }
     var panelLoading by remember { mutableStateOf(false) }
     var panelFailed by remember { mutableStateOf(false) }
+    // Catch-up's place in the programme, for the banner's time bar (ms), and whether it is paused.
+    var position by remember { mutableLongStateOf(0L) }
+    var length by remember { mutableLongStateOf(0L) }
+    var paused by remember { mutableStateOf(false) }
 
     val player = remember {
         // Media3's own user agent, as for movies: the stream server blocks the API client's.
@@ -112,6 +122,8 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
     }
     LaunchedEffect(channel.id, catchup) {
         error = null
+        paused = false
+        position = 0L
         val url = catchup?.let { timeshiftUrl(login, channel.extId, it) } ?: streamUrl(login, StreamKind.Live, channel.extId, "ts")
         player.setMediaItem(MediaItem.fromUri(url))
         player.prepare()
@@ -172,9 +184,19 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
             delay(CLOCK_TICK_MS)
         }
     }
-    LaunchedEffect(channel.id, bannerAt) {
+    // The time bar moves while it shows.
+    LaunchedEffect(banner, catchup) {
+        val p = catchup ?: return@LaunchedEffect
+        while (banner) {
+            position = player.currentPosition
+            // The stream's own length once known; the guide's until then.
+            length = player.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: ((p.end - p.start) * 1000)
+            delay(POSITION_TICK_MS)
+        }
+    }
+    LaunchedEffect(channel.id, bannerAt, paused) {
         banner = true
-        if (!channel.isRadio) {
+        if (!channel.isRadio && !paused) {
             delay(BANNER_MS)
             banner = false
         }
@@ -225,6 +247,21 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
         index = Math.floorMod(index + step, channels.size)
     }
 
+    // Catch-up: back or forward, further a step while the key is held.
+    fun seek(forward: Boolean, repeat: Int): Boolean {
+        if (catchup == null) return false
+        val step = if (repeat >= HELD_REPEATS) SEEK_HELD_MS else SEEK_MS
+        val to = player.currentPosition + if (forward) step else -step
+        player.seekTo(to.coerceIn(0L, player.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: Long.MAX_VALUE))
+        // After a failed read the player is stopped: a skip tries again from the new place.
+        if (player.playerError != null) {
+            error = null
+            player.prepare()
+        }
+        bannerAt++
+        return true
+    }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -236,19 +273,24 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
                 when (it.nativeKeyEvent.keyCode) {
                     AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_CHANNEL_UP -> move(1).let { true }
                     AndroidKeyEvent.KEYCODE_DPAD_DOWN, AndroidKeyEvent.KEYCODE_CHANNEL_DOWN -> move(-1).let { true }
-                    AndroidKeyEvent.KEYCODE_DPAD_LEFT -> (channel.archiveDays > 0).also { open ->
+                    AndroidKeyEvent.KEYCODE_DPAD_LEFT -> seek(forward = false, it.nativeKeyEvent.repeatCount) || (channel.archiveDays > 0).also { open ->
                         if (open) {
                             panelLoading = true // from the first frame, not "nothing to play back"
                             panel = emptyList()
                         }
                     }
-                    AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_INFO -> {
-                        if (catchup != null) player.playWhenReady = !player.playWhenReady
+                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> seek(forward = true, it.nativeKeyEvent.repeatCount)
+                    AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_INFO,
+                    AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, AndroidKeyEvent.KEYCODE_MEDIA_PLAY, AndroidKeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                        if (catchup != null) {
+                            player.playWhenReady = !player.playWhenReady
+                            paused = !player.playWhenReady
+                        }
                         bannerAt++
                         true
                     }
-                    AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> (catchup != null).also { c -> if (c) player.seekTo(player.currentPosition + SEEK_MS) }
-                    AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> (catchup != null).also { c -> if (c) player.seekTo((player.currentPosition - SEEK_MS).coerceAtLeast(0)) }
+                    AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> seek(forward = true, it.nativeKeyEvent.repeatCount)
+                    AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> seek(forward = false, it.nativeKeyEvent.repeatCount)
                     else -> false
                 }
             }
@@ -270,7 +312,10 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
         )
         if (banner || error != null) {
             val shown = catchup
-            Banner(channel, error, if (shown != null) shown to null else nowAndNext(guide, now), now, catchup = shown != null)
+            Banner(
+                channel, error, if (shown != null) shown to null else nowAndNext(guide, now), now,
+                catchup = if (shown != null) CatchupPlace(position, length, paused) else null,
+            )
         }
         panel?.let { list ->
             EarlierPanel(
@@ -332,7 +377,7 @@ private fun dayOf(unixSeconds: Long, format: java.time.format.DateTimeFormatter)
 
 /** The channel strip along the bottom: number, logo, name, and the error if the channel failed. */
 @Composable
-private fun BoxScope.Banner(channel: Channel, error: String?, onAir: Pair<Programme?, Programme?>, now: Long, catchup: Boolean = false) {
+private fun BoxScope.Banner(channel: Channel, error: String?, onAir: Pair<Programme?, Programme?>, now: Long, catchup: CatchupPlace? = null) {
     Box(
         Modifier
             .fillMaxWidth()
@@ -354,21 +399,31 @@ private fun BoxScope.Banner(channel: Channel, error: String?, onAir: Pair<Progra
                     Text(stringResource(R.string.live_failed) + " ($error)", style = MaterialTheme.typography.bodyMedium, color = WtvColors.TextSecondary)
                 }
                 val (onNow, next) = onAir
-                if (catchup) Text(stringResource(R.string.live_catchup), style = MaterialTheme.typography.labelLarge, color = WtvColors.Accent)
+                if (catchup != null) {
+                    Text(
+                        stringResource(if (catchup.paused) R.string.live_catchup_paused else R.string.live_catchup),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = WtvColors.Accent,
+                    )
+                }
                 if (onNow != null) {
                     // Times and title apart: in one line, a Hebrew title turns the line right-to-left and swaps the times.
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         Text("${clock(onNow.start)}–${clock(onNow.end)}", style = MaterialTheme.typography.titleMedium, color = WtvColors.TextPrimary)
                         Text(onNow.title, style = MaterialTheme.typography.titleMedium, color = WtvColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    if (!catchup) {
+                    if (catchup != null) TimeBar(catchup)
+                    if (catchup == null) {
                         val elapsed = ((now - onNow.start).toFloat() / (onNow.end - onNow.start)).coerceIn(0f, 1f)
                         Box(Modifier.padding(vertical = 6.dp).width(420.dp).height(3.dp).background(WtvColors.Surface)) {
                             Box(Modifier.fillMaxWidth(elapsed).height(3.dp).background(WtvColors.Accent))
                         }
                     }
                 }
-                if (!catchup && channel.archiveDays > 0) {
+                if (catchup != null) {
+                    Text(stringResource(R.string.live_catchup_hint), style = MaterialTheme.typography.bodySmall, color = WtvColors.TextMuted)
+                }
+                if (catchup == null && channel.archiveDays > 0) {
                     Text(stringResource(R.string.live_earlier_hint), style = MaterialTheme.typography.bodySmall, color = WtvColors.TextMuted)
                 }
                 if (next != null) {
@@ -385,6 +440,30 @@ private fun BoxScope.Banner(channel: Channel, error: String?, onAir: Pair<Progra
     }
 }
 
+/** Where catch-up is in its programme (ms), and whether it is paused. */
+private class CatchupPlace(val position: Long, val length: Long, val paused: Boolean)
+
+/** Catch-up's time bar: time in, the bar, the programme's length. Left to right in Hebrew too, like a clock. */
+@Composable
+private fun TimeBar(place: CatchupPlace) {
+    val done = if (place.length > 0) (place.position.toFloat() / place.length).coerceIn(0f, 1f) else 0f
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text(duration(place.position), style = MaterialTheme.typography.titleSmall, color = WtvColors.TextPrimary)
+            Box(Modifier.width(440.dp).height(4.dp).background(WtvColors.Surface)) {
+                Box(Modifier.fillMaxWidth(done).height(4.dp).background(WtvColors.Accent))
+            }
+            Text(duration(place.length), style = MaterialTheme.typography.titleSmall, color = WtvColors.TextSecondary)
+        }
+    }
+}
+
+/** "1:05:09" or "5:09". */
+internal fun duration(ms: Long): String {
+    val s = (ms / 1000).coerceAtLeast(0)
+    return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
+}
+
 /** "20:00" in the device's time zone. */
 private fun clock(unixSeconds: Long): String =
     java.time.Instant.ofEpochSecond(unixSeconds).atZone(java.time.ZoneId.systemDefault()).toLocalTime().format(CLOCK)
@@ -395,3 +474,7 @@ private const val CLOCK_TICK_MS = 30_000L
 private const val STALL_MS = 20_000L
 private const val STALLED = "TIMEOUT"
 private const val SEEK_MS = 30_000L
+/** Held for this many key repeats (about a second), a step is 2 minutes. */
+private const val HELD_REPEATS = 10
+private const val SEEK_HELD_MS = 120_000L
+private const val POSITION_TICK_MS = 500L

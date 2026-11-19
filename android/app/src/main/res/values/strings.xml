@@ -108,6 +108,8 @@
     <string name="live_next">Next  %1$s  %2$s</string>
     <string name="live_earlier">Earlier programmes</string>
     <string name="live_earlier_hint">◀  Earlier programmes</string>
+    <string name="live_catchup_paused">Paused</string>
+    <string name="live_catchup_hint">◀ ▶ Back or forward 30 s (hold for faster)    OK Pause</string>
     <string name="live_catchup">Catch-up · Back returns to live</string>
     <string name="live_archive_failed">Earlier programmes could not be loaded</string>
     <string name="live_no_archive">No earlier programmes to play back yet</string>
