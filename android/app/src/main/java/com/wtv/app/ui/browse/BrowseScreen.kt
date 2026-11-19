@@ -42,6 +42,7 @@ import com.wtv.app.data.ContinueItem
 import com.wtv.app.data.Genre
 import com.wtv.app.data.Kind
 import com.wtv.app.data.Title
+import com.wtv.app.ui.components.LocalContinueMenu
 import com.wtv.app.ui.components.LocalTitleMenu
 import com.wtv.app.ui.components.Backdrop
 import com.wtv.app.ui.components.HeroText
@@ -324,13 +325,15 @@ private fun Rows(
                                 ) {
                                     itemsIndexed(row.titles, key = { _, t -> t.id }) { i, t ->
                                         val (watched, episode) = row.progress[t.id] ?: (null to null)
+                                        // Only Continue watching's cards have positions; their menu can remove them.
+                                        val menu = if (row.progress.isEmpty()) LocalTitleMenu.current else LocalContinueMenu.current
                                         LandscapeCard(
                                             imageUrl = t.cardImage,
                                             title = t.displayName(hebrew),
                                             label = episode,
                                             progress = watched,
                                             onClick = { onOpen(t) },
-                                            onLongClick = LocalTitleMenu.current.let { menu -> { menu(t) } },
+                                            onLongClick = { menu(t) },
                                             onFocused = { focused = t },
                                             modifier = rowModifier.then(if (rowIndex == 0 && i == 0) Modifier.focusRequester(firstFocus) else Modifier),
                                         )

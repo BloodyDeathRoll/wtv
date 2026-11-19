@@ -73,6 +73,7 @@ import com.wtv.app.ui.browse.BrowseScreen
 import com.wtv.app.ui.browse.BrowseSource
 import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.categories.CategoriesScreen
+import com.wtv.app.ui.components.LocalContinueMenu
 import com.wtv.app.ui.components.LocalTitleMenu
 import com.wtv.app.ui.components.RailItem
 import com.wtv.app.ui.components.SideRail
@@ -314,18 +315,32 @@ fun WtvApp() {
     if (askExit) ExitDialog(onYes = { activity?.finish() }, onNo = { askExit = false })
     BackHandler(enabled = stack.isNotEmpty()) { close { stack.removeAt(stack.lastIndex) } }
 
-    // A card held down opens its menu, over whatever page it is on.
-    var menuFor by remember { mutableStateOf<Title?>(null) }
-    menuFor?.let { t ->
+    // A card held down opens its menu, over whatever page it is on; from Continue watching
+    // the menu can also take the title out of that row.
+    var menu by remember { mutableStateOf<MenuRequest?>(null) }
+    menu?.let { (t, continuing) ->
         TitleMenu(
             t,
-            onInfo = { menuFor = null; open(Page.TitlePage(t)) },
-            onPlay = { menuFor = null; open(Page.TitlePage(t, autoPlay = true)) },
-            onDismiss = { menuFor = null },
+            onInfo = { menu = null; open(Page.TitlePage(t)) },
+            onPlay = { menu = null; open(Page.TitlePage(t, autoPlay = true)) },
+            onDismiss = { menu = null },
+            onClearProgress = if (!continuing) null else {
+                {
+                    menu = null
+                    scope.launch {
+                        runCatching { catalog.clearProgress(catalog.progress(t).map { it.titleId }.toSet()) }
+                            .onSuccess { progressVersion++ }
+                            .onFailure { Log.w("WtvProgress", "Removing the positions failed: ${it.message}") }
+                    }
+                }
+            },
         )
     }
 
-    CompositionLocalProvider(LocalTitleMenu provides { menuFor = it }) {
+    CompositionLocalProvider(
+        LocalTitleMenu provides { menu = MenuRequest(it, continuing = false) },
+        LocalContinueMenu provides { menu = MenuRequest(it, continuing = true) },
+    ) {
         Box(Modifier.fillMaxSize()) {
             Box(Modifier.size(1.dp).focusRequester(parked).focusProperties { canFocus = parking }.focusable())
             Layer(blocked = stack.isNotEmpty(), hidden = stack.isNotEmpty(), memory = baseMemory) {
@@ -558,3 +573,6 @@ private fun ExitDialog(onYes: () -> Unit, onNo: () -> Unit) {
 
 /** Recommendations come 50 at a time; the next 50 load as the focus nears the end. */
 private const val RECOMMENDATIONS_PAGE = 50
+
+/** A card's menu to show: from Continue watching it can also remove the title from that row. */
+private data class MenuRequest(val title: Title, val continuing: Boolean)
