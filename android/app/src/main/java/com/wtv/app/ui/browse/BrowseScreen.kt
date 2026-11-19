@@ -1,5 +1,6 @@
 package com.wtv.app.ui.browse
 
+import android.os.SystemClock
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -114,18 +115,24 @@ fun BrowseScreen(
     /** More on a recommendations row: the recommendations page, of one kind or (null) both. */
     onForYou: (Kind?) -> Unit,
 ) {
-    val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
+    val app = LocalContext.current.applicationContext as WtvApplication
+    val catalog = app.catalog
     val hebrew = isHebrew()
+    // Whose rows these are: another language or account never sees them.
+    val owner = listOf(hebrew, wtwEmail, app.session.email)
     val continueLabel = stringResource(R.string.row_continue)
     val seasonEpisode = stringResource(R.string.season_episode)
     // Null until loaded: Home shows its rows once this is in too, so the row does not
     // appear above the rows after the user has started moving. A nicety: when it
     // fails, Home just has no Continue watching row.
     // Bounded: Home waits for it, and it is not worth a long wait.
-    val watching by produceState<List<ContinueItem>?>(null, progressVersion) {
-        value = runCatching { withTimeoutOrNull(CONTINUE_WAIT_MS) { catalog.continueWatching() } }.getOrNull() ?: value.orEmpty()
+    // Starts from the last one loaded, so Home back from Live TV does not wait.
+    val watching by produceState(lastWatching?.takeIf { it.first == owner }?.second, progressVersion) {
+        val got = runCatching { withTimeoutOrNull(CONTINUE_WAIT_MS) { catalog.continueWatching() } }.getOrNull()
+        value = got ?: value.orEmpty()
+        // Only a real answer is kept: after a failure, Home waits for the row again next time.
+        if (got != null) lastWatching = owner to got
     }
-    val app = LocalContext.current.applicationContext as WtvApplication
     val recentMovies = stringResource(R.string.row_recent_movies)
     val recentSeries = stringResource(R.string.row_recent_series)
     val forYou = HomeLabels(
@@ -141,7 +148,19 @@ fun BrowseScreen(
     val ratings = catalog.ratingsVersion
     var ratingsSeen by remember { mutableIntStateOf(ratings) }
     val load by produceState<Load>(Load.Loading, source, hebrew, attempt, wtwEmail, ratings) {
-        val keep = (quiet || ratings != ratingsSeen) && value is Load.Ready
+        // A page switched back to shows its last rows at once; they are read again,
+        // quietly, only after a rating or a playback, or when old.
+        val cached = shown[source]?.takeIf { it.owner == owner }
+        val epoch = rankings
+        if (cached != null && !quiet) {
+            // `value` outlives the keys, so the rows shown so far are replaced here, then kept below.
+            value = cached.load
+            if (cached.ratings == ratings && cached.progress == progressVersion && SystemClock.elapsedRealtime() - cached.at < ROWS_FRESH_MS) {
+                ratingsSeen = ratings
+                return@produceState
+            }
+        }
+        val keep = (quiet || ratings != ratingsSeen || cached != null) && value is Load.Ready
         quiet = false
         ratingsSeen = ratings
         if (!keep) value = Load.Loading
@@ -152,6 +171,8 @@ fun BrowseScreen(
         }.getOrElse { Load.Failed(it.message ?: it.toString()) }
         // A failed quiet reload leaves what is shown.
         if (!(keep && next is Load.Failed)) value = next
+        // Rows read before a new ranking arrived are not kept: they hold the old one's picks.
+        if (next is Load.Ready && epoch == rankings) shown[source] = Shown(owner, ratings, progressVersion, next, SystemClock.elapsedRealtime())
     }
 
     // Home shows its rows at once; with WTW connected it then has the server rank,
@@ -159,6 +180,9 @@ fun BrowseScreen(
     if (source == BrowseSource.Home) {
         LaunchedEffect(Unit) {
             if (refreshRanking(app)) {
+                // The other pages' recommendations come from the ranking too.
+                shown.clear()
+                rankings++
                 quiet = true
                 attempt++
             }
@@ -184,6 +208,21 @@ fun BrowseScreen(
 }
 
 private const val CONTINUE_WAIT_MS = 5_000L
+
+/** How long a page's rows are shown again as they are; older ones are shown, then read again. */
+private const val ROWS_FRESH_MS = 10 * 60_000L
+
+/** A page's rows as last loaded, for `owner` (language and accounts), after `ratings` and `progress` changes. */
+private class Shown(val owner: List<Any?>, val ratings: Int, val progress: Int, val load: Load.Ready, val at: Long)
+
+/** Each page's last rows, kept while the app runs: switching tabs does not load them again. */
+private val shown = HashMap<BrowseSource, Shown>()
+
+/** New rankings made while the app runs; a load that saw an older count does not keep its rows. */
+private var rankings = 0
+
+/** Continue watching as last loaded, and for whom. */
+private var lastWatching: Pair<List<Any?>, List<ContinueItem>>? = null
 /** A first ranking takes about 10 s; after that the server answers at once. */
 private const val RANKING_WAIT_MS = 30_000L
 
