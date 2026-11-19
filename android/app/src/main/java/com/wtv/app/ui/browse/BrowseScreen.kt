@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -46,6 +48,7 @@ import com.wtv.app.ui.components.LocalContinueMenu
 import com.wtv.app.ui.components.LocalTitleMenu
 import com.wtv.app.ui.components.Backdrop
 import com.wtv.app.ui.components.HeroText
+import com.wtv.app.ui.components.MatchBadge
 import com.wtv.app.ui.components.LandscapeCard
 import com.wtv.app.ui.components.MetaRow
 import com.wtv.app.ui.components.RowTitle
@@ -172,7 +175,7 @@ fun BrowseScreen(
             when {
                 home && w == null -> Message(stringResource(R.string.loading), firstFocus, up)
                 rows.isEmpty() -> Message(stringResource(R.string.nothing_here), firstFocus, up)
-                else -> Rows(rows, state.genres, hebrew, firstFocus, up, tabsFocused, onMore, onOpen, onForYou)
+                else -> Rows(rows, state.genres, hebrew, firstFocus, up, tabsFocused, onMore, onOpen, onForYou, wtw = wtwEmail != null)
             }
         }
     }
@@ -275,6 +278,9 @@ private suspend fun loadRows(
         }
     }
 
+/** Rows whose WTW match is asked for as soon as the page shows. */
+private const val FIRST_SCORED_ROWS = 3
+
 /** Titles in a section's "Recommended for You" row, before its More card. */
 private const val SECTION_PICKS = 10
 
@@ -289,6 +295,8 @@ private fun Rows(
     onMore: (Category) -> Unit,
     onOpen: (Title) -> Unit,
     onForYou: (Kind?) -> Unit,
+    /** WTW is connected: titles show their "% match". */
+    wtw: Boolean,
 ) {
     // Safe: empty rows are left out, and an empty page never gets here.
     // Kept when only Continue watching changes: the header stays on the focused card.
@@ -297,6 +305,16 @@ private fun Rows(
     LaunchedEffect(rows) {
         if (rows.none { r -> r.titles.any { it.id == focused.id } }) focused = rows.first().titles.first()
     }
+    // WTW's own match: the cards not answered yet are asked for, the first rows at once, then
+    // the focused row and the one under it as the user moves down: not the whole page at once.
+    val scores = (LocalContext.current.applicationContext as WtvApplication).wtwScores
+    fun ask(of: List<BrowseRow>) = scores.request(of.flatMap { r -> r.titles.filter { it.match == null }.map { it.id } })
+    LaunchedEffect(rows, wtw) { if (wtw) ask(rows.take(FIRST_SCORED_ROWS)) }
+    LaunchedEffect(rows, wtw, focused) {
+        val at = rows.indexOfFirst { r -> r.titles.any { it.id == focused.id } }
+        if (wtw && at >= 0) ask(rows.subList(at, minOf(at + 2, rows.size)))
+    }
+    fun matchOf(t: Title): Int? = if (wtw) scores[t.id] ?: t.match else null
     val list = rememberLazyListState()
     LaunchedEffect(tabsFocused) {
         if (tabsFocused) {
@@ -308,7 +326,8 @@ private fun Rows(
         Backdrop(focused.heroImage)
         Column(Modifier.padding(start = 88.dp, top = 76.dp)) {
             // Fixed height: rows do not jump when the synopsis length changes.
-            Box(Modifier.height(220.dp)) {
+            Box(Modifier.fillMaxWidth().padding(end = 64.dp).height(220.dp)) {
+                matchOf(focused)?.let { MatchBadge(it, Modifier.align(AbsoluteAlignment.TopRight)) }
                 HeroText(
                     modifier = Modifier.width(560.dp),
                     titleMaxLines = 1,
@@ -347,6 +366,7 @@ private fun Rows(
                                             onClick = { onOpen(t) },
                                             onLongClick = { menu(t) },
                                             onFocused = { focused = t },
+                                            match = matchOf(t),
                                             modifier = rowModifier.then(if (rowIndex == 0 && i == 0) Modifier.focusRequester(firstFocus) else Modifier),
                                         )
                                     }

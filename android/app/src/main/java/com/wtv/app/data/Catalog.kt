@@ -65,6 +65,8 @@ data class Title(
     val originalLanguage: String?,
     /** The card of this title's copies; null before the first regroup (then the title is its own card). */
     val groupId: Long?,
+    /** WTW's "% match" from the user's ranking; null without one. Shown only while WTW is connected. */
+    val match: Int? = null,
 ) {
     fun displayName(hebrew: Boolean): String = (if (hebrew) nameHe else nameEn) ?: name
     fun synopsis(hebrew: Boolean): String? = if (hebrew) overviewHe ?: plot ?: overviewEn else overviewEn ?: plot ?: overviewHe
@@ -196,6 +198,17 @@ class Catalog(private val api: Api) {
      */
     suspend fun refreshRanking(wtwToken: String): Boolean =
         !JSONObject(api.function("rank", JSONObject().put("wtw_token", wtwToken).toString())).optBoolean("fresh")
+
+    /**
+     * WTW's own "% match" for these cards, asked of WTW by the server (`wtw-scores`):
+     * card id to the percent WTW shows, null when WTW does not score the title.
+     * Cards WTW could not be asked about this time are left out.
+     */
+    suspend fun wtwScores(wtwToken: String, ids: List<Long>): Map<Long, Int?> {
+        val body = JSONObject().put("wtw_token", wtwToken).put("title_ids", JSONArray(ids))
+        val scores = JSONObject(api.function("wtw-scores", body.toString())).optJSONObject("scores") ?: return emptyMap()
+        return scores.keys().asSequence().associate { it.toLong() to if (scores.isNull(it)) null else scores.getInt(it) }
+    }
 
     /** One page of a category in the given order. */
     suspend fun page(category: Category, sort: Sort, hebrew: Boolean, offset: Int, limit: Int): List<Title> =
@@ -398,7 +411,7 @@ internal fun pagePath(category: Category, sort: Sort, hebrew: Boolean, offset: I
     cards(category.kind, category.id.takeUnless { category.all }, category.genre) + "&order=${sort.order(hebrew)}&offset=$offset&limit=$limit"
 
 private const val TITLE_COLUMNS = "id,ext_id,container_ext,kind,name,title_en,title_he,year,plot,overview_en,overview_he,tmdb_genre_ids,certification," +
-    "tmdb_backdrop,tmdb_poster,backdrop_url,poster_url,runtime_min,tmdb_runtime_min,director,cast_names,tmdb_rating,original_language,group_id"
+    "tmdb_backdrop,tmdb_poster,backdrop_url,poster_url,runtime_min,tmdb_runtime_min,director,cast_names,tmdb_rating,original_language,group_id,wtw_match"
 
 private fun kindOf(db: String): Kind = Kind.entries.firstOrNull { it.db == db } ?: throw ApiException("Unknown kind: $db")
 
@@ -427,6 +440,7 @@ internal fun title(o: JSONObject) = Title(
     tmdbRating = if (o.isNull("tmdb_rating") || !o.has("tmdb_rating")) null else o.getDouble("tmdb_rating"),
     originalLanguage = o.text("original_language"),
     groupId = if (o.isNull("group_id") || !o.has("group_id")) null else o.getLong("group_id"),
+    match = o.int("wtw_match"),
 )
 
 /** Ids of the cards of copies in `rows` whose card is not in `rows` itself. */
