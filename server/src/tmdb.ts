@@ -47,6 +47,8 @@ interface Common {
 
 export interface TmdbMovieFull extends Common {
   title: string
+  original_title?: string
+  release_date?: string
   runtime: number | null
   credits: { cast: TmdbCastMember[] }
   release_dates: { results: { iso_3166_1: string; release_dates: { certification: string }[] }[] }
@@ -130,6 +132,13 @@ export function createTmdb(apiKey: string, fetchFn: typeof fetch = fetch, sleep 
       const query: Query = { query: name }
       if (year !== null) query.first_air_date_year = String(year)
       return ids((await get<{ results: { id: number }[] }>('search/tv', query)).results, max)
+    },
+
+    /** Ids of the best movie matches for a title, in any language TMDB knows. */
+    async searchMovie(name: string, year: number | null, max = 5): Promise<number[]> {
+      const query: Query = { query: name }
+      if (year !== null) query.year = String(year)
+      return ids((await get<{ results: { id: number }[] }>('search/movie', query)).results, max)
     },
 
     async series(id: number): Promise<TmdbSeries> {
