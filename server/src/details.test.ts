@@ -250,6 +250,18 @@ test('details: movies get their TMDB id and backdrop; series their episodes and 
   ])
 })
 
+test('details: a movie with no provider id gets one by search; one with an id is not searched', async () => {
+  const { db, upserts } = fakeDb([movie(1), movie(2)])
+  const { tmdb, looked } = fakeTmdb({
+    movieSearch: { 'm1|2020': [99], 'm2|2020': [42] },
+    movies: { 99: { title: 'm1', year: 2020 }, 42: { title: 'm2', year: 2020 } },
+  })
+  await fetchDetails(fakeXtream(), tmdb, db, 'prov1', 60_000, () => 1_794_900_000_000)
+  const ids = upserts.filter(u => u.table === 'titles').flatMap(u => u.rows).map(r => [r.ext_id, r.tmdb_id])
+  assert.deepEqual(ids, [[1, 501], [2, 42]])
+  assert.deepEqual(looked, [42])
+})
+
 test('details: a series fetched before is not searched again, matched or not', async () => {
   const { db, upserts } = fakeDb([series(5, 77, '2026-11-01T00:00:00Z'), series(6, null, '2026-11-01T00:00:00Z')])
   const { tmdb, looked } = fakeTmdb({ search: { 'דוקטור X|2026': [22] }, seasons: { 22: [460408] } })
