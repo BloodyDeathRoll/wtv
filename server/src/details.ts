@@ -84,7 +84,8 @@ export async function matchSeries(
   const counts = Object.entries(episodeCounts).map(([season, n]) => [Number(season), n] as const).filter(([season]) => season > 0)
   if (want.size === 0 && counts.length === 0) return null
   const names = seriesNames(title.name)
-  const keys = new Set(names.map(nameKey))
+  // An empty key (a name of punctuation only) must not match anything.
+  const keys = new Set(names.map(nameKey).filter(Boolean))
   const tried = new Set<number>()
 
   function agrees(s: TmdbSeries): boolean {
@@ -133,9 +134,9 @@ function episodeCounts(episodes: { season: number }[]): Record<number, number> {
   return out
 }
 
-/** The names in a provider series name: the whole, then each side of " - " ("Shtisel - שטיסל"). */
+/** The names in a provider series name: the whole, then each side of " - " ("Shtisel - שטיסל"; – — | too). */
 export function seriesNames(name: string): string[] {
-  return [...new Set([name, ...name.split(/\s+-\s+/)].map(n => n.trim()).filter(Boolean))]
+  return [...new Set([name, ...name.split(/\s+[-–—|]\s+/)].map(n => n.trim()).filter(Boolean))]
 }
 
 /** A name for comparing: lower case, letters and digits only, no "the", no country tag ("US", "ארה"ב"). */
@@ -143,8 +144,8 @@ export function nameKey(name: string): string {
   return name
     .toLowerCase()
     .replace(/\((?:us|uk|il)\)|\b(?:us|uk)\b|ארה"ב/g, ' ')
+    .replace(/^\s*the\b/, '')
     .replace(/[^\p{L}\p{N}]+/gu, '')
-    .replace(/^the/, '')
 }
 
 const describe = (err: unknown) => (err instanceof Error ? err.message : String(err))

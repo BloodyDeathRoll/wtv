@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Db, Row } from './db.ts'
-import { fetchDetails, matchSeries, type Pending } from './details.ts'
+import { fetchDetails, matchSeries, nameKey, seriesNames, type Pending } from './details.ts'
 import type { Tmdb, TmdbCredit, TmdbSeries } from './tmdb.ts'
 import type { Xtream } from './xtream.ts'
 
@@ -103,6 +103,21 @@ test('match without season ids: the Hebrew name can match the original name', as
     shows: { 56017: { ...officeShow('Shtisel', '2013-06-29', '2021-03-25', [12, 12, 9]), original_name: 'שטיסל' } },
   })
   assert.equal(await matchSeries(tmdb, { name: 'שטיסל', year: 2013, castNames: null }, [], { 1: 12, 2: 12, 3: 9 }), 56017)
+})
+
+test('series names: each side of a dash; keys ignore case, punctuation, "the" and country tags', () => {
+  assert.deepEqual(seriesNames('Shtisel - שטיסל'), ['Shtisel - שטיסל', 'Shtisel', 'שטיסל'])
+  assert.deepEqual(seriesNames('לוחם  – Warrior'), ['לוחם  – Warrior', 'לוחם', 'Warrior'])
+  assert.deepEqual(seriesNames('Spider-Man'), ['Spider-Man'])
+  assert.equal(nameKey('The Office US'), nameKey('The Office'))
+  assert.equal(nameKey('המשרד ארה"ב'), 'המשרד')
+  assert.equal(nameKey('Theodore'), 'theodore')
+  assert.equal(nameKey('US'), '')
+})
+
+test('match without season ids: a name with no letters matches nothing', async () => {
+  const { tmdb } = fakeTmdb({ search: { '!!!|': [7] }, shows: { 7: officeShow('?', '2005-01-01', '2006-01-01', [6]) } })
+  assert.equal(await matchSeries(tmdb, { name: '!!!', year: null, castNames: null }, [], { 1: 6 }), null)
 })
 
 const movie = (ext_id: number): Pending => ({ id: ext_id, kind: 'movie', ext_id, name: `m${ext_id}`, year: 2020, cast_names: null, tmdb_id: null, details_at: null })
