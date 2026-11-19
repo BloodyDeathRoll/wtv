@@ -370,7 +370,6 @@ class Catalog(private val api: Api) {
     suspend fun setShowRadio(show: Boolean) =
         api.post("user_settings?on_conflict=user_id", JSONObject().put("show_radio", show).toString(), prefer = UPSERT)
 
-    /** One row per provider category, newest first; empty categories left out. */
     /** A section's rows: its provider categories, then `extra` (genres), newest first; empty ones left out. */
     suspend fun rows(kind: Kind, perRow: Int = 10, extra: List<Category> = emptyList()): List<Pair<Category, List<Title>>> = coroutineScope {
         (categories(kind) + extra).map { c -> async { rowRequests.withPermit { c to latest(kind, c.id, perRow, c.genre) } } }

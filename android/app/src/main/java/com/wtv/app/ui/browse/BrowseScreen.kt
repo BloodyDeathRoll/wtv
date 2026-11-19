@@ -257,7 +257,16 @@ private suspend fun loadRows(
                 runCatching { if (wtw) catalog.watchAgain(kind = source.kind) else catalog.finishedTitles(kind = source.kind) }.getOrDefault(emptyList())
             }
             // The provider files series by service only: their genre rows come from TMDB (movies have the provider's).
-            val genres = if (source.kind == Kind.Series) runCatching { catalog.genreCategories(Kind.Series, hebrew) }.getOrDefault(emptyList()) else emptyList()
+            val genres = when (source.kind) {
+                Kind.Series -> try {
+                    catalog.genreCategories(Kind.Series, hebrew)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }
+                else -> emptyList()
+            }
             val rows = catalog.rows(source.kind, extra = genres).map { (c, titles) -> BrowseRow(c.label(hebrew), c, titles) }
             listOf(
                 BrowseRow(forYou.recommended, null, recommended.await(), forYou = true, forYouKind = source.kind),
@@ -315,7 +324,8 @@ private fun Rows(
                     contentPadding = PaddingValues(top = 8.dp, bottom = 400.dp),
                 ) {
                     // Two categories can share a label; their ids differ.
-                    itemsIndexed(rows, key = { _, r -> r.category?.id ?: r.label }) { rowIndex, row ->
+                    // Provider category and TMDB genre ids can be equal: the kind of tag is part of the key.
+                    itemsIndexed(rows, key = { _, r -> r.category?.let { "${if (it.genre) "g" else "c"}${it.id}" } ?: r.label }) { rowIndex, row ->
                         Column {
                             RowTitle(row.label)
                             // Up from the first row goes to the tabs; spatially the rail is nearer.
