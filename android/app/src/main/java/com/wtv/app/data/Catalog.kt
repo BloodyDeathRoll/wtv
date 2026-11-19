@@ -175,7 +175,8 @@ class Catalog(private val api: Api) {
         api.get("rpc/top_picks_page?select=$TITLE_COLUMNS&p_offset=$offset&p_limit=$limit" + (kind?.let { "&p_kind=${it.db}" } ?: "")).objects().map(::title)
 
     /** "Watch it again" without WTW: the titles the user finished, last finished first. */
-    suspend fun finishedTitles(limit: Int = 20): List<Title> = api.get("rpc/finished_titles?select=$TITLE_COLUMNS&p_limit=$limit").objects().map(::title)
+    suspend fun finishedTitles(limit: Int = 20, kind: Kind? = null): List<Title> =
+        api.get("rpc/finished_titles?select=$TITLE_COLUMNS&p_limit=$limit" + (kind?.let { "&p_kind=${it.db}" } ?: "")).objects().map(::title)
 
     /** Home: of the newest titles, the ranking's best, unrated. */
     suspend fun newForYou(limit: Int = 20): List<Title> = api.get("rpc/new_for_you?select=$TITLE_COLUMNS&p_limit=$limit").objects().map(::title)
@@ -185,7 +186,8 @@ class Catalog(private val api: Api) {
         api.get("rpc/also_liked?select=$TITLE_COLUMNS&p_title=${title.id}&p_limit=$limit").objects().map(::title)
 
     /** Home: titles loved or liked in WTW. */
-    suspend fun watchAgain(limit: Int = 20): List<Title> = api.get("rpc/watch_again?select=$TITLE_COLUMNS&p_limit=$limit").objects().map(::title)
+    suspend fun watchAgain(limit: Int = 20, kind: Kind? = null): List<Title> =
+        api.get("rpc/watch_again?select=$TITLE_COLUMNS&p_limit=$limit" + (kind?.let { "&p_kind=${it.db}" } ?: "")).objects().map(::title)
 
     /**
      * Asks the server to rank the catalog from the user's WTW data (`wtwToken`
