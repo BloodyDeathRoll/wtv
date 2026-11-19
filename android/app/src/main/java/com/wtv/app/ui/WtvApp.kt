@@ -73,6 +73,7 @@ import com.wtv.app.ui.browse.BrowseScreen
 import com.wtv.app.ui.browse.BrowseSource
 import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.categories.CategoriesScreen
+import com.wtv.app.ui.components.LocalContinueMenu
 import com.wtv.app.ui.components.LocalTitleMenu
 import com.wtv.app.ui.components.RailItem
 import com.wtv.app.ui.components.SideRail
@@ -314,18 +315,33 @@ fun WtvApp() {
     if (askExit) ExitDialog(onYes = { activity?.finish() }, onNo = { askExit = false })
     BackHandler(enabled = stack.isNotEmpty()) { close { stack.removeAt(stack.lastIndex) } }
 
-    // A card held down opens its menu, over whatever page it is on.
+    // A card held down opens its menu, over whatever page it is on; from Continue watching
+    // the menu can also take the title out of that row.
     var menuFor by remember { mutableStateOf<Title?>(null) }
+    var menuContinuing by remember { mutableStateOf(false) }
     menuFor?.let { t ->
         TitleMenu(
             t,
             onInfo = { menuFor = null; open(Page.TitlePage(t)) },
             onPlay = { menuFor = null; open(Page.TitlePage(t, autoPlay = true)) },
             onDismiss = { menuFor = null },
+            onClearProgress = if (!menuContinuing) null else {
+                {
+                    menuFor = null
+                    scope.launch {
+                        runCatching { catalog.clearProgress(catalog.progress(t).map { it.titleId }.toSet()) }
+                            .onSuccess { progressVersion++ }
+                            .onFailure { Log.w("WtvProgress", "Removing the positions failed: ${it.message}") }
+                    }
+                }
+            },
         )
     }
 
-    CompositionLocalProvider(LocalTitleMenu provides { menuFor = it }) {
+    CompositionLocalProvider(
+        LocalTitleMenu provides { menuContinuing = false; menuFor = it },
+        LocalContinueMenu provides { menuContinuing = true; menuFor = it },
+    ) {
         Box(Modifier.fillMaxSize()) {
             Box(Modifier.size(1.dp).focusRequester(parked).focusProperties { canFocus = parking }.focusable())
             Layer(blocked = stack.isNotEmpty(), hidden = stack.isNotEmpty(), memory = baseMemory) {

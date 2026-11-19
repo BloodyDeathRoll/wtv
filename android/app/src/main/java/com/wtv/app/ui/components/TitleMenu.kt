@@ -64,13 +64,16 @@ fun Modifier.ignoresOpeningPress(): Modifier {
 /** Opens the long-press menu for a title card; the app frame provides it. */
 val LocalTitleMenu = staticCompositionLocalOf<(Title) -> Unit> { {} }
 
+/** The same menu for a card in Continue watching: it can also take the title out of that row. */
+val LocalContinueMenu = staticCompositionLocalOf<(Title) -> Unit> { {} }
+
 /**
  * A title card held down: a list of Watchlist, Info, Play (focused), Close,
  * each a row with its icon at the start and its name after it (mirrored in
  * Hebrew). Back closes.
  */
 @Composable
-fun TitleMenu(title: Title, onInfo: () -> Unit, onPlay: () -> Unit, onDismiss: () -> Unit) {
+fun TitleMenu(title: Title, onInfo: () -> Unit, onPlay: () -> Unit, onDismiss: () -> Unit, onClearProgress: (() -> Unit)? = null) {
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
     val scope = rememberCoroutineScope()
     // Null until known: the Watchlist button says Add or Remove.
@@ -98,6 +101,7 @@ fun TitleMenu(title: Title, onInfo: () -> Unit, onPlay: () -> Unit, onDismiss: (
                 )
                 MenuItem(Icons.Outlined.Info, stringResource(R.string.more_info), onInfo)
                 MenuItem(Icons.Filled.PlayArrow, stringResource(R.string.play), onPlay, Modifier.focusRequester(play))
+                if (onClearProgress != null) MenuItem(Icons.Outlined.Close, stringResource(R.string.menu_remove), onClearProgress)
                 MenuItem(Icons.Outlined.Close, stringResource(R.string.close), onDismiss)
             }
         }
