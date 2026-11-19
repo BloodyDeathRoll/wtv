@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -34,8 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.tv.material3.Button
-import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.FilterChip
+import com.wtv.app.ui.components.ChoiceChip
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.wtv.app.R
@@ -85,7 +85,6 @@ fun GridScreen(category: Category, firstFocus: FocusRequester, onOpen: (Title) -
  * at a time as the focus nears the end. With `sorts`, chips choose the order
  * (null: Recommended); without, `fetch` gets null.
  */
-@OptIn(ExperimentalTvMaterial3Api::class) // FilterChip
 @Composable
 fun PosterGrid(
     label: String,
@@ -157,8 +156,13 @@ fun PosterGrid(
 
     Box(Modifier.fillMaxSize()) {
         Backdrop(focused?.heroImage)
-        // The name and the sort chips sit where the tabs are on the browse pages.
-        Row(Modifier.padding(start = 88.dp, end = 48.dp, top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+        // The name and the sort chips sit where the tabs are on the browse pages: the name
+        // at the start, the chips across from it at the end, in line with the rows' end.
+        Row(
+            Modifier.fillMaxWidth().padding(start = 88.dp, end = 30.dp, top = 18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
                 label,
                 style = MaterialTheme.typography.headlineMedium,
@@ -167,12 +171,11 @@ fun PosterGrid(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),
             )
-            if (sorts) Spacer(Modifier.padding(start = 24.dp))
             // Without sorts `sort` stays null, which `fetch` gets.
-            if (sorts) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (sorts) Row(Modifier.padding(start = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 // Recommended (null) is not a Sort: it is a server function, not a REST order.
                 (listOf<Sort?>(null) + Sort.entries).forEachIndexed { i, s ->
-                    FilterChip(
+                    ChoiceChip(
                         selected = s == sort,
                         onClick = { sort = s },
                         modifier = if (i == 0) Modifier.focusRequester(chips) else Modifier,

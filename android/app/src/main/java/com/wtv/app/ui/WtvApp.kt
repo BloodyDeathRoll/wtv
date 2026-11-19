@@ -437,7 +437,7 @@ fun WtvApp() {
                                 scope = p.scope,
                             )
                             // Read again after a watchlist change (a title removed from its page, say).
-                            Page.Watchlist -> TitlesPage(catalog.watchlistVersion, { catalog.watchlist() }, entry.first, onOpen = { open(Page.TitlePage(it)) }) {
+                            Page.Watchlist -> TitlesPage(catalog.watchlistVersion, { catalog.watchlist() }, entry.first, onOpen = { open(Page.TitlePage(it)) }, kinds = true) {
                                 Text(stringResource(R.string.rail_watchlist), style = MaterialTheme.typography.displayMedium, color = WtvColors.TextPrimary)
                             }
                             is Page.Settings -> SettingsScreen(firstFocus = entry.first, providerFirst = p.providerFirst)

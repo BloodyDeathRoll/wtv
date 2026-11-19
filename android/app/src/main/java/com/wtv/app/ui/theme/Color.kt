@@ -17,6 +17,12 @@ object WtvColors {
     /** Focus ring on cards and buttons. */
     val Focus = Color(0xFFFFFFFF)
 
+    /** An unselected chip: a little lighter than [Surface]. */
+    val Chip = Color(0xFF253241)
+
+    /** A selected chip: darker than an unselected one. */
+    val ChipSelected = Color(0xFF131B23)
+
     /** Rating badges ("TV-14", "16+"). */
     val Badge = Color(0xFF33373D)
 

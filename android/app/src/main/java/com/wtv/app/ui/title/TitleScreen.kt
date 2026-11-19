@@ -50,8 +50,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.Button
-import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.FilterChip
+import com.wtv.app.ui.components.ChoiceChip
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.wtv.app.R
@@ -476,13 +475,12 @@ private fun MoreInfo(title: Title, cast: List<CastMember>, hebrew: Boolean, onDi
 }
 
 /** Season choices next to the episodes row title. Moving onto one shows that season. */
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SeasonChips(seasons: List<Int>, shown: Int?, onSeason: (Int) -> Unit) {
     Sideways {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 10.dp)) {
             items(seasons, key = { it }) { n ->
-                FilterChip(
+                ChoiceChip(
                     selected = n == shown,
                     onClick = { onSeason(n) },
                     modifier = Modifier.onFocusChanged { if (it.isFocused && n != shown) onSeason(n) },
