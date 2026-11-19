@@ -19,8 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -40,15 +38,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.tv.material3.Button
-import androidx.tv.material3.Icon
-import androidx.tv.material3.IconButton
-import androidx.tv.material3.IconButtonDefaults
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Tab
 import androidx.tv.material3.TabDefaults
@@ -128,8 +122,7 @@ private sealed interface Page {
         override val id get() = "person:${person.personId}"
     }
 
-    /** `grow`: opened from a section's search icon, the field opens out across the line. */
-    data class Search(val scope: SearchScope = SearchScope.All, val grow: Boolean = false) : Page {
+    data class Search(val scope: SearchScope = SearchScope.All) : Page {
         override val id get() = "search:$scope"
     }
 
@@ -194,8 +187,6 @@ fun WtvApp() {
     val selectedTab = tabs.getValue(section)
     // Down from the tabs enters the page here, never the rail.
     val page = remember { FocusRequester() }
-    // The section's search icon, top right: Up from a tab reaches it without moving along the tabs (which switches the section).
-    val sectionSearch = remember { FocusRequester() }
     // The section remembers its last focused card, to return to it.
     val baseMemory = remember { FocusMemory() }
 
@@ -391,7 +382,6 @@ fun WtvApp() {
                             // Set on each tab: focus moves from the tab, not the row.
                             modifier = Modifier.focusRequester(tabs.getValue(s)).focusProperties {
                                 down = page
-                                if (section != Section.Home) up = sectionSearch
                             },
                             colors = TabDefaults.pillIndicatorTabColors(
                                 contentColor = WtvColors.TextSecondary,
@@ -406,35 +396,6 @@ fun WtvApp() {
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                             )
                         }
-                    }
-                }
-                // Movies, Series and Live TV search in their own section; the field opens out from here.
-                val sectionScope = when (section) {
-                    Section.Movies -> SearchScope.Movies
-                    Section.Series -> SearchScope.Series
-                    Section.LiveTv -> SearchScope.Live
-                    Section.Home -> null
-                }
-                if (sectionScope != null) {
-                    IconButton(
-                        onClick = {
-                            tabsHaveFocus = false
-                            open(Page.Search(sectionScope, grow = true))
-                        },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 18.dp, end = 48.dp)
-                            .size(44.dp)
-                            .focusRequester(sectionSearch)
-                            .focusProperties { down = selectedTab },
-                        colors = IconButtonDefaults.colors(
-                            containerColor = Color.Transparent,
-                            contentColor = WtvColors.TextSecondary,
-                            focusedContainerColor = WtvColors.TextPrimary,
-                            focusedContentColor = WtvColors.Background,
-                        ),
-                    ) {
-                        Icon(Icons.Outlined.Search, contentDescription = stringResource(R.string.search_in_section), modifier = Modifier.size(24.dp))
                     }
                 }
             }
@@ -473,7 +434,6 @@ fun WtvApp() {
                                 onPerson = { open(Page.Person(it)) },
                                 onWatch = ::watch,
                                 scope = p.scope,
-                                grow = p.grow,
                             )
                             // Read again after a watchlist change (a title removed from its page, say).
                             Page.Watchlist -> TitlesPage(catalog.watchlistVersion, { catalog.watchlist() }, entry.first, onOpen = { open(Page.TitlePage(it)) }) {
@@ -502,7 +462,17 @@ fun WtvApp() {
                     tabsHaveFocus = false
                     // Search and Settings are pages like the others: Back returns from them.
                     when (it) {
-                        RailItem.Search -> open(Page.Search())
+                        // Search looks in the section on screen: titles of that kind, or channels on Live TV.
+                        RailItem.Search -> open(
+                            Page.Search(
+                                when (section) {
+                                    Section.Movies -> SearchScope.Movies
+                                    Section.Series -> SearchScope.Series
+                                    Section.LiveTv -> SearchScope.Live
+                                    Section.Home -> SearchScope.All
+                                },
+                            ),
+                        )
                         RailItem.Categories -> open(Page.Categories(if (section == Section.Series) Kind.Series else Kind.Movie))
                         RailItem.MainMenu ->
                             if (stack.isEmpty()) selectedTab.requestFocus()
