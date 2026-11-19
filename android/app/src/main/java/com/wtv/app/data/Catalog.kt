@@ -17,8 +17,21 @@ import org.json.JSONObject
 
 enum class Kind(val db: String) { Movie("movie"), Series("series") }
 
-/** A provider category, or with `genre` a TMDB genre (side bar → Categories): both open the same grid. */
-data class Category(val id: Int, val kind: Kind, val name: String, val nameEn: String?, val nameHe: String?, val genre: Boolean = false) {
+/**
+ * A provider category, or with `genre` a TMDB genre, or with `all` every title
+ * of the kind (side bar → Categories): all open the same grid. `count`, when
+ * known, is how many titles it has.
+ */
+data class Category(
+    val id: Int,
+    val kind: Kind,
+    val name: String,
+    val nameEn: String?,
+    val nameHe: String?,
+    val genre: Boolean = false,
+    val all: Boolean = false,
+    val count: Int? = null,
+) {
     fun label(hebrew: Boolean): String = (if (hebrew) nameHe else nameEn) ?: name
 }
 
@@ -307,11 +320,20 @@ class Catalog(private val api: Api) {
         Marks(rating(rating.await()) ?: fromWtw(wtw.await()), listed.await())
     }
 
+    /** Rated titles count as seen: a change reloads Home's and the sections' rows. */
+    var ratingsVersion by mutableIntStateOf(0)
+        private set
+
     /** Rates a title's card, or clears its rating with null. */
     suspend fun setRating(title: Title, rating: Rating?) {
         if (rating == null) api.delete("ratings?title_id=eq.${title.cardId}")
         else api.post("ratings?on_conflict=user_id,title_id", ratingBody(title.cardId, rating), prefer = UPSERT)
+        ratingsVersion++
     }
+
+    /** How many titles the kind has in all, per provider category and per genre: (tag, id) to count. */
+    suspend fun categoryCounts(kind: Kind): Map<Pair<String, Int>, Int> =
+        api.get("rpc/category_counts?p_kind=${kind.db}").objects().associate { (it.getString("tag") to it.getInt("id")) to it.getInt("n") }
 
     suspend fun setWatchlist(title: Title, on: Boolean) {
         if (on) api.post("watchlist?on_conflict=user_id,title_id", JSONObject().put("title_id", title.cardId).toString(), prefer = "resolution=ignore-duplicates,return=minimal")
@@ -366,10 +388,12 @@ internal fun latestPath(kind: Kind, category: Int?, limit: Int): String =
     cards(kind, category) + "&order=${Sort.Added.order(hebrew = false)}&limit=$limit"
 
 internal fun recommendedPath(category: Category, offset: Int, limit: Int): String =
-    "rpc/recommended_page?select=$TITLE_COLUMNS&p_kind=${category.kind.db}&${if (category.genre) "p_genre" else "p_category"}=${category.id}&p_offset=$offset&p_limit=$limit"
+    "rpc/recommended_page?select=$TITLE_COLUMNS&p_kind=${category.kind.db}" +
+        (if (category.all) "" else "&${if (category.genre) "p_genre" else "p_category"}=${category.id}") +
+        "&p_offset=$offset&p_limit=$limit"
 
 internal fun pagePath(category: Category, sort: Sort, hebrew: Boolean, offset: Int, limit: Int): String =
-    cards(category.kind, category.id, category.genre) + "&order=${sort.order(hebrew)}&offset=$offset&limit=$limit"
+    cards(category.kind, category.id.takeUnless { category.all }, category.genre) + "&order=${sort.order(hebrew)}&offset=$offset&limit=$limit"
 
 private const val TITLE_COLUMNS = "id,ext_id,container_ext,kind,name,title_en,title_he,year,plot,overview_en,overview_he,tmdb_genre_ids,certification," +
     "tmdb_backdrop,tmdb_poster,backdrop_url,poster_url,runtime_min,tmdb_runtime_min,director,cast_names,tmdb_rating,original_language,group_id"

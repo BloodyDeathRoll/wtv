@@ -224,4 +224,13 @@ class CatalogTest {
         assertTrue(recommended, recommended.contains("&p_genre=18"))
         assertFalse(recommended, recommended.contains("p_category"))
     }
+
+    @Test fun `All movies is the whole kind, in both orders`() {
+        val all = Category(0, Kind.Movie, "All movies", null, null, all = true)
+        val page = pagePath(all, Sort.Name, hebrew = false, offset = 0, limit = 60)
+        assertTrue(page, page.contains("&kind=eq.movie"))
+        assertFalse(page, page.contains("_ids=cs."))
+        val recommended = recommendedPath(all, offset = 0, limit = 60)
+        assertFalse(recommended, recommended.contains("p_category") || recommended.contains("p_genre"))
+    }
 }

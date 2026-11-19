@@ -123,6 +123,8 @@
     <string name="rail_main_menu">תפריט ראשי</string>
     <string name="categories_providers">קטגוריות</string>
     <string name="categories_genres">ז׳אנרים</string>
+    <string name="categories_all_movies">כל הסרטים</string>
+    <string name="categories_all_series">כל הסדרות</string>
     <string name="row_recommended">מומלץ עבורך</string>
     <string name="search_actor">שחקן</string>
     <string name="search_in_section">חיפוש כאן</string>
