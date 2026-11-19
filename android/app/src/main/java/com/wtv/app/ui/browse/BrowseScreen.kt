@@ -129,11 +129,15 @@ fun BrowseScreen(
         stringResource(R.string.row_recommended),
     )
     var attempt by remember { mutableIntStateOf(0) }
-    // A reload for a new ranking keeps the rows on screen until the new ones are in.
+    // A reload for a new ranking, or after a rating (rated titles leave the picks), keeps
+    // the rows on screen until the new ones are in.
     var quiet by remember { mutableStateOf(false) }
-    val load by produceState<Load>(Load.Loading, source, hebrew, attempt, wtwEmail) {
-        val keep = quiet && value is Load.Ready
+    val ratings = catalog.ratingsVersion
+    var ratingsSeen by remember { mutableIntStateOf(ratings) }
+    val load by produceState<Load>(Load.Loading, source, hebrew, attempt, wtwEmail, ratings) {
+        val keep = (quiet || ratings != ratingsSeen) && value is Load.Ready
         quiet = false
+        ratingsSeen = ratings
         if (!keep) value = Load.Loading
         val next = runCatching {
             val rows = loadRows(catalog, source, hebrew, recentMovies, recentSeries, forYou, wtw = wtwEmail != null)

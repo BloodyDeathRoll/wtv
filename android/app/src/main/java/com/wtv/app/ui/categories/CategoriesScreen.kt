@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -22,6 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.FilterChip
+import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.wtv.app.R
@@ -32,8 +34,9 @@ import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.theme.WtvColors
 
 /**
- * Side bar → Categories, for movies or series: the provider's categories,
- * then the genres. A tag opens its full grid, as More does at a row's end.
+ * Side bar → Categories, for movies or series: All movies (or series), the
+ * provider's categories, then the genres, each with how many titles it has.
+ * A tag opens its full grid, as More does at a row's end.
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalTvMaterial3Api::class) // FlowRow, FilterChip
 @Composable
@@ -41,10 +44,21 @@ fun CategoriesScreen(kind: Kind, firstFocus: FocusRequester, onOpen: (Category) 
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
     val hebrew = isHebrew()
     // Null until loaded; a group that fails to load is left out.
-    val groups by produceState<List<Pair<Int, List<Category>>>?>(null, kind, hebrew) {
+    val allLabel = stringResource(if (kind == Kind.Movie) R.string.categories_all_movies else R.string.categories_all_series)
+    val groups by produceState<List<Pair<Int?, List<Category>>>?>(null, kind, hebrew) {
         val providers = runCatching { catalog.categories(kind) }.getOrDefault(emptyList())
         val genres = runCatching { catalog.genreCategories(kind, hebrew) }.getOrDefault(emptyList())
-        value = listOf(R.string.categories_providers to providers, R.string.categories_genres to genres).filter { it.second.isNotEmpty() }
+        // Counts are a nicety: without them the tags show without numbers, and none is left out.
+        val counts = runCatching { catalog.categoryCounts(kind) }.getOrNull()
+        fun counted(tag: String, list: List<Category>) =
+            if (counts == null) list
+            else list.mapNotNull { c -> counts[tag to c.id]?.let { c.copy(count = it) } }
+        val all = Category(0, kind, allLabel, allLabel, allLabel, all = true, count = counts?.get("all" to 0))
+        value = listOf(
+            null to listOf(all),
+            R.string.categories_providers to counted("category", providers),
+            R.string.categories_genres to counted("genre", genres),
+        ).filter { it.second.isNotEmpty() }
     }
     Column(Modifier.fillMaxSize().padding(start = 88.dp, end = 48.dp, top = 48.dp).verticalScroll(rememberScrollState())) {
         Text(stringResource(R.string.rail_categories), style = MaterialTheme.typography.displayMedium, color = WtvColors.TextPrimary)
@@ -56,15 +70,23 @@ fun CategoriesScreen(kind: Kind, firstFocus: FocusRequester, onOpen: (Category) 
         }
         shown.forEachIndexed { g, (label, tags) ->
             Spacer(Modifier.height(28.dp))
-            Text(stringResource(label), style = MaterialTheme.typography.titleMedium, color = WtvColors.TextSecondary)
-            Spacer(Modifier.height(12.dp))
+            if (label != null) {
+                Text(stringResource(label), style = MaterialTheme.typography.titleMedium, color = WtvColors.TextSecondary)
+                Spacer(Modifier.height(12.dp))
+            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 tags.forEachIndexed { i, c ->
                     FilterChip(
                         selected = false,
                         onClick = { onOpen(c) },
                         modifier = if (g == 0 && i == 0) Modifier.focusRequester(firstFocus) else Modifier,
-                    ) { Text(c.label(hebrew)) }
+                    ) {
+                        Text(c.label(hebrew))
+                        if (c.count != null) {
+                            Spacer(Modifier.width(10.dp))
+                            Text(c.count.toString(), color = LocalContentColor.current.copy(alpha = 0.6f))
+                        }
+                    }
                 }
             }
         }
