@@ -317,17 +317,16 @@ fun WtvApp() {
 
     // A card held down opens its menu, over whatever page it is on; from Continue watching
     // the menu can also take the title out of that row.
-    var menuFor by remember { mutableStateOf<Title?>(null) }
-    var menuContinuing by remember { mutableStateOf(false) }
-    menuFor?.let { t ->
+    var menu by remember { mutableStateOf<MenuRequest?>(null) }
+    menu?.let { (t, continuing) ->
         TitleMenu(
             t,
-            onInfo = { menuFor = null; open(Page.TitlePage(t)) },
-            onPlay = { menuFor = null; open(Page.TitlePage(t, autoPlay = true)) },
-            onDismiss = { menuFor = null },
-            onClearProgress = if (!menuContinuing) null else {
+            onInfo = { menu = null; open(Page.TitlePage(t)) },
+            onPlay = { menu = null; open(Page.TitlePage(t, autoPlay = true)) },
+            onDismiss = { menu = null },
+            onClearProgress = if (!continuing) null else {
                 {
-                    menuFor = null
+                    menu = null
                     scope.launch {
                         runCatching { catalog.clearProgress(catalog.progress(t).map { it.titleId }.toSet()) }
                             .onSuccess { progressVersion++ }
@@ -339,8 +338,8 @@ fun WtvApp() {
     }
 
     CompositionLocalProvider(
-        LocalTitleMenu provides { menuContinuing = false; menuFor = it },
-        LocalContinueMenu provides { menuContinuing = true; menuFor = it },
+        LocalTitleMenu provides { menu = MenuRequest(it, continuing = false) },
+        LocalContinueMenu provides { menu = MenuRequest(it, continuing = true) },
     ) {
         Box(Modifier.fillMaxSize()) {
             Box(Modifier.size(1.dp).focusRequester(parked).focusProperties { canFocus = parking }.focusable())
@@ -574,3 +573,6 @@ private fun ExitDialog(onYes: () -> Unit, onNo: () -> Unit) {
 
 /** Recommendations come 50 at a time; the next 50 load as the focus nears the end. */
 private const val RECOMMENDATIONS_PAGE = 50
+
+/** A card's menu to show: from Continue watching it can also remove the title from that row. */
+private data class MenuRequest(val title: Title, val continuing: Boolean)

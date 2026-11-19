@@ -325,14 +325,15 @@ private fun Rows(
                                 ) {
                                     itemsIndexed(row.titles, key = { _, t -> t.id }) { i, t ->
                                         val (watched, episode) = row.progress[t.id] ?: (null to null)
+                                        // Only Continue watching's cards have positions; their menu can remove them.
+                                        val menu = if (row.progress.isEmpty()) LocalTitleMenu.current else LocalContinueMenu.current
                                         LandscapeCard(
                                             imageUrl = t.cardImage,
                                             title = t.displayName(hebrew),
                                             label = episode,
                                             progress = watched,
                                             onClick = { onOpen(t) },
-                                            // Continue watching's cards have positions; their menu can clear them.
-                                            onLongClick = (if (row.progress.isEmpty()) LocalTitleMenu.current else LocalContinueMenu.current).let { menu -> { menu(t) } },
+                                            onLongClick = { menu(t) },
                                             onFocused = { focused = t },
                                             modifier = rowModifier.then(if (rowIndex == 0 && i == 0) Modifier.focusRequester(firstFocus) else Modifier),
                                         )
