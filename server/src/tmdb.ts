@@ -6,7 +6,11 @@ export class TmdbError extends Error {}
 
 export interface TmdbSeries {
   id: number
-  seasons: { id: number }[]
+  name?: string
+  original_name?: string
+  first_air_date?: string
+  last_air_date?: string
+  seasons: { id: number; season_number?: number; episode_count?: number }[]
 }
 
 export interface TmdbCredit {
