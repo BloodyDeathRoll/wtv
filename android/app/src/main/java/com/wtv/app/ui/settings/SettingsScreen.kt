@@ -55,7 +55,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.FilterChip
+import com.wtv.app.ui.components.ChoiceChip
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.wtv.app.AppLanguage
@@ -93,7 +93,7 @@ fun SettingsScreen(firstFocus: FocusRequester, providerFirst: Boolean = false) {
             Spacer(Modifier.width(24.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 AppLanguage.entries.forEach { language ->
-                    FilterChip(
+                    ChoiceChip(
                         selected = language == current,
                         onClick = {
                             if (language != current) {
@@ -186,7 +186,7 @@ private fun LiveSection() {
         Text(stringResource(R.string.setting_radio), style = MaterialTheme.typography.bodyLarge, color = WtvColors.TextSecondary, modifier = Modifier.width(140.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             for (on in listOf(true, false)) {
-                FilterChip(
+                ChoiceChip(
                     selected = f.showRadio == on,
                     onClick = { if (f.showRadio != on) change({ it.copy(showRadio = on) }, { it.copy(showRadio = !on) }) { catalog.setShowRadio(on) } },
                     modifier = if (on) Modifier.focusRequester(radio) else Modifier,
@@ -212,7 +212,7 @@ private fun LiveSection() {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(end = 48.dp)) {
                     items(groups, key = { "g${it.id}" }) { c ->
                         val key = "g${c.id}"
-                        FilterChip(selected = false, modifier = Modifier.focusRequester(chips.getOrPut(key) { FocusRequester() }), onClick = {
+                        ChoiceChip(selected = false, modifier = Modifier.focusRequester(chips.getOrPut(key) { FocusRequester() }), onClick = {
                             leave(key)
                             change({ it.copy(hiddenGroups = it.hiddenGroups - c.id) }, { it.copy(hiddenGroups = it.hiddenGroups + c.id) }) {
                                 catalog.setGroupHidden(c.id, false)
@@ -221,7 +221,7 @@ private fun LiveSection() {
                     }
                     items(hiddenChannels, key = { "c${it.id}" }) { c ->
                         val key = "c${c.id}"
-                        FilterChip(selected = false, modifier = Modifier.focusRequester(chips.getOrPut(key) { FocusRequester() }), onClick = {
+                        ChoiceChip(selected = false, modifier = Modifier.focusRequester(chips.getOrPut(key) { FocusRequester() }), onClick = {
                             leave(key)
                             change({ it.copy(hiddenChannels = it.hiddenChannels - c.id) }, { it.copy(hiddenChannels = it.hiddenChannels + c.id) }) {
                                 catalog.setChannelHidden(c.id, false)

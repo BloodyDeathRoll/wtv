@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -24,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,9 +46,11 @@ import coil3.compose.AsyncImage
 import com.wtv.app.R
 import com.wtv.app.WtvApplication
 import com.wtv.app.data.CastMember
+import com.wtv.app.data.Kind
 import com.wtv.app.data.Title
 import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.components.Backdrop
+import com.wtv.app.ui.components.ChoiceChip
 import com.wtv.app.ui.components.LocalTitleMenu
 import com.wtv.app.ui.components.PosterCard
 import com.wtv.app.ui.theme.WtvColors
@@ -90,7 +94,8 @@ fun PersonScreen(person: CastMember, firstFocus: FocusRequester, onOpen: (Title)
 /**
  * A page of title posters under a header: a person's titles, the watchlist.
  * `load` runs again when `key` changes; `header` gets the number of titles
- * once they are in.
+ * once they are in. With `kinds`, chips across from the header show all
+ * titles, the movies or the series.
  */
 @Composable
 fun TitlesPage(
@@ -98,9 +103,12 @@ fun TitlesPage(
     load: suspend () -> List<Title>,
     firstFocus: FocusRequester,
     onOpen: (Title) -> Unit,
+    kinds: Boolean = false,
     header: @Composable (count: Int?) -> Unit,
 ) {
     val hebrew = isHebrew()
+    // Null: all titles.
+    var kind by rememberSaveable { mutableStateOf<Kind?>(null) }
     var attempt by remember { mutableIntStateOf(0) }
     // The loading message holds the focus until the posters arrive. They take it
     // unless the user pressed a key meanwhile (moved to the rail, say). Removing the
@@ -122,12 +130,22 @@ fun TitlesPage(
     // requested again on every change, unless the user pressed a key meanwhile.
     LaunchedEffect(state) { if (!moved) runCatching { firstFocus.requestFocus() } }
     // The focused poster's name under the header, as on a category's page.
-    var focused by remember(key) { mutableStateOf<Title?>(null) }
+    var focused by remember(key, kind) { mutableStateOf<Title?>(null) }
 
     Box(Modifier.fillMaxSize()) {
         Backdrop(focused?.heroImage)
         Column(Modifier.fillMaxSize().padding(start = 88.dp, end = 48.dp, top = 48.dp)) {
-            header((state as? Load.Ready)?.titles?.size)
+            // The chips across from the header: at the end, which is the left in Hebrew.
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f, fill = false)) { header((state as? Load.Ready)?.titles?.size) }
+                if (kinds) Row(Modifier.padding(start = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    (listOf<Kind?>(null) + Kind.entries).forEach { k ->
+                        ChoiceChip(selected = k == kind, onClick = { kind = k }) {
+                            Text(stringResource(when (k) { null -> R.string.filter_all; Kind.Movie -> R.string.tab_movies; Kind.Series -> R.string.tab_series }))
+                        }
+                    }
+                }
+            }
             Spacer(Modifier.height(8.dp))
             Text(
                 focused?.let { t -> listOfNotNull(t.displayName(hebrew), t.year?.toString(), t.certification).joinToString("   ") } ?: " ",
@@ -139,8 +157,9 @@ fun TitlesPage(
             when (val s = state) {
                 Load.Loading -> Message(stringResource(R.string.loading), firstFocus, onKey = { moved = true })
                 is Load.Failed -> Message(stringResource(R.string.load_failed, s.message), firstFocus, onKey = { moved = true }, onRetry = { moved = false; attempt++ })
-                is Load.Ready ->
-                    if (s.titles.isEmpty()) Message(stringResource(R.string.nothing_here), firstFocus, onKey = { moved = true })
+                is Load.Ready -> {
+                    val shown = s.titles.filter { kind == null || it.kind == kind }
+                    if (shown.isEmpty()) Message(stringResource(R.string.nothing_here), firstFocus, onKey = { moved = true })
                     else {
                         LazyVerticalGrid(
                             columns = GridCells.Fixed(6),
@@ -148,7 +167,7 @@ fun TitlesPage(
                             verticalArrangement = Arrangement.spacedBy(18.dp),
                             contentPadding = PaddingValues(top = 6.dp, bottom = 48.dp),
                         ) {
-                            itemsIndexed(s.titles, key = { _, t -> t.id }) { i, t ->
+                            itemsIndexed(shown, key = { _, t -> t.id }) { i, t ->
                                 PosterCard(
                                     imageUrl = t.posterImage,
                                     title = t.displayName(hebrew),
@@ -160,6 +179,7 @@ fun TitlesPage(
                             }
                         }
                     }
+                }
             }
         }
     }

@@ -21,8 +21,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.FilterChip
+import com.wtv.app.ui.components.ChoiceChip
 import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
@@ -38,7 +37,7 @@ import com.wtv.app.ui.theme.WtvColors
  * provider's categories, then the genres, each with how many titles it has.
  * A tag opens its full grid, as More does at a row's end.
  */
-@OptIn(ExperimentalLayoutApi::class, ExperimentalTvMaterial3Api::class) // FlowRow, FilterChip
+@OptIn(ExperimentalLayoutApi::class) // FlowRow
 @Composable
 fun CategoriesScreen(kind: Kind, firstFocus: FocusRequester, onOpen: (Category) -> Unit) {
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
@@ -76,7 +75,7 @@ fun CategoriesScreen(kind: Kind, firstFocus: FocusRequester, onOpen: (Category) 
             }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 tags.forEachIndexed { i, c ->
-                    FilterChip(
+                    ChoiceChip(
                         selected = false,
                         onClick = { onOpen(c) },
                         modifier = if (g == 0 && i == 0) Modifier.focusRequester(firstFocus) else Modifier,

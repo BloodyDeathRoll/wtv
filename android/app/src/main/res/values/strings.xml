@@ -83,6 +83,7 @@
     <string name="row_new_for_you">New for you</string>
     <string name="row_watch_again">Watch it again</string>
     <string name="sort_recommended">Recommended</string>
+    <string name="filter_all">All</string>
     <string name="resume">Resume</string>
     <string name="start_over">Start over</string>
     <string name="play_episode">Play %1$s</string>

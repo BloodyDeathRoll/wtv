@@ -49,8 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Button
-import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.FilterChip
+import com.wtv.app.ui.components.ChoiceChip
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.wtv.app.R
@@ -85,7 +84,6 @@ private sealed interface Load {
  * list; holding OK opens a menu: favourite, hide the channel, hide its group.
  * Hidden things come back in Settings.
  */
-@OptIn(ExperimentalTvMaterial3Api::class) // FilterChip
 @Composable
 fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Channel>, Int, List<Channel>) -> Unit) {
     val context = LocalContext.current
@@ -179,7 +177,7 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     groups.forEach { g ->
-                        FilterChip(
+                        ChoiceChip(
                             selected = g.label == shown.label,
                             onClick = { shownLabel = g.label },
                             modifier = Modifier
