@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -20,6 +19,12 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.FolderOff
+import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,6 +46,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.FilterChip
@@ -55,8 +61,10 @@ import com.wtv.app.data.liveGroups
 import com.wtv.app.player.OnNow
 import com.wtv.app.player.ProviderLogin
 import com.wtv.app.ui.browse.isHebrew
-import com.wtv.app.ui.components.ignoresOpeningPress
 import com.wtv.app.ui.components.ChannelCard
+import com.wtv.app.ui.components.MENU_WIDTH
+import com.wtv.app.ui.components.MenuItem
+import com.wtv.app.ui.components.ignoresOpeningPress
 import com.wtv.app.ui.theme.WtvColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -254,7 +262,7 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
     }
 }
 
-/** Held OK on a channel: favourite, hide it, or hide the group it is shown in (not Favourites). Back closes. */
+/** Held OK on a channel: favourite, hide it, hide the group it is shown in (not Favourites), or close; a list like the title menu. Back closes. */
 @Composable
 private fun ChannelMenu(
     channel: Channel,
@@ -266,20 +274,23 @@ private fun ChannelMenu(
     onHideGroup: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         val first = remember { FocusRequester() }
         Column(
-            Modifier.ignoresOpeningPress().background(WtvColors.Surface, RoundedCornerShape(12.dp)).padding(28.dp).width(420.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            Modifier.ignoresOpeningPress().width(MENU_WIDTH).background(WtvColors.Surface, RoundedCornerShape(12.dp)).padding(24.dp),
         ) {
-            Text(channel.name, style = MaterialTheme.typography.titleLarge, color = WtvColors.TextPrimary)
-            Spacer(Modifier.height(4.dp))
-            Button(onClick = onFavorite, modifier = Modifier.fillMaxWidth().focusRequester(first)) {
-                Text(stringResource(if (favorite) R.string.live_menu_unfavorite else R.string.live_menu_favorite))
-            }
-            Button(onClick = onHide, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.live_menu_hide)) }
-            if (group != null) {
-                Button(onClick = onHideGroup, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.live_menu_hide_group, groupLabel)) }
+            Text(channel.name, style = MaterialTheme.typography.titleLarge, color = WtvColors.TextPrimary, maxLines = 2)
+            Spacer(Modifier.height(16.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                MenuItem(
+                    if (favorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                    stringResource(if (favorite) R.string.live_menu_unfavorite else R.string.live_menu_favorite),
+                    onFavorite,
+                    Modifier.focusRequester(first),
+                )
+                MenuItem(Icons.Outlined.VisibilityOff, stringResource(R.string.live_menu_hide), onHide)
+                if (group != null) MenuItem(Icons.Outlined.FolderOff, stringResource(R.string.live_menu_hide_group, groupLabel), onHideGroup)
+                MenuItem(Icons.Outlined.Close, stringResource(R.string.close), onDismiss)
             }
         }
         LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
