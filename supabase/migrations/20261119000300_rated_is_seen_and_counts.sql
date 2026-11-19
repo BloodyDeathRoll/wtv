@@ -148,7 +148,7 @@ $$;
 
 -- Tags on the Categories page: the kind's total ('all', id 0), then each
 -- provider category and each genre with at least one title.
-create function public.category_counts(p_kind text)
+create or replace function public.category_counts(p_kind text)
 returns table (tag text, id integer, n bigint)
 language sql stable security invoker set search_path = public
 as $$
