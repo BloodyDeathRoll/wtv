@@ -73,7 +73,10 @@ internal fun groupBody(categoryId: Int, hidden: Boolean): String =
 internal fun favoriteBody(channelId: Long, favorite: Boolean): String =
     JSONObject().put("channel_id", channelId).put("favorite", favorite).toString()
 
-/** The channel with this provider number: in `current` first (its order kept), else in `all`; null when neither has it. */
+/**
+ * The channel with this provider number: in `current` first (its order kept), else in `all`; null when neither has it.
+ * Numbers can repeat across provider categories: the first one wins.
+ */
 fun channelByNumber(num: Int, current: List<Channel>, all: List<Channel>): Pair<List<Channel>, Int>? {
     current.indexOfFirst { it.num == num }.takeIf { it >= 0 }?.let { return current to it }
     return all.indexOfFirst { it.num == num }.takeIf { it >= 0 }?.let { all to it }

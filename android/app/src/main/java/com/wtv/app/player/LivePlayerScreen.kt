@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -147,12 +147,12 @@ fun LivePlayerScreen(
     val panelOpen = panel != null
     LaunchedEffect(panel, channel.id) {
         val kind = panel ?: return@LaunchedEffect
+        panelList = emptyList()
+        panelFailed = false
         if (kind == LivePanel.Channels) {
             panelLoading = false
             return@LaunchedEffect
         }
-        panelList = emptyList()
-        panelFailed = false
         panelLoading = true
         runCatching {
             when (kind) {
@@ -287,7 +287,7 @@ fun LivePlayerScreen(
     val numbers = rememberNumberEntry { num ->
         val found = channelByNumber(num, list, all) ?: return@rememberNumberEntry false
         panel = null
-        catchup = null
+        if (found.first[found.second].id != channel.id) catchup = null // the same channel keeps its programme
         list = found.first
         index = found.second
         bannerAt++
@@ -404,7 +404,7 @@ fun LivePlayerScreen(
             LivePanel.Guide -> GuidePanel(channel, panelList, playing = catchup, loading = panelLoading, failed = panelFailed)
             LivePanel.Channels -> ChannelsPanel(list, index) { i ->
                 panel = null
-                catchup = null
+                if (i != index) catchup = null // the same channel keeps its programme
                 index = i
                 bannerAt++
                 runCatching { firstFocus.requestFocus() }

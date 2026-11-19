@@ -40,6 +40,7 @@ class NumberEntry {
             in KeyEvent.KEYCODE_NUMPAD_0..KeyEvent.KEYCODE_NUMPAD_9 -> event.keyCode - KeyEvent.KEYCODE_NUMPAD_0
             else -> return false
         }
+        if (event.repeatCount > 0) return true // a held key adds its digit once
         if (digits.length < MAX_DIGITS) digits += digit
         missing = null
         return true

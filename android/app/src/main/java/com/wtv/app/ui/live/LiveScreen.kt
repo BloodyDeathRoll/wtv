@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -43,6 +42,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -56,10 +56,10 @@ import androidx.tv.material3.Text
 import com.wtv.app.R
 import com.wtv.app.WtvApplication
 import com.wtv.app.data.Channel
-import com.wtv.app.data.allShown
-import com.wtv.app.data.channelByNumber
 import com.wtv.app.data.LiveCategory
 import com.wtv.app.data.LiveFilters
+import com.wtv.app.data.allShown
+import com.wtv.app.data.channelByNumber
 import com.wtv.app.data.liveGroups
 import com.wtv.app.player.OnNow
 import com.wtv.app.player.ProviderLogin
@@ -174,60 +174,60 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
         true
     }
     Box(Modifier.fillMaxSize().onKeyEvent { numbers.key(it.nativeKeyEvent) }) {
-    Column(Modifier.fillMaxSize().padding(start = 88.dp, end = 48.dp, top = 96.dp)) {
-        Box(Modifier.size(1.dp).focusRequester(parked).focusProperties { canFocus = parking }.focusable())
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                groups.forEach { g ->
-                    FilterChip(
-                        selected = g.label == shown.label,
-                        onClick = { shownLabel = g.label },
-                        modifier = Modifier
-                            // Down from the tabs lands on the shown group's chip.
-                            .then(if (g.label == shown.label) Modifier.focusRequester(chip).focusRequester(firstFocus) else Modifier)
-                            .focusProperties { this.up = up }
-                            .onFocusChanged { if (it.isFocused) shownLabel = g.label },
-                    ) { Text("${g.label}  ${g.channels.size}") }
-                }
-            }
-            Spacer(Modifier.padding(start = 24.dp))
-            Text(stringResource(R.string.live_hint), style = MaterialTheme.typography.bodySmall, color = WtvColors.TextMuted)
-        }
-        Spacer(Modifier.height(20.dp))
-        LazyVerticalGrid(
-            state = grid,
-            columns = GridCells.Fixed(COLUMNS),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(top = 6.dp, bottom = 48.dp),
-        ) {
-            itemsIndexed(shown.channels, key = { _, c -> c.id }) { i, c ->
-                // Asked for each card as it comes on screen; the answer is kept until the programme ends.
-                // A card left on screen moves on when its programme ends.
-                val onNow by produceState(OnNow.cached(c.extId, nowSecs()).second, c.extId) {
-                    val login = providerLogin ?: return@produceState
-                    while (true) {
-                        val p = OnNow.fetch(app.http, login, c.extId, nowSecs())
-                        value = p
-                        // No guide, or a failed call: OnNow's own wait decides when asking again is worth it.
-                        delay(((p?.end ?: (nowSecs() + 60)) - nowSecs()).coerceAtLeast(5) * 1000)
+        Column(Modifier.fillMaxSize().padding(start = 88.dp, end = 48.dp, top = 96.dp)) {
+            Box(Modifier.size(1.dp).focusRequester(parked).focusProperties { canFocus = parking }.focusable())
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    groups.forEach { g ->
+                        FilterChip(
+                            selected = g.label == shown.label,
+                            onClick = { shownLabel = g.label },
+                            modifier = Modifier
+                                // Down from the tabs lands on the shown group's chip.
+                                .then(if (g.label == shown.label) Modifier.focusRequester(chip).focusRequester(firstFocus) else Modifier)
+                                .focusProperties { this.up = up }
+                                .onFocusChanged { if (it.isFocused) shownLabel = g.label },
+                        ) { Text("${g.label}  ${g.channels.size}") }
                     }
                 }
-                ChannelCard(
-                    onNow = onNow?.title?.takeIf { it.isNotBlank() },
-                    logo = c.logo,
-                    name = c.name,
-                    number = c.num,
-                    favorite = c.id in favorites,
-                    onClick = { onWatch(shown.channels, i, all) },
-                    onLongClick = { menu = c },
-                    // Up from the first row goes to the shown group's chip.
-                    modifier = if (i < COLUMNS) Modifier.focusProperties { this.up = chip } else Modifier,
-                )
+                Spacer(Modifier.padding(start = 24.dp))
+                Text(stringResource(R.string.live_hint), style = MaterialTheme.typography.bodySmall, color = WtvColors.TextMuted)
+            }
+            Spacer(Modifier.height(20.dp))
+            LazyVerticalGrid(
+                state = grid,
+                columns = GridCells.Fixed(COLUMNS),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(top = 6.dp, bottom = 48.dp),
+            ) {
+                itemsIndexed(shown.channels, key = { _, c -> c.id }) { i, c ->
+                    // Asked for each card as it comes on screen; the answer is kept until the programme ends.
+                    // A card left on screen moves on when its programme ends.
+                    val onNow by produceState(OnNow.cached(c.extId, nowSecs()).second, c.extId) {
+                        val login = providerLogin ?: return@produceState
+                        while (true) {
+                            val p = OnNow.fetch(app.http, login, c.extId, nowSecs())
+                            value = p
+                            // No guide, or a failed call: OnNow's own wait decides when asking again is worth it.
+                            delay(((p?.end ?: (nowSecs() + 60)) - nowSecs()).coerceAtLeast(5) * 1000)
+                        }
+                    }
+                    ChannelCard(
+                        onNow = onNow?.title?.takeIf { it.isNotBlank() },
+                        logo = c.logo,
+                        name = c.name,
+                        number = c.num,
+                        favorite = c.id in favorites,
+                        onClick = { onWatch(shown.channels, i, all) },
+                        onLongClick = { menu = c },
+                        // Up from the first row goes to the shown group's chip.
+                        modifier = if (i < COLUMNS) Modifier.focusProperties { this.up = chip } else Modifier,
+                    )
+                }
             }
         }
-    }
-    NumberOverlay(numbers)
+        NumberOverlay(numbers)
     }
     // Hiding removes the focused card (or its whole group), and Android would then give the
     // focus to the first focusable item: the Home tab, which switches the section. So the focus
