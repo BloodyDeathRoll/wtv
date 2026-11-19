@@ -99,3 +99,13 @@ fun nowAndNext(programmes: List<Programme>, now: Long): Pair<Programme?, Program
     val i = programmes.indexOfFirst { now >= it.start && now < it.end }
     return if (i >= 0) programmes[i] to programmes.getOrNull(i + 1) else null to programmes.firstOrNull { it.start > now }
 }
+
+/**
+ * The guide panel's lead (the catch-up programme playing, else what is on at `now`) and what is
+ * still to come after it: not yet over at `now`, one per start (providers repeat entries).
+ */
+internal fun guideOf(programmes: List<Programme>, playing: Programme?, now: Long): Pair<Programme?, List<Programme>> {
+    val lead = playing ?: nowAndNext(programmes, now).first
+    val from = maxOf(lead?.end ?: now, now)
+    return lead to programmes.filter { it.start >= from }.distinctBy { it.start }
+}

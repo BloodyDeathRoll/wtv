@@ -86,4 +86,20 @@ class EpgTest {
         val list = listOf(p(100), p(300), p(300), p(500), p(200, archived = false), p(400, text = "soon"), p(1000))
         assertEquals(listOf(500L, 300L, 100L), playable(list, now = 1000).map { it.start })
     }
+
+    @Test fun `guide leads with what is on, then what is still to come, one per start`() {
+        fun p(start: Long) = Programme("p$start", null, start, start + 100)
+        val list = listOf(p(100), p(200), p(300), p(300), p(400))
+        val (lead, after) = guideOf(list, playing = null, now = 250)
+        assertEquals(200L, lead?.start)
+        assertEquals(listOf(300L, 400L), after.map { it.start })
+    }
+
+    @Test fun `in catch-up the guide leads with the programme playing and lists only what has not aired`() {
+        fun p(start: Long) = Programme("p$start", null, start, start + 100)
+        val list = listOf(p(100), p(200), p(300), p(400))
+        val (lead, after) = guideOf(list, playing = p(100), now = 350)
+        assertEquals(100L, lead?.start)
+        assertEquals(listOf(400L), after.map { it.start })
+    }
 }

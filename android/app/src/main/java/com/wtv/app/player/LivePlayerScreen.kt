@@ -255,6 +255,7 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
     LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
 
     fun open(kind: LivePanel) {
+        panelList = emptyList()
         panelLoading = true // from the first frame, not "nothing to show"
         panel = kind
     }
@@ -404,9 +405,7 @@ private fun BoxScope.EarlierPanel(channel: Channel, programmes: List<Programme>,
 @Composable
 private fun BoxScope.GuidePanel(channel: Channel, programmes: List<Programme>, playing: Programme?, loading: Boolean, failed: Boolean) {
     val first = remember { FocusRequester() }
-    val now = System.currentTimeMillis() / 1000
-    val lead = playing ?: nowAndNext(programmes, now).first
-    val after = programmes.filter { it.start >= (lead?.end ?: now) }
+    val (lead, after) = guideOf(programmes, playing, System.currentTimeMillis() / 1000)
     Column(Modifier.fullScreenPanel()) {
         Text(channel.name, style = MaterialTheme.typography.titleMedium, color = WtvColors.TextSecondary)
         Spacer(Modifier.height(12.dp))
