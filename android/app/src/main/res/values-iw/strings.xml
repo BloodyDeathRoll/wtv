@@ -139,4 +139,5 @@
     <string name="search_hint_live">חיפוש ערוצים</string>
     <string name="live_no_channel">אין ערוץ %1$d</string>
     <string name="live_channels">ערוצים</string>
+    <string name="wtw_match">%1$d%% התאמה</string>
 </resources>

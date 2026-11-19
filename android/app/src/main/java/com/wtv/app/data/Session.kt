@@ -41,10 +41,10 @@ class Session(
     /** The Google account's email, or null while not signed in with Google. */
     val email: String? get() = prefs.getString(EMAIL, null)
 
-    /** A valid access token, refreshed or created as needed. */
-    suspend fun token(): String = lock.withLock {
+    /** A valid access token (good for at least `minSeconds` more), refreshed or created as needed. */
+    suspend fun token(minSeconds: Long = 60): String = lock.withLock {
         requireConfigured(url, key, settingNames)
-        current() ?: refresh() ?: if (anonymous) signUpAnonymously() else throw ApiException("Not signed in")
+        current(minSeconds) ?: refresh() ?: if (anonymous) signUpAnonymously() else throw ApiException("Not signed in")
     }
 
     /**
@@ -133,9 +133,9 @@ class Session(
         if (prefs.getString(ACCESS, null) == rejected) prefs.edit().remove(ACCESS).apply()
     }
 
-    private fun current(): String? {
+    private fun current(minSeconds: Long = 60): String? {
         val token = prefs.getString(ACCESS, null) ?: return null
-        return token.takeIf { isFresh(prefs.getLong(EXPIRES_AT, 0), System.currentTimeMillis() / 1000) }
+        return token.takeIf { isFresh(prefs.getLong(EXPIRES_AT, 0), System.currentTimeMillis() / 1000, minSeconds) }
     }
 
     /**
@@ -215,8 +215,8 @@ class Session(
  */
 internal fun isRejection(code: Int): Boolean = code in setOf(400, 401, 403, 404, 422)
 
-/** An access token is used until a minute before it expires. */
-internal fun isFresh(expiresAtSeconds: Long, nowSeconds: Long): Boolean = nowSeconds < expiresAtSeconds - 60
+/** An access token is used until a minute (or `marginSeconds`) before it expires. */
+internal fun isFresh(expiresAtSeconds: Long, nowSeconds: Long, marginSeconds: Long = 60): Boolean = nowSeconds < expiresAtSeconds - marginSeconds
 
 /** A build without the database settings (local.properties) fails with a clear message, not a crash. */
 internal fun requireConfigured(url: String, key: String, names: String) {

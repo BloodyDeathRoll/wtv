@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -59,6 +60,8 @@ fun ImageCard(
     onFocused: () -> Unit = {},
     progress: Float? = null,
     onLongClick: (() -> Unit)? = null,
+    /** WTW's "% match", in the top right corner. */
+    match: Int? = null,
 ) {
     Card(
         onClick = onClick,
@@ -110,6 +113,10 @@ fun ImageCard(
                     modifier = Modifier.align(Alignment.BottomStart).padding(10.dp),
                 )
             }
+            if (match != null) {
+                // Top right in Hebrew too, as asked.
+                MatchBadge(match, Modifier.align(AbsoluteAlignment.TopRight).padding(6.dp), small = true)
+            }
             if (progress != null) {
                 Box(Modifier.align(Alignment.BottomStart).fillMaxWidth().height(4.dp).background(Color(0x66000000))) {
                     Box(Modifier.fillMaxWidth(progress).height(4.dp).background(WtvColors.Accent))
@@ -130,7 +137,8 @@ fun LandscapeCard(
     onFocused: () -> Unit = {},
     progress: Float? = null,
     onLongClick: (() -> Unit)? = null,
-) = ImageCard(imageUrl, title, onClick, width = 200.dp, aspectRatio = 16f / 9f, modifier, label, onFocused, progress, onLongClick)
+    match: Int? = null,
+) = ImageCard(imageUrl, title, onClick, width = 200.dp, aspectRatio = 16f / 9f, modifier, label, onFocused, progress, onLongClick, match)
 
 /** 2:3 card for the full category grid and posters. */
 @Composable

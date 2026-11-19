@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,6 +38,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -72,6 +74,7 @@ import com.wtv.app.ui.components.ActionDivider
 import com.wtv.app.ui.components.ActionIcon
 import com.wtv.app.ui.components.Backdrop
 import com.wtv.app.ui.components.HeroText
+import com.wtv.app.ui.components.MatchBadge
 import com.wtv.app.ui.components.LandscapeCard
 import com.wtv.app.ui.components.MetaRow
 import com.wtv.app.ui.components.PersonCard
@@ -236,7 +239,8 @@ fun TitleScreen(
         Backdrop(title.heroImage)
         Column(Modifier.padding(start = 88.dp, top = 64.dp)) {
             // Fixed height: the rows do not jump when the header text changes.
-            Box(Modifier.height(300.dp)) {
+            Box(Modifier.fillMaxWidth().padding(end = 64.dp).height(300.dp)) {
+                wtwMatch(title)?.let { MatchBadge(it, Modifier.align(AbsoluteAlignment.TopRight)) }
                 val e = episode
                 HeroText(
                     modifier = Modifier.width(560.dp),
@@ -494,3 +498,12 @@ private suspend fun <T> orDefault(default: T, block: suspend () -> T): T =
     } catch (e: Exception) {
         default
     }
+
+/** WTW's own "% match" for the title while WTW is connected on this device; asked for when not known yet. */
+@Composable
+private fun wtwMatch(title: Title): Int? {
+    val app = LocalContext.current.applicationContext as WtvApplication
+    val connected = remember { app.wtw.email != null }
+    LaunchedEffect(title.id, connected) { if (connected && title.match == null) app.wtwScores.request(listOf(title.id)) }
+    return if (connected) app.wtwScores[title.id] ?: title.match else null
+}
