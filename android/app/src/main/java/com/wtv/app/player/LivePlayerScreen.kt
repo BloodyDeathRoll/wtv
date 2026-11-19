@@ -105,9 +105,10 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
     // The banner's clock: ticks while the banner is up (on radio it stays), so the line and bar move on.
     var now by remember { mutableLongStateOf(System.currentTimeMillis() / 1000) }
     val http = (context.applicationContext as WtvApplication).http
-    // The past programme playing instead of live, if any; the earlier-programmes panel (null: closed).
+    // The past programme playing instead of live, if any; the full-screen panel open over the picture (null: none) and its list.
     var catchup by remember { mutableStateOf<Programme?>(null) }
-    var panel by remember { mutableStateOf<List<Programme>?>(null) }
+    var panel by remember { mutableStateOf<LivePanel?>(null) }
+    var panelList by remember { mutableStateOf(emptyList<Programme>()) }
     var panelLoading by remember { mutableStateOf(false) }
     var panelFailed by remember { mutableStateOf(false) }
     // Catch-up's place in the programme, for the banner's time bar (ms), and whether it is paused.
@@ -131,12 +132,18 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
     }
     // The panel's list, read when it opens.
     val panelOpen = panel != null
-    LaunchedEffect(panelOpen, channel.id) {
-        if (!panelOpen) return@LaunchedEffect
+    LaunchedEffect(panel, channel.id) {
+        val kind = panel ?: return@LaunchedEffect
+        panelList = emptyList()
         panelFailed = false
         panelLoading = true
-        runCatching { archive(http, login, channel.extId, System.currentTimeMillis() / 1000) }
-            .onSuccess { panel = it }
+        runCatching {
+            when (kind) {
+                LivePanel.Earlier -> archive(http, login, channel.extId, System.currentTimeMillis() / 1000)
+                LivePanel.Guide -> shortEpg(http, login, channel.extId, limit = GUIDE_LIMIT)
+            }
+        }
+            .onSuccess { panelList = it }
             .onFailure {
                 if (it is CancellationException) throw it
                 panelFailed = true
@@ -247,6 +254,11 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
     }
     LaunchedEffect(Unit) { runCatching { firstFocus.requestFocus() } }
 
+    fun open(kind: LivePanel) {
+        panelLoading = true // from the first frame, not "nothing to show"
+        panel = kind
+    }
+
     fun move(step: Int) {
         catchup = null
         index = Math.floorMod(index + step, channels.size)
@@ -288,17 +300,12 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
                     AndroidKeyEvent.KEYCODE_DPAD_LEFT -> seek(forward = false, it.nativeKeyEvent) || move(-1).let { true }
                     AndroidKeyEvent.KEYCODE_CHANNEL_UP -> move(1).let { true }
                     AndroidKeyEvent.KEYCODE_CHANNEL_DOWN -> move(-1).let { true }
-                    // Up: what is on. Down: the earlier programmes, on a channel that keeps them.
-                    AndroidKeyEvent.KEYCODE_DPAD_UP -> bannerAt++.let { true }
-                    AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
-                        if (channel.archiveDays > 0) {
-                            panelLoading = true // from the first frame, not "nothing to play back"
-                            panel = emptyList()
-                        } else {
-                            bannerAt++
-                        }
+                    // Up: the earlier programmes, on a channel that keeps them. Down: what is on and the channel's guide.
+                    AndroidKeyEvent.KEYCODE_DPAD_UP -> {
+                        if (channel.archiveDays > 0) open(LivePanel.Earlier) else bannerAt++
                         true
                     }
+                    AndroidKeyEvent.KEYCODE_DPAD_DOWN -> open(LivePanel.Guide).let { true }
                     AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_INFO,
                     AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                         if (catchup != null) player.playWhenReady = !player.playWhenReady
@@ -340,10 +347,10 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
                 catchup = if (shown != null) CatchupPlace(position, length, paused) else null,
             )
         }
-        panel?.let { list ->
-            EarlierPanel(
+        when (panel) {
+            LivePanel.Earlier -> EarlierPanel(
                 channel = channel,
-                programmes = list,
+                programmes = panelList,
                 loading = panelLoading,
                 failed = panelFailed,
                 onPlay = { p ->
@@ -353,6 +360,8 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
                     runCatching { firstFocus.requestFocus() }
                 },
             )
+            LivePanel.Guide -> GuidePanel(channel, panelList, playing = catchup, loading = panelLoading, failed = panelFailed)
+            null -> Unit
         }
     }
 }
@@ -363,14 +372,7 @@ private fun BoxScope.EarlierPanel(channel: Channel, programmes: List<Programme>,
     val first = remember { FocusRequester() }
     val locale = LocalConfiguration.current.locales[0]
     val day = remember(locale) { java.time.format.DateTimeFormatter.ofPattern("EEE d.M", locale) }
-    Column(
-        Modifier
-            .align(Alignment.CenterStart)
-            .fillMaxHeight()
-            .width(640.dp)
-            .background(Color(0xF2101820))
-            .padding(start = 48.dp, end = 24.dp, top = 40.dp),
-    ) {
+    Column(Modifier.fullScreenPanel()) {
         // Title and channel apart: a Hebrew channel name inside an English line comes out in the wrong order.
         Text(stringResource(R.string.live_earlier), style = MaterialTheme.typography.headlineSmall, color = WtvColors.TextPrimary)
         Text(channel.name, style = MaterialTheme.typography.titleMedium, color = WtvColors.TextSecondary)
@@ -394,6 +396,59 @@ private fun BoxScope.EarlierPanel(channel: Channel, programmes: List<Programme>,
     }
     LaunchedEffect(programmes.isNotEmpty()) { if (programmes.isNotEmpty()) runCatching { first.requestFocus() } }
 }
+
+/**
+ * What is on (or the catch-up programme playing) with its description, then the channel's guide after it.
+ * Rows take focus only so the remote can scroll the list.
+ */
+@Composable
+private fun BoxScope.GuidePanel(channel: Channel, programmes: List<Programme>, playing: Programme?, loading: Boolean, failed: Boolean) {
+    val first = remember { FocusRequester() }
+    val now = System.currentTimeMillis() / 1000
+    val lead = playing ?: nowAndNext(programmes, now).first
+    val after = programmes.filter { it.start >= (lead?.end ?: now) }
+    Column(Modifier.fullScreenPanel()) {
+        Text(channel.name, style = MaterialTheme.typography.titleMedium, color = WtvColors.TextSecondary)
+        Spacer(Modifier.height(12.dp))
+        if (lead != null) {
+            Text(lead.title, style = MaterialTheme.typography.headlineMedium, color = WtvColors.TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("${clock(lead.start)}–${clock(lead.end)}", style = MaterialTheme.typography.titleMedium, color = WtvColors.Accent)
+            lead.description?.let {
+                Spacer(Modifier.height(8.dp))
+                Text(it, style = MaterialTheme.typography.bodyLarge, color = WtvColors.TextSecondary, maxLines = 5, overflow = TextOverflow.Ellipsis)
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+        Text(stringResource(R.string.live_guide), style = MaterialTheme.typography.titleLarge, color = WtvColors.TextPrimary)
+        Spacer(Modifier.height(8.dp))
+        when {
+            failed -> Text(stringResource(R.string.live_guide_failed), color = WtvColors.TextSecondary)
+            loading -> Text(stringResource(R.string.loading), color = WtvColors.TextMuted)
+            after.isEmpty() -> Text(stringResource(R.string.live_no_guide), color = WtvColors.TextSecondary)
+            else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+                itemsIndexed(after, key = { _, p -> p.start }) { i, p ->
+                    ListItem(
+                        selected = false,
+                        onClick = {},
+                        // Time and title apart: a Hebrew title in one line with the time swaps their order.
+                        leadingContent = { Text(clock(p.start), style = MaterialTheme.typography.titleMedium) },
+                        headlineContent = { Text(p.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        supportingContent = p.description?.let { d -> { Text(d, maxLines = 2, overflow = TextOverflow.Ellipsis) } },
+                        modifier = if (i == 0) Modifier.focusRequester(first) else Modifier,
+                    )
+                }
+            }
+        }
+    }
+    LaunchedEffect(after.isNotEmpty()) { if (after.isNotEmpty()) runCatching { first.requestFocus() } }
+}
+
+/** A panel over the whole picture, dark enough to read on but letting the programme show through. */
+private fun Modifier.fullScreenPanel(): Modifier =
+    fillMaxSize().background(Color(0xD9000000)).padding(horizontal = 96.dp, vertical = 48.dp)
+
+/** The two full-screen panels: earlier programmes (Up) and what is on with the guide (Down). */
+private enum class LivePanel { Earlier, Guide }
 
 private fun dayOf(unixSeconds: Long, format: java.time.format.DateTimeFormatter): String =
     java.time.Instant.ofEpochSecond(unixSeconds).atZone(java.time.ZoneId.systemDefault()).format(format)
@@ -447,8 +502,12 @@ private fun BoxScope.Banner(channel: Channel, error: String?, onAir: Pair<Progra
                 if (catchup != null) {
                     Text(stringResource(R.string.live_catchup_hint), style = MaterialTheme.typography.bodySmall, color = WtvColors.TextMuted)
                 }
-                if (catchup == null && channel.archiveDays > 0) {
-                    Text(stringResource(R.string.live_earlier_hint), style = MaterialTheme.typography.bodySmall, color = WtvColors.TextMuted)
+                if (catchup == null) {
+                    Text(
+                        stringResource(if (channel.archiveDays > 0) R.string.live_earlier_hint else R.string.live_guide_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = WtvColors.TextMuted,
+                    )
                 }
                 if (next != null) {
                     Text(
@@ -517,3 +576,5 @@ private const val HELD_STEP_GAP_MS = 400L
 /** A forward step stops this far before the end: the end returns to live. */
 private const val END_MARGIN_MS = 10_000L
 private const val POSITION_TICK_MS = 500L
+/** Programmes asked for the guide panel: the provider's short guide stops at what it has. */
+private const val GUIDE_LIMIT = 30

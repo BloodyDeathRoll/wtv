@@ -106,7 +106,11 @@
     <string name="setting_hidden_hint">בחירה מחזירה את הפריט</string>
     <string name="live_next">בהמשך  %1$s  %2$s</string>
     <string name="live_earlier">תוכניות קודמות</string>
-    <string name="live_earlier_hint">▼  תוכניות קודמות    ◀ ▶  ערוצים</string>
+    <string name="live_earlier_hint">▲  תוכניות קודמות    ▼  לוח שידורים    ◀ ▶  ערוצים</string>
+    <string name="live_guide_hint">▼  לוח שידורים    ◀ ▶  ערוצים</string>
+    <string name="live_guide">בהמשך בערוץ</string>
+    <string name="live_guide_failed">לא ניתן לטעון את לוח השידורים</string>
+    <string name="live_no_guide">אין לוח שידורים לערוץ הזה</string>
     <string name="live_catchup_paused">מושהה</string>
     <string name="live_catchup_hint">◀ ▶ אחורה או קדימה 30 שניות (לחיצה ארוכה: מהר יותר)    OK השהיה</string>
     <string name="live_catchup">צפייה חוזרת · כפתור חזרה מחזיר לשידור החי</string>
