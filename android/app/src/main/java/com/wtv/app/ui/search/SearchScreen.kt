@@ -1,6 +1,5 @@
 package com.wtv.app.ui.search
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -100,8 +99,7 @@ private class Suggestion(val text: String, val tag: String?, val pick: () -> Uni
  * Text search, in English or Hebrew. The field opens the TV's keyboard; as
  * the user types, suggestions appear under it (actors and titles, or
  * channels), then the results: actors, then title posters, or channel cards
- * on Live TV. With `grow`, the field opens out across the line when the
- * page appears (the search icon on a section).
+ * on Live TV.
  */
 @Composable
 fun SearchScreen(
@@ -110,7 +108,6 @@ fun SearchScreen(
     onPerson: (CastMember) -> Unit,
     onWatch: (List<Channel>, Int) -> Unit,
     scope: SearchScope = SearchScope.All,
-    grow: Boolean = false,
 ) {
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
     val hebrew = isHebrew()
@@ -169,10 +166,6 @@ fun SearchScreen(
             ).take(SUGGESTIONS)
     }
 
-    // The section's icon opens the field out across the line.
-    var opened by remember { mutableStateOf(!grow) }
-    LaunchedEffect(Unit) { opened = true }
-    val fieldWidth by animateDpAsState(if (opened) 900.dp else 56.dp, label = "field")
     val showSuggestions = nearField && suggestions.isNotEmpty()
 
     // The Search key waits for this query's results: then it moves to them, or gives up when there are none.
@@ -189,7 +182,7 @@ fun SearchScreen(
     }
 
     Column(Modifier.fillMaxSize().padding(start = 88.dp, end = 48.dp, top = 48.dp)) {
-        Box(Modifier.fillMaxWidth(), contentAlignment = if (grow) Alignment.TopEnd else Alignment.TopStart) {
+        Box(Modifier.fillMaxWidth()) {
             Column(Modifier.onFocusChanged { nearField = it.hasFocus }) {
                 BasicTextField(
                     value = query,
@@ -208,7 +201,7 @@ fun SearchScreen(
                         if (!current || runCatching { firstResult.requestFocus() }.isFailure) toResults = true
                     }),
                     modifier = Modifier
-                        .width(fieldWidth)
+                        .width(FIELD_WIDTH)
                         .focusRequester(field)
                         // A text field keeps Down for its cursor; on a TV Down means "to what is below".
                         .onPreviewKeyEvent {
@@ -224,7 +217,7 @@ fun SearchScreen(
                         .padding(horizontal = 20.dp, vertical = 12.dp),
                     decorationBox = { inner ->
                         Box {
-                            if (query.isEmpty() && opened) {
+                            if (query.isEmpty()) {
                                 Text(stringResource(scope.hint), style = MaterialTheme.typography.headlineMedium, color = WtvColors.TextMuted, maxLines = 1)
                             }
                             inner()
@@ -233,7 +226,7 @@ fun SearchScreen(
                 )
                 if (showSuggestions) {
                     Spacer(Modifier.height(8.dp))
-                    Column(Modifier.width(fieldWidth)) {
+                    Column(Modifier.width(FIELD_WIDTH)) {
                         suggestions.forEachIndexed { i, s ->
                             Button(
                                 onClick = s.pick,
@@ -327,3 +320,5 @@ private fun Found(
 private fun Note(text: String) {
     Text(text, style = MaterialTheme.typography.titleMedium, color = WtvColors.TextMuted)
 }
+
+private val FIELD_WIDTH = 900.dp
