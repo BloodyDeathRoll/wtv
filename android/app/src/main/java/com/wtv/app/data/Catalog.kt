@@ -160,8 +160,8 @@ class Catalog(private val api: Api) {
     }
 
     /** The newest titles the provider has, in one category or all. */
-    suspend fun latest(kind: Kind, category: Int? = null, limit: Int = 10): List<Title> =
-        api.get(latestPath(kind, category, limit)).objects().map(::title)
+    suspend fun latest(kind: Kind, category: Int? = null, limit: Int = 10, genre: Boolean = false): List<Title> =
+        api.get(latestPath(kind, category, limit, genre)).objects().map(::title)
 
     /** One page of a category, best first by the user's WTW ranking; newest first without one. */
     suspend fun recommendedPage(category: Category, offset: Int, limit: Int): List<Title> =
@@ -371,8 +371,9 @@ class Catalog(private val api: Api) {
         api.post("user_settings?on_conflict=user_id", JSONObject().put("show_radio", show).toString(), prefer = UPSERT)
 
     /** One row per provider category, newest first; empty categories left out. */
-    suspend fun rows(kind: Kind, perRow: Int = 10): List<Pair<Category, List<Title>>> = coroutineScope {
-        categories(kind).map { c -> async { rowRequests.withPermit { c to latest(kind, c.id, perRow) } } }
+    /** A section's rows: its provider categories, then `extra` (genres), newest first; empty ones left out. */
+    suspend fun rows(kind: Kind, perRow: Int = 10, extra: List<Category> = emptyList()): List<Pair<Category, List<Title>>> = coroutineScope {
+        (categories(kind) + extra).map { c -> async { rowRequests.withPermit { c to latest(kind, c.id, perRow, c.genre) } } }
             .awaitAll()
             .filter { it.second.isNotEmpty() }
     }
@@ -386,8 +387,8 @@ private fun cards(kind: Kind, category: Int?, genre: Boolean = false): String =
     "titles?select=$TITLE_COLUMNS&kind=eq.${kind.db}&available=is.true&is_primary=is.true" +
         (category?.let { if (genre) "&tmdb_genre_ids=cs.%7B$it%7D" else "&group_category_ids=cs.%7B$it%7D" } ?: "")
 
-internal fun latestPath(kind: Kind, category: Int?, limit: Int): String =
-    cards(kind, category) + "&order=${Sort.Added.order(hebrew = false)}&limit=$limit"
+internal fun latestPath(kind: Kind, category: Int?, limit: Int, genre: Boolean = false): String =
+    cards(kind, category, genre) + "&order=${Sort.Added.order(hebrew = false)}&limit=$limit"
 
 internal fun recommendedPath(category: Category, offset: Int, limit: Int): String =
     "rpc/recommended_page?select=$TITLE_COLUMNS&p_kind=${category.kind.db}" +

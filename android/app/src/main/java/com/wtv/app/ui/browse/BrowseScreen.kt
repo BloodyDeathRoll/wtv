@@ -256,7 +256,9 @@ private suspend fun loadRows(
             val again = async {
                 runCatching { if (wtw) catalog.watchAgain(kind = source.kind) else catalog.finishedTitles(kind = source.kind) }.getOrDefault(emptyList())
             }
-            val rows = catalog.rows(source.kind).map { (c, titles) -> BrowseRow(c.label(hebrew), c, titles) }
+            // The provider files series by service only: their genre rows come from TMDB (movies have the provider's).
+            val genres = if (source.kind == Kind.Series) runCatching { catalog.genreCategories(Kind.Series, hebrew) }.getOrDefault(emptyList()) else emptyList()
+            val rows = catalog.rows(source.kind, extra = genres).map { (c, titles) -> BrowseRow(c.label(hebrew), c, titles) }
             listOf(
                 BrowseRow(forYou.recommended, null, recommended.await(), forYou = true, forYouKind = source.kind),
                 BrowseRow(forYou.watchAgain, null, again.await()),
