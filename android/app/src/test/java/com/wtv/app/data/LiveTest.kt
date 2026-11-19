@@ -62,4 +62,18 @@ class LiveTest {
         assertEquals(20, group.getInt("category_id"))
         assertEquals(false, group.getBoolean("hidden"))
     }
+
+    @Test fun `a typed number is found in the watched group first, then in all channels`() {
+        val group = listOf(ch(5), ch(9))
+        val all = listOf(ch(1), ch(5), ch(9), ch(12))
+        assertEquals(group to 1, channelByNumber(9, group, all))
+        assertEquals(all to 3, channelByNumber(12, group, all))
+        assertEquals(null, channelByNumber(77, group, all))
+    }
+
+    @Test fun `all shown channels are each once, by number, unnumbered last`() {
+        val unnumbered = ch(3).copy(num = null)
+        val groups = listOf(LiveGroup(null, "Favourites", listOf(ch(9), ch(2))), LiveGroup(null, "Israel", listOf(unnumbered, ch(2), ch(5))))
+        assertEquals(listOf(2L, 5L, 9L, 3L), allShown(groups).map { it.id })
+    }
 }

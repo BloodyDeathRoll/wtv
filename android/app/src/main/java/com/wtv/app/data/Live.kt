@@ -72,3 +72,16 @@ internal fun groupBody(categoryId: Int, hidden: Boolean): String =
 /** The JSON body that sets a channel's favourite flag. The user is the database's: the signed-in one. */
 internal fun favoriteBody(channelId: Long, favorite: Boolean): String =
     JSONObject().put("channel_id", channelId).put("favorite", favorite).toString()
+
+/**
+ * The channel with this provider number: in `current` first (its order kept), else in `all`; null when neither has it.
+ * Numbers can repeat across provider categories: the first one wins.
+ */
+fun channelByNumber(num: Int, current: List<Channel>, all: List<Channel>): Pair<List<Channel>, Int>? {
+    current.indexOfFirst { it.num == num }.takeIf { it >= 0 }?.let { return current to it }
+    return all.indexOfFirst { it.num == num }.takeIf { it >= 0 }?.let { all to it }
+}
+
+/** Every channel the page shows, once, in channel-number order (unnumbered last). */
+fun allShown(groups: List<LiveGroup>): List<Channel> =
+    groups.flatMap { it.channels }.distinctBy { it.id }.sortedWith(compareBy(nullsLast()) { it.num })

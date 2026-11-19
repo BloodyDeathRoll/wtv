@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -70,6 +71,9 @@ import coil3.compose.AsyncImage
 import com.wtv.app.R
 import com.wtv.app.WtvApplication
 import com.wtv.app.data.Channel
+import com.wtv.app.data.channelByNumber
+import com.wtv.app.ui.live.NumberOverlay
+import com.wtv.app.ui.live.rememberNumberEntry
 import com.wtv.app.ui.theme.WtvColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -90,11 +94,20 @@ import kotlinx.coroutines.delay
  */
 @OptIn(UnstableApi::class)
 @Composable
-fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, firstFocus: FocusRequester) {
+fun LivePlayerScreen(
+    channels: List<Channel>,
+    start: Int,
+    login: ProviderLogin,
+    firstFocus: FocusRequester,
+    /** Every channel the user can watch, for a number typed that is not in `channels`. */
+    all: List<Channel> = channels,
+) {
     require(channels.isNotEmpty()) { "A live page needs at least one channel" }
     val context = LocalContext.current
+    // The channels Left and Right move through: the group watched from, or all of them after a number jump outside it.
+    var list by remember { mutableStateOf(channels) }
     var index by remember { mutableIntStateOf(start.coerceIn(channels.indices)) }
-    val channel = channels[index]
+    val channel = list[index]
     var error by remember { mutableStateOf<String?>(null) }
     var bannerAt by remember { mutableIntStateOf(0) } // bumped to show the banner again
     var banner by remember { mutableStateOf(true) }
@@ -136,11 +149,16 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
         val kind = panel ?: return@LaunchedEffect
         panelList = emptyList()
         panelFailed = false
+        if (kind == LivePanel.Channels) {
+            panelLoading = false
+            return@LaunchedEffect
+        }
         panelLoading = true
         runCatching {
             when (kind) {
                 LivePanel.Earlier -> archive(http, login, channel.extId, System.currentTimeMillis() / 1000)
                 LivePanel.Guide -> shortEpg(http, login, channel.extId, limit = GUIDE_LIMIT)
+                LivePanel.Channels -> emptyList()
             }
         }
             .onSuccess { panelList = it }
@@ -262,7 +280,19 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
 
     fun move(step: Int) {
         catchup = null
-        index = Math.floorMod(index + step, channels.size)
+        index = Math.floorMod(index + step, list.size)
+    }
+
+    // A number typed on the remote goes to that channel, from wherever the screen is.
+    val numbers = rememberNumberEntry { num ->
+        val found = channelByNumber(num, list, all) ?: return@rememberNumberEntry false
+        panel = null
+        if (found.first[found.second].id != channel.id) catchup = null // the same channel keeps its programme
+        list = found.first
+        index = found.second
+        bannerAt++
+        runCatching { firstFocus.requestFocus() }
+        true
     }
 
     // Catch-up: back or forward, further a step while the key is held. Held keys repeat many
@@ -293,6 +323,7 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
             .background(Color.Black)
             .focusRequester(firstFocus)
             .onKeyEvent {
+                if (numbers.key(it.nativeKeyEvent)) return@onKeyEvent true
                 // With the panel open, its list has the keys.
                 if (it.type != KeyEventType.KeyDown || panelOpen) return@onKeyEvent false
                 when (it.nativeKeyEvent.keyCode) {
@@ -307,8 +338,17 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
                         true
                     }
                     AndroidKeyEvent.KEYCODE_DPAD_DOWN -> open(LivePanel.Guide).let { true }
-                    AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_INFO,
-                    AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                    // OK: the channel list; in catch-up it pauses and plays, below.
+                    AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER -> {
+                        if (catchup != null) {
+                            player.playWhenReady = !player.playWhenReady
+                            bannerAt++
+                        } else {
+                            open(LivePanel.Channels)
+                        }
+                        true
+                    }
+                    AndroidKeyEvent.KEYCODE_INFO, AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                         if (catchup != null) player.playWhenReady = !player.playWhenReady
                         bannerAt++
                         true
@@ -362,8 +402,16 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
                 },
             )
             LivePanel.Guide -> GuidePanel(channel, panelList, playing = catchup, loading = panelLoading, failed = panelFailed)
+            LivePanel.Channels -> ChannelsPanel(list, index) { i ->
+                panel = null
+                if (i != index) catchup = null // the same channel keeps its programme
+                index = i
+                bannerAt++
+                runCatching { firstFocus.requestFocus() }
+            }
             null -> Unit
         }
+        NumberOverlay(numbers)
     }
 }
 
@@ -446,8 +494,42 @@ private fun BoxScope.GuidePanel(channel: Channel, programmes: List<Programme>, p
 private fun Modifier.fullScreenPanel(): Modifier =
     fillMaxSize().background(Color(0xD9000000)).padding(horizontal = 96.dp, vertical = 48.dp)
 
-/** The two full-screen panels: earlier programmes (Up) and what is on with the guide (Down). */
-private enum class LivePanel { Earlier, Guide }
+/** The full-screen panels: earlier programmes (Up), what is on with the guide (Down), the channel list (OK). */
+private enum class LivePanel { Earlier, Guide, Channels }
+
+/** The channels Left and Right move through, the one watched focused; OK switches to one, Back closes. */
+@Composable
+private fun BoxScope.ChannelsPanel(channels: List<Channel>, current: Int, onPick: (Int) -> Unit) {
+    val focus = remember { FocusRequester() }
+    val rows = rememberLazyListState(initialFirstVisibleItemIndex = (current - 3).coerceAtLeast(0))
+    Column(Modifier.fullScreenPanel()) {
+        Text(stringResource(R.string.live_channels), style = MaterialTheme.typography.headlineSmall, color = WtvColors.TextPrimary)
+        Spacer(Modifier.height(16.dp))
+        LazyColumn(state = rows, verticalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(bottom = 40.dp)) {
+            itemsIndexed(channels, key = { _, c -> c.id }) { i, c ->
+                ListItem(
+                    selected = i == current,
+                    onClick = { onPick(i) },
+                    leadingContent = {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                            Text(c.num?.toString() ?: "", style = MaterialTheme.typography.titleMedium, modifier = Modifier.width(56.dp))
+                            Box(Modifier.size(width = 64.dp, height = 36.dp)) {
+                                if (c.logo != null) AsyncImage(model = c.logo, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                            }
+                        }
+                    },
+                    headlineContent = { Text(c.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    modifier = if (i == current) Modifier.focusRequester(focus) else Modifier,
+                )
+            }
+        }
+    }
+    LaunchedEffect(Unit) {
+        // The focused row is composed once the list has laid out.
+        delay(50)
+        runCatching { focus.requestFocus() }
+    }
+}
 
 private fun dayOf(unixSeconds: Long, format: java.time.format.DateTimeFormatter): String =
     java.time.Instant.ofEpochSecond(unixSeconds).atZone(java.time.ZoneId.systemDefault()).format(format)
