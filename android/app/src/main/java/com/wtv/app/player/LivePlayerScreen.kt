@@ -75,13 +75,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
 /**
- * Live TV, full screen, like a TV box: Up / Down (and the remote's channel
- * keys) change channel within `channels`, wrapping at the ends; OK shows the
- * banner. The banner (number, logo, name, and what is on now and next from the
+ * Live TV, full screen, like a TV box: Left / Right (and the remote's channel
+ * keys) change channel within `channels`, wrapping at the ends; Up and OK show
+ * the banner. The banner (number, logo, name, and what is on now and next from the
  * provider's short guide) shows for a few seconds on every change; on a radio
  * channel it stays. Back leaves. Nothing is saved.
  *
- * Catch-up, on channels that keep an archive: Left opens the earlier
+ * Catch-up, on channels that keep an archive: Down opens the earlier
  * programmes; one chosen plays from its start in place of the live picture.
  * Then Left and Right (and the rewind and fast-forward keys) move 30 s, or
  * 2 minutes a step while held; OK pauses or plays; the banner shows where in
@@ -261,10 +261,9 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
         val held = event.repeatCount >= HELD_REPEATS
         if (event.repeatCount > 0 && event.eventTime - lastStepAt < HELD_STEP_GAP_MS) return true
         lastStepAt = event.eventTime
-        val step = if (held) SEEK_HELD_MS else SEEK_MS
-        val end = player.duration.takeIf { it != C.TIME_UNSET && it > 0 }?.let { (it - END_MARGIN_MS).coerceAtLeast(0L) } ?: Long.MAX_VALUE
-        val to = (player.currentPosition + if (forward) step else -step).coerceIn(0L, end)
-        player.seekTo(to)
+        val length = player.duration.takeIf { it != C.TIME_UNSET && it > 0 }
+        val to = nextPosition(player.currentPosition, length, forward, held)
+        if (to != player.currentPosition) player.seekTo(to)
         position = to
         // After a failed read the player is stopped: a skip tries again from the new place.
         if (player.playerError != null) {
@@ -284,15 +283,22 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
                 // With the panel open, its list has the keys.
                 if (it.type != KeyEventType.KeyDown || panelOpen) return@onKeyEvent false
                 when (it.nativeKeyEvent.keyCode) {
-                    AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_CHANNEL_UP -> move(1).let { true }
-                    AndroidKeyEvent.KEYCODE_DPAD_DOWN, AndroidKeyEvent.KEYCODE_CHANNEL_DOWN -> move(-1).let { true }
-                    AndroidKeyEvent.KEYCODE_DPAD_LEFT -> seek(forward = false, it.nativeKeyEvent) || (channel.archiveDays > 0).also { open ->
-                        if (open) {
+                    // Left and Right change channel; in catch-up they move through the programme.
+                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> seek(forward = true, it.nativeKeyEvent) || move(1).let { true }
+                    AndroidKeyEvent.KEYCODE_DPAD_LEFT -> seek(forward = false, it.nativeKeyEvent) || move(-1).let { true }
+                    AndroidKeyEvent.KEYCODE_CHANNEL_UP -> move(1).let { true }
+                    AndroidKeyEvent.KEYCODE_CHANNEL_DOWN -> move(-1).let { true }
+                    // Up: what is on. Down: the earlier programmes, on a channel that keeps them.
+                    AndroidKeyEvent.KEYCODE_DPAD_UP -> bannerAt++.let { true }
+                    AndroidKeyEvent.KEYCODE_DPAD_DOWN -> {
+                        if (channel.archiveDays > 0) {
                             panelLoading = true // from the first frame, not "nothing to play back"
                             panel = emptyList()
+                        } else {
+                            bannerAt++
                         }
+                        true
                     }
-                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> seek(forward = true, it.nativeKeyEvent)
                     AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_INFO,
                     AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
                         if (catchup != null) player.playWhenReady = !player.playWhenReady
@@ -474,6 +480,17 @@ private fun TimeBar(place: CatchupPlace) {
             Text(duration(place.length), style = MaterialTheme.typography.titleSmall, color = WtvColors.TextSecondary)
         }
     }
+}
+
+/**
+ * Where a catch-up step lands: 30 s (2 minutes held) back or forward, never before the start,
+ * and forward never into the last 10 s (the end returns to live) nor backward from there.
+ */
+internal fun nextPosition(position: Long, length: Long?, forward: Boolean, held: Boolean): Long {
+    val step = if (held) SEEK_HELD_MS else SEEK_MS
+    if (!forward) return (position - step).coerceAtLeast(0L)
+    val end = length?.let { (it - END_MARGIN_MS).coerceAtLeast(0L) } ?: Long.MAX_VALUE
+    return maxOf(position, minOf(position + step, end))
 }
 
 /** "1:05:09" or "5:09". */

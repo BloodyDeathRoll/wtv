@@ -107,7 +107,7 @@
     <string name="setting_hidden_hint">Select one to show it again</string>
     <string name="live_next">Next  %1$s  %2$s</string>
     <string name="live_earlier">Earlier programmes</string>
-    <string name="live_earlier_hint">◀  Earlier programmes</string>
+    <string name="live_earlier_hint">▼  Earlier programmes    ◀ ▶  Channels</string>
     <string name="live_catchup_paused">Paused</string>
     <string name="live_catchup_hint">◀ ▶ Back or forward 30 s (hold for faster)    OK Pause</string>
     <string name="live_catchup">Catch-up · Back returns to live</string>

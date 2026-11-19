@@ -15,4 +15,15 @@ class DurationTest {
     @Test fun `a negative time shows as zero`() {
         assertEquals("0:00", duration(-5_000))
     }
+
+    @Test fun `a catch-up step stays inside the programme and short of its end`() {
+        val len = 2_700_000L // 45 minutes
+        assertEquals(30_000L, nextPosition(0, len, forward = true, held = false))
+        assertEquals(120_000L, nextPosition(0, len, forward = true, held = true))
+        assertEquals(0L, nextPosition(10_000, len, forward = false, held = false))
+        assertEquals(len - 10_000, nextPosition(len - 30_000, len, forward = true, held = false))
+        // Already in the last 10 s: forward stays put rather than jumping back.
+        assertEquals(len - 4_000, nextPosition(len - 4_000, len, forward = true, held = false))
+        assertEquals(90_000L, nextPosition(60_000, null, forward = true, held = false))
+    }
 }
