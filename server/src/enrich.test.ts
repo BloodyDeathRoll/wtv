@@ -79,6 +79,7 @@ function fakeTmdb(movies: Record<number, TmdbMovieFull | null>, series: Record<n
   const no = async () => assert.fail('not used by enrich')
   const tmdb: Tmdb = {
     searchSeries: no,
+    searchMovie: no,
     series: no,
     searchPerson: no,
     personSeries: no,

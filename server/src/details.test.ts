@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Db, Row } from './db.ts'
-import { fetchDetails, matchSeries, nameKey, seriesNames, type Pending } from './details.ts'
-import type { Tmdb, TmdbCredit, TmdbSeries } from './tmdb.ts'
+import { fetchDetails, matchMovie, matchSeries, nameKey, titleNames, type Pending } from './details.ts'
+import type { Tmdb, TmdbCredit, TmdbMovieFull, TmdbSeries } from './tmdb.ts'
 import type { Xtream } from './xtream.ts'
 
 /** A TMDB with fixed answers; records which series were looked up. */
@@ -13,6 +13,9 @@ function fakeTmdb(data: {
   credits?: Record<number, TmdbCredit[]>
   /** Name, years and seasons of a series, for matching without season ids. */
   shows?: Record<number, Omit<TmdbSeries, 'id'>>
+  /** Movie search answers ("name|year") and movies by id: title, original title, Hebrew title, year, minutes. */
+  movieSearch?: Record<string, number[]>
+  movies?: Record<number, { title: string; original?: string; hebrew?: string; year?: number; minutes?: number }>
 }) {
   const looked: number[] = []
   const tmdb: Tmdb = {
@@ -23,7 +26,20 @@ function fakeTmdb(data: {
     },
     searchPerson: async name => data.people?.[name] ?? null,
     personSeries: async id => data.credits?.[id] ?? [],
-    movieFull: async () => assert.fail('not used by details'),
+    searchMovie: async (name, year) => data.movieSearch?.[`${name}|${year ?? ''}`] ?? [],
+    movieFull: async id => {
+      looked.push(id)
+      const m = data.movies?.[id]
+      if (!m) return null
+      return {
+        id,
+        title: m.title,
+        original_title: m.original ?? m.title,
+        release_date: m.year ? `${m.year}-05-01` : '',
+        runtime: m.minutes ?? null,
+        translations: { translations: m.hebrew ? [{ iso_639_1: 'he', data: { title: m.hebrew } }] : [] },
+      } as TmdbMovieFull
+    },
     seriesFull: async () => assert.fail('not used by details'),
     season: async () => assert.fail('not used by details'),
     genres: async () => assert.fail('not used by details'),
@@ -106,9 +122,9 @@ test('match without season ids: the Hebrew name can match the original name', as
 })
 
 test('series names: each side of a dash; keys ignore case, punctuation, "the" and country tags', () => {
-  assert.deepEqual(seriesNames('Shtisel - שטיסל'), ['Shtisel - שטיסל', 'Shtisel', 'שטיסל'])
-  assert.deepEqual(seriesNames('לוחם  – Warrior'), ['לוחם  – Warrior', 'לוחם', 'Warrior'])
-  assert.deepEqual(seriesNames('Spider-Man'), ['Spider-Man'])
+  assert.deepEqual(titleNames('Shtisel - שטיסל'), ['Shtisel - שטיסל', 'Shtisel', 'שטיסל'])
+  assert.deepEqual(titleNames('לוחם  – Warrior'), ['לוחם  – Warrior', 'לוחם', 'Warrior'])
+  assert.deepEqual(titleNames('Spider-Man'), ['Spider-Man'])
   assert.equal(nameKey('The Office US'), nameKey('The Office'))
   assert.equal(nameKey('המשרד ארה"ב'), 'המשרד')
   assert.equal(nameKey('Theodore'), 'theodore')
@@ -118,6 +134,27 @@ test('series names: each side of a dash; keys ignore case, punctuation, "the" an
 test('match without season ids: a name with no letters matches nothing', async () => {
   const { tmdb } = fakeTmdb({ search: { '!!!|': [7] }, shows: { 7: officeShow('?', '2005-01-01', '2006-01-01', [6]) } })
   assert.equal(await matchSeries(tmdb, { name: '!!!', year: null, castNames: null }, [], { 1: 6 }), null)
+})
+
+test('movie match: the name must agree, and the year within one', async () => {
+  const { tmdb } = fakeTmdb({
+    movieSearch: { 'Encanto|2021': [1, 2, 3] },
+    movies: { 1: { title: 'Encantado', year: 2021 }, 2: { title: 'Encanto', year: 2015 }, 3: { title: 'Encanto', year: 2022 } },
+  })
+  assert.equal(await matchMovie(tmdb, { name: 'Encanto - אנקאנטו (2021)', year: 2021 }, null), 3)
+})
+
+test('movie match: the Hebrew title counts; without a year the running time decides', async () => {
+  const { tmdb } = fakeTmdb({
+    movieSearch: { 'יוסי שריד|': [7, 8] },
+    movies: { 7: { title: 'Yossi', hebrew: 'יוסי שריד', minutes: 120 }, 8: { title: 'Yossi Sarid', hebrew: 'יוסי שריד', year: 2023, minutes: 70 } },
+  })
+  assert.equal(await matchMovie(tmdb, { name: 'יוסי שריד', year: null }, 72 * 60), 8)
+})
+
+test('movie match: a name alone is not enough', async () => {
+  const { tmdb } = fakeTmdb({ movieSearch: { 'Ami and Tami|': [9] }, movies: { 9: { title: 'Ami and Tami', year: 2018 } } })
+  assert.equal(await matchMovie(tmdb, { name: 'Ami and Tami', year: null }, null), null)
 })
 
 const movie = (ext_id: number): Pending => ({ id: ext_id, kind: 'movie', ext_id, name: `m${ext_id}`, year: 2020, cast_names: null, tmdb_id: null, details_at: null })
@@ -211,6 +248,18 @@ test('details: movies get their TMDB id and backdrop; series their episodes and 
   assert.deepEqual(updates, [
     { table: 'episodes', filter: `title_id=in.(1005)&available=is.true&or=(seen_at.is.null,seen_at.lt.${encodeURIComponent(at)})`, values: { available: false } },
   ])
+})
+
+test('details: a movie with no provider id gets one by search; one with an id is not searched', async () => {
+  const { db, upserts } = fakeDb([movie(1), movie(2)])
+  const { tmdb, looked } = fakeTmdb({
+    movieSearch: { 'm1|2020': [99], 'm2|2020': [42] },
+    movies: { 99: { title: 'm1', year: 2020 }, 42: { title: 'm2', year: 2020 } },
+  })
+  await fetchDetails(fakeXtream(), tmdb, db, 'prov1', 60_000, () => 1_794_900_000_000)
+  const ids = upserts.filter(u => u.table === 'titles').flatMap(u => u.rows).map(r => [r.ext_id, r.tmdb_id])
+  assert.deepEqual(ids, [[1, 501], [2, 42]])
+  assert.deepEqual(looked, [42])
 })
 
 test('details: a series fetched before is not searched again, matched or not', async () => {

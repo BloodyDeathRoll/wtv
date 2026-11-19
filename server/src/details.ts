@@ -1,7 +1,8 @@
 /**
  * Fetches per-title details (P1-3) for titles never fetched and for series the
  * provider changed since:
- * - movies: the TMDB id and backdrop the provider gives;
+ * - movies: the TMDB id and backdrop the provider gives, or, when it gives no
+ *   id, one found by search whose name and year (or running time) agree;
  * - series: the episodes, and a TMDB id found by search. The provider gives no
  *   TMDB id for a series, only for its seasons (and most often dummies): a
  *   search hit counts when one of its seasons has one of those ids, or else
@@ -43,6 +44,8 @@ export interface DetailsReport {
 
 /** Search hits checked per query; cast members tried; shows checked per cast member. */
 const TITLE_HITS = 5
+/** Minutes a movie's running time may differ from TMDB's (cuts, credits). */
+const RUNTIME_SLACK_MIN = 5
 const CAST_TRIED = 2
 const CAST_SHOWS = 6
 
@@ -83,7 +86,7 @@ export async function matchSeries(
   const want = new Set(seasonIds.filter(id => id >= MIN_SEASON_ID))
   const counts = Object.entries(episodeCounts).map(([season, n]) => [Number(season), n] as const).filter(([season]) => season > 0)
   if (want.size === 0 && counts.length === 0) return null
-  const names = seriesNames(title.name)
+  const names = titleNames(title.name)
   // An empty key (a name of punctuation only) must not match anything.
   const keys = new Set(names.map(nameKey).filter(Boolean))
   const tried = new Set<number>()
@@ -127,6 +130,45 @@ export async function matchSeries(
   return null
 }
 
+/**
+ * The TMDB id of a movie the provider gives none for, or null. Searches each
+ * name (for the year, then any year); a hit counts only when its title,
+ * original title or Hebrew title is one of the provider's names and its
+ * release year is within a year of the provider's, or, when either year is
+ * unknown, its running time is within a few minutes of the provider's. A name
+ * alone is not enough: remakes share names.
+ */
+export async function matchMovie(
+  tmdb: Tmdb,
+  title: { name: string; year: number | null },
+  durationSecs: number | null,
+): Promise<number | null> {
+  const names = titleNames(title.name.replace(/\s*\(\d{4}\)\s*$/, ''))
+  const keys = new Set(names.map(nameKey).filter(Boolean))
+  if (keys.size === 0) return null
+  const minutes = durationSecs ? durationSecs / 60 : null
+  const tried = new Set<number>()
+  for (const name of names) {
+    for (const year of title.year !== null ? [title.year, null] : [null]) {
+      for (const id of await tmdb.searchMovie(name, year, TITLE_HITS)) {
+        if (tried.has(id)) continue
+        tried.add(id)
+        const m = await tmdb.movieFull(id)
+        if (m === null) continue
+        const hebrew = m.translations.translations.find(x => x.iso_639_1 === 'he')?.data.title
+        if (![m.title, m.original_title, hebrew].some(n => n && keys.has(nameKey(n)))) continue
+        const released = Number(m.release_date?.slice(0, 4)) || null
+        if (title.year !== null && released !== null) {
+          if (Math.abs(title.year - released) <= 1) return id
+        } else if (minutes !== null && m.runtime && Math.abs(minutes - m.runtime) <= RUNTIME_SLACK_MIN) {
+          return id
+        }
+      }
+    }
+  }
+  return null
+}
+
 /** Episodes per season number. */
 function episodeCounts(episodes: { season: number }[]): Record<number, number> {
   const out: Record<number, number> = {}
@@ -134,8 +176,8 @@ function episodeCounts(episodes: { season: number }[]): Record<number, number> {
   return out
 }
 
-/** The names in a provider series name: the whole, then each side of " - " ("Shtisel - שטיסל"; – — | too). */
-export function seriesNames(name: string): string[] {
+/** The names in a provider title: the whole, then each side of " - " ("Shtisel - שטיסל"; – — | too). */
+export function titleNames(name: string): string[] {
   return [...new Set([name, ...name.split(/\s+[-–—|]\s+/)].map(n => n.trim()).filter(Boolean))]
 }
 
@@ -198,7 +240,9 @@ export async function fetchDetails(
       halted() || outOfTime() ? Promise.resolve() : attempt(async () => {
         if (t.kind === 'movie') {
           const info = await xtream.movieInfo(t.ext_id)
-          titleRows.push({ ...base(t), tmdb_id: info.tmdbId, backdrop_url: info.backdropUrl, details_at: detailsAt })
+          // A movie is fetched once (`details_at`): searched once when the provider has no id.
+          const tmdbId = info.tmdbId ?? (await matchMovie(tmdb, { name: t.name, year: t.year }, info.durationSecs))
+          titleRows.push({ ...base(t), tmdb_id: tmdbId, backdrop_url: info.backdropUrl, details_at: detailsAt })
           return
         }
         const info = await xtream.seriesInfo(t.ext_id)
