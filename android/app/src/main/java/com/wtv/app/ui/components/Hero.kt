@@ -131,6 +131,12 @@ private fun BackdropImage(url: String, onLoaded: () -> Unit, alpha: () -> Float)
     )
 }
 
+/** Where a page's header starts, under the tabs. */
+val HeaderTop = 60.dp
+
+/** The header's height on browse pages: two rows of cards fit under it. */
+val HeaderHeight = 148.dp
+
 private const val FadeMillis = 300
 private const val ImageWidth = 0.72f
 private const val ImageHeight = 0.8f
@@ -155,10 +161,10 @@ fun HeroText(
             Spacer(Modifier.height(6.dp))
             Text(highlight, style = MaterialTheme.typography.titleSmall, color = WtvColors.Accent)
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
         meta()
         if (synopsis != null) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
             Text(synopsis, style = MaterialTheme.typography.bodyLarge, color = WtvColors.TextSecondary, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
         if (actions != null) {

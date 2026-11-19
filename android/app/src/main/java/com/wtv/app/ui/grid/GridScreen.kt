@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -40,24 +41,35 @@ import androidx.tv.material3.Text
 import com.wtv.app.R
 import com.wtv.app.WtvApplication
 import com.wtv.app.data.Category
+import com.wtv.app.data.Genre
+import com.wtv.app.data.Kind
 import com.wtv.app.data.Sort
 import com.wtv.app.data.Title
+import com.wtv.app.ui.browse.TitleHeader
 import com.wtv.app.ui.browse.isHebrew
 import com.wtv.app.ui.components.LocalTitleMenu
 import com.wtv.app.ui.components.Backdrop
-import com.wtv.app.ui.components.PosterCard
+import com.wtv.app.ui.components.HeaderHeight
+import com.wtv.app.ui.components.HeaderTop
+import com.wtv.app.ui.components.LandscapeCard
+import com.wtv.app.ui.components.RowsAtTop
 import com.wtv.app.ui.theme.WtvColors
 import kotlinx.coroutines.launch
 
 private const val PAGE = 60
-private const val COLUMNS = 6
+private const val COLUMNS = 4
 
 /** Load the next page when the focus gets this close to the end. */
 private const val PRELOAD = 2 * COLUMNS
 
+/** A 200 dp landscape card's height. */
+private val CARD_HEIGHT = 112.5.dp
+private val ROW_GAP = 28.dp
+private val EDGE = 12.dp
+
 /**
- * A whole category as a poster grid, with a choice of order. The focused
- * title's name and backdrop show above the grid.
+ * A whole category in rows of four, with a choice of order. The focused
+ * title's header and backdrop show above the rows.
  */
 @Composable
 fun GridScreen(category: Category, firstFocus: FocusRequester, onOpen: (Title) -> Unit) {
@@ -69,9 +81,9 @@ fun GridScreen(category: Category, firstFocus: FocusRequester, onOpen: (Title) -
 }
 
 /**
- * Titles as a poster grid under `label`, loaded `pageSize` at a time as the
- * focus nears the end. With `sorts`, chips choose the order (null:
- * Recommended); without, `fetch` gets null.
+ * Titles in rows of four under `label`, two rows on screen, loaded `pageSize`
+ * at a time as the focus nears the end. With `sorts`, chips choose the order
+ * (null: Recommended); without, `fetch` gets null.
  */
 @OptIn(ExperimentalTvMaterial3Api::class) // FilterChip
 @Composable
@@ -83,6 +95,7 @@ fun PosterGrid(
     pageSize: Int = PAGE,
     fetch: suspend (sort: Sort?, offset: Int, limit: Int) -> List<Title>,
 ) {
+    val app = LocalContext.current.applicationContext as WtvApplication
     val hebrew = isHebrew()
     val scope = rememberCoroutineScope()
 
@@ -122,7 +135,7 @@ fun PosterGrid(
     LaunchedEffect(sort, hebrew) { loadMore() }
 
     // The loading message held the focus; when the first page arrives, the first
-    // poster takes it. Only on opening: after a sort change the focus stays on the chips.
+    // card takes it. Only on opening: after a sort change the focus stays on the chips.
     var placed by remember { mutableStateOf(false) }
     LaunchedEffect(titles.isNotEmpty()) {
         if (titles.isNotEmpty() && !placed) {
@@ -131,71 +144,82 @@ fun PosterGrid(
         }
     }
 
+    // Genre names are a nicety: without them the header's meta line just has no genres.
+    val genres by produceState(emptyMap<Pair<Kind, Int>, Genre>()) { value = runCatching { app.catalog.genres() }.getOrDefault(emptyMap()) }
+    // WTW's own match, asked for the two rows on screen and the one under them as the focus moves.
+    val scores = app.wtwScores
+    val wtw = remember { app.wtw.email != null }
+    fun matchOf(t: Title): Int? = if (wtw) scores[t.id] ?: t.match else null
+    LaunchedEffect(focused, titles.size) {
+        val at = titles.indexOf(focused).coerceAtLeast(0) / COLUMNS * COLUMNS
+        if (wtw) scores.request(titles.drop(at).take(3 * COLUMNS).filter { it.match == null }.map { it.id })
+    }
+
     Box(Modifier.fillMaxSize()) {
         Backdrop(focused?.heroImage)
-        Column(Modifier.padding(start = 88.dp, end = 48.dp, top = 40.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    label,
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = WtvColors.TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                if (sorts) Spacer(Modifier.padding(start = 24.dp))
-                // Without sorts `sort` stays null, which `fetch` gets.
-                if (sorts) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Recommended (null) is not a Sort: it is a server function, not a REST order.
-                    (listOf<Sort?>(null) + Sort.entries).forEachIndexed { i, s ->
-                        FilterChip(
-                            selected = s == sort,
-                            onClick = { sort = s },
-                            modifier = if (i == 0) Modifier.focusRequester(chips) else Modifier,
-                        ) { Text(stringResource(s?.label ?: R.string.sort_recommended)) }
-                    }
+        // The name and the sort chips sit where the tabs are on the browse pages.
+        Row(Modifier.padding(start = 88.dp, end = 48.dp, top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                label,
+                style = MaterialTheme.typography.headlineMedium,
+                color = WtvColors.TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (sorts) Spacer(Modifier.padding(start = 24.dp))
+            // Without sorts `sort` stays null, which `fetch` gets.
+            if (sorts) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Recommended (null) is not a Sort: it is a server function, not a REST order.
+                (listOf<Sort?>(null) + Sort.entries).forEachIndexed { i, s ->
+                    FilterChip(
+                        selected = s == sort,
+                        onClick = { sort = s },
+                        modifier = if (i == 0) Modifier.focusRequester(chips) else Modifier,
+                    ) { Text(stringResource(s?.label ?: R.string.sort_recommended)) }
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            // The focused title, in one line: the grid has no room for a full header.
-            Text(
-                focused?.let { t -> listOfNotNull(t.displayName(hebrew), t.year?.toString(), t.certification).joinToString("   ") } ?: " ",
-                style = MaterialTheme.typography.titleSmall,
-                color = WtvColors.TextSecondary,
-                maxLines = 1,
-            )
-            Spacer(Modifier.height(12.dp))
+        }
+        Column(Modifier.padding(start = 88.dp, top = HeaderTop)) {
+            focused?.let { TitleHeader(it, genres, hebrew, matchOf(it)) } ?: Spacer(Modifier.height(HeaderHeight))
             when {
                 titles.isEmpty() && error != null -> Message(stringResource(R.string.load_failed, error!!), firstFocus, onRetry = ::loadMore)
                 titles.isEmpty() && end -> Message(stringResource(R.string.nothing_here), firstFocus)
                 titles.isEmpty() -> Message(stringResource(R.string.loading), firstFocus)
-                else -> LazyVerticalGrid(
-                    columns = GridCells.Fixed(COLUMNS),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
-                    contentPadding = PaddingValues(top = 6.dp, bottom = 48.dp),
-                ) {
-                    itemsIndexed(titles, key = { _, t -> t.id }) { i, t ->
-                        PosterCard(
-                            imageUrl = t.posterImage,
-                            title = t.displayName(hebrew),
-                            onClick = { onOpen(t) },
-                            onLongClick = LocalTitleMenu.current.let { menu -> { menu(t) } },
-                            onFocused = {
-                                focused = t
-                                if (i >= titles.size - PRELOAD) loadMore()
-                            },
-                            modifier = Modifier
-                                .then(if (i == 0) Modifier.focusRequester(firstFocus) else Modifier)
-                                // Up from the first row goes to the sort chips.
-                                .then(if (sorts && i < COLUMNS) Modifier.focusProperties { up = chips } else Modifier),
-                        )
-                    }
-                    // A later page failed: a Retry under the grid, since the focus may not move again.
-                    if (error != null) {
-                        item(span = { GridItemSpan(maxLineSpan) }) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Button(onClick = ::loadMore) { Text(stringResource(R.string.retry)) }
+                // The focused row goes to the top, so each step down shows one new row.
+                else -> RowsAtTop(titleSpaceDp = EDGE) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(COLUMNS),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(ROW_GAP),
+                        // End: four 200 dp cards fill the row. Top and bottom: room for the focused card's lift.
+                        contentPadding = PaddingValues(top = EDGE, end = 30.dp, bottom = EDGE),
+                        // Two rows high: the rows under them stay hidden.
+                        modifier = Modifier.height(EDGE * 2 + CARD_HEIGHT * 2 + ROW_GAP),
+                    ) {
+                        itemsIndexed(titles, key = { _, t -> t.id }) { i, t ->
+                            LandscapeCard(
+                                imageUrl = t.cardImage,
+                                title = t.displayName(hebrew),
+                                onClick = { onOpen(t) },
+                                onLongClick = LocalTitleMenu.current.let { menu -> { menu(t) } },
+                                onFocused = {
+                                    focused = t
+                                    if (i >= titles.size - PRELOAD) loadMore()
+                                },
+                                match = matchOf(t),
+                                modifier = Modifier
+                                    .then(if (i == 0) Modifier.focusRequester(firstFocus) else Modifier)
+                                    // Up from the first row goes to the sort chips.
+                                    .then(if (sorts && i < COLUMNS) Modifier.focusProperties { up = chips } else Modifier),
+                            )
+                        }
+                        // A later page failed: a Retry under the grid, since the focus may not move again.
+                        if (error != null) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Button(onClick = ::loadMore) { Text(stringResource(R.string.retry)) }
+                                }
                             }
                         }
                     }

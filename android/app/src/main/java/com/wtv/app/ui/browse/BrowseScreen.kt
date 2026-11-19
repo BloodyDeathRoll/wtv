@@ -47,6 +47,8 @@ import com.wtv.app.data.Title
 import com.wtv.app.ui.components.LocalContinueMenu
 import com.wtv.app.ui.components.LocalTitleMenu
 import com.wtv.app.ui.components.Backdrop
+import com.wtv.app.ui.components.HeaderHeight
+import com.wtv.app.ui.components.HeaderTop
 import com.wtv.app.ui.components.HeroText
 import com.wtv.app.ui.components.MatchBadge
 import com.wtv.app.ui.components.LandscapeCard
@@ -324,22 +326,12 @@ private fun Rows(
     }
     Box(Modifier.fillMaxSize()) {
         Backdrop(focused.heroImage)
-        Column(Modifier.padding(start = 88.dp, top = 76.dp)) {
-            // Fixed height: rows do not jump when the synopsis length changes.
-            Box(Modifier.fillMaxWidth().padding(end = 64.dp).height(220.dp)) {
-                matchOf(focused)?.let { MatchBadge(it, Modifier.align(AbsoluteAlignment.TopRight)) }
-                HeroText(
-                    modifier = Modifier.width(560.dp),
-                    titleMaxLines = 1,
-                    title = focused.displayName(hebrew),
-                    meta = { MetaRow(items = metaItems(focused, genres, hebrew), badges = listOfNotNull(focused.certification)) },
-                    synopsis = focused.synopsis(hebrew),
-                )
-            }
+        Column(Modifier.padding(start = 88.dp, top = HeaderTop)) {
+            TitleHeader(focused, genres, hebrew, matchOf(focused))
             RowsAtTop {
                 LazyColumn(
                     state = list,
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                     contentPadding = PaddingValues(top = 8.dp, bottom = 400.dp),
                 ) {
                     // Two categories can share a label; their ids differ.
@@ -388,6 +380,22 @@ private fun Rows(
                 }
             }
         }
+    }
+}
+
+/** The focused title's header: name, year and genres, synopsis, and WTW's `match`. */
+@Composable
+fun TitleHeader(t: Title, genres: Map<Pair<Kind, Int>, Genre>, hebrew: Boolean, match: Int?) {
+    // Fixed height: rows do not jump when the synopsis length changes.
+    Box(Modifier.fillMaxWidth().padding(end = 64.dp).height(HeaderHeight)) {
+        match?.let { MatchBadge(it, Modifier.align(AbsoluteAlignment.TopRight)) }
+        HeroText(
+            modifier = Modifier.width(560.dp),
+            titleMaxLines = 1,
+            title = t.displayName(hebrew),
+            meta = { MetaRow(items = metaItems(t, genres, hebrew), badges = listOfNotNull(t.certification)) },
+            synopsis = t.synopsis(hebrew),
+        )
     }
 }
 

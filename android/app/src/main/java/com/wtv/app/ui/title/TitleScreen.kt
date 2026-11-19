@@ -73,6 +73,8 @@ import com.wtv.app.ui.components.LocalTitleMenu
 import com.wtv.app.ui.components.ActionDivider
 import com.wtv.app.ui.components.ActionIcon
 import com.wtv.app.ui.components.Backdrop
+import com.wtv.app.ui.components.HeaderHeight
+import com.wtv.app.ui.components.HeaderTop
 import com.wtv.app.ui.components.HeroText
 import com.wtv.app.ui.components.MatchBadge
 import com.wtv.app.ui.components.LandscapeCard
@@ -237,9 +239,10 @@ fun TitleScreen(
 
     Box(Modifier.fillMaxSize()) {
         Backdrop(title.heroImage)
-        Column(Modifier.padding(start = 88.dp, top = 64.dp)) {
-            // Fixed height: the rows do not jump when the header text changes.
-            Box(Modifier.fillMaxWidth().padding(end = 64.dp).height(300.dp)) {
+        Column(Modifier.padding(start = 88.dp, top = HeaderTop)) {
+            // Fixed height: the rows do not jump when the header text changes. Below the
+            // browse header's text: the actions, and the focused action's name under them.
+            Box(Modifier.fillMaxWidth().padding(end = 64.dp).height(HeaderHeight + 92.dp)) {
                 wtwMatch(title)?.let { MatchBadge(it, Modifier.align(AbsoluteAlignment.TopRight)) }
                 val e = episode
                 HeroText(
@@ -334,7 +337,7 @@ fun TitleScreen(
             // The episodes row's title line holds the season chips: more room above its cards.
             RowsAtTop(titleSpaceDp = 58.dp) {
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
                     contentPadding = PaddingValues(top = 8.dp, bottom = 400.dp),
                 ) {
                     // A series' row is there from the start, empty while loading: the list keeps
