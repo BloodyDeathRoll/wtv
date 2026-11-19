@@ -227,6 +227,11 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
                 }
             }
 
+            // Paused follows the player, whatever paused it.
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                paused = catchup != null && !playWhenReady
+            }
+
             override fun onPlayerError(e: PlaybackException) {
                 error = e.errorCodeName
                 banner = true
@@ -247,12 +252,20 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
         index = Math.floorMod(index + step, channels.size)
     }
 
-    // Catch-up: back or forward, further a step while the key is held.
-    fun seek(forward: Boolean, repeat: Int): Boolean {
+    // Catch-up: back or forward, further a step while the key is held. Held keys repeat many
+    // times a second: steps are spaced out, and a forward step stops short of the end (the end
+    // returns to live).
+    var lastStepAt by remember { mutableLongStateOf(0L) }
+    fun seek(forward: Boolean, event: AndroidKeyEvent): Boolean {
         if (catchup == null) return false
-        val step = if (repeat >= HELD_REPEATS) SEEK_HELD_MS else SEEK_MS
-        val to = player.currentPosition + if (forward) step else -step
-        player.seekTo(to.coerceIn(0L, player.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: Long.MAX_VALUE))
+        val held = event.repeatCount >= HELD_REPEATS
+        if (event.repeatCount > 0 && event.eventTime - lastStepAt < HELD_STEP_GAP_MS) return true
+        lastStepAt = event.eventTime
+        val step = if (held) SEEK_HELD_MS else SEEK_MS
+        val end = player.duration.takeIf { it != C.TIME_UNSET && it > 0 }?.let { (it - END_MARGIN_MS).coerceAtLeast(0L) } ?: Long.MAX_VALUE
+        val to = (player.currentPosition + if (forward) step else -step).coerceIn(0L, end)
+        player.seekTo(to)
+        position = to
         // After a failed read the player is stopped: a skip tries again from the new place.
         if (player.playerError != null) {
             error = null
@@ -273,24 +286,28 @@ fun LivePlayerScreen(channels: List<Channel>, start: Int, login: ProviderLogin, 
                 when (it.nativeKeyEvent.keyCode) {
                     AndroidKeyEvent.KEYCODE_DPAD_UP, AndroidKeyEvent.KEYCODE_CHANNEL_UP -> move(1).let { true }
                     AndroidKeyEvent.KEYCODE_DPAD_DOWN, AndroidKeyEvent.KEYCODE_CHANNEL_DOWN -> move(-1).let { true }
-                    AndroidKeyEvent.KEYCODE_DPAD_LEFT -> seek(forward = false, it.nativeKeyEvent.repeatCount) || (channel.archiveDays > 0).also { open ->
+                    AndroidKeyEvent.KEYCODE_DPAD_LEFT -> seek(forward = false, it.nativeKeyEvent) || (channel.archiveDays > 0).also { open ->
                         if (open) {
                             panelLoading = true // from the first frame, not "nothing to play back"
                             panel = emptyList()
                         }
                     }
-                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> seek(forward = true, it.nativeKeyEvent.repeatCount)
+                    AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> seek(forward = true, it.nativeKeyEvent)
                     AndroidKeyEvent.KEYCODE_DPAD_CENTER, AndroidKeyEvent.KEYCODE_ENTER, AndroidKeyEvent.KEYCODE_INFO,
-                    AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, AndroidKeyEvent.KEYCODE_MEDIA_PLAY, AndroidKeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                        if (catchup != null) {
-                            player.playWhenReady = !player.playWhenReady
-                            paused = !player.playWhenReady
-                        }
+                    AndroidKeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
+                        if (catchup != null) player.playWhenReady = !player.playWhenReady
                         bannerAt++
                         true
                     }
-                    AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> seek(forward = true, it.nativeKeyEvent.repeatCount)
-                    AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> seek(forward = false, it.nativeKeyEvent.repeatCount)
+                    // The remote's own play and pause keys set the state rather than toggle it.
+                    AndroidKeyEvent.KEYCODE_MEDIA_PLAY, AndroidKeyEvent.KEYCODE_MEDIA_PAUSE -> (catchup != null).also { c ->
+                        if (c) {
+                            player.playWhenReady = it.nativeKeyEvent.keyCode == AndroidKeyEvent.KEYCODE_MEDIA_PLAY
+                            bannerAt++
+                        }
+                    }
+                    AndroidKeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> seek(forward = true, it.nativeKeyEvent)
+                    AndroidKeyEvent.KEYCODE_MEDIA_REWIND -> seek(forward = false, it.nativeKeyEvent)
                     else -> false
                 }
             }
@@ -412,8 +429,9 @@ private fun BoxScope.Banner(channel: Channel, error: String?, onAir: Pair<Progra
                         Text("${clock(onNow.start)}–${clock(onNow.end)}", style = MaterialTheme.typography.titleMedium, color = WtvColors.TextPrimary)
                         Text(onNow.title, style = MaterialTheme.typography.titleMedium, color = WtvColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
-                    if (catchup != null) TimeBar(catchup)
-                    if (catchup == null) {
+                    if (catchup != null) {
+                        TimeBar(catchup)
+                    } else {
                         val elapsed = ((now - onNow.start).toFloat() / (onNow.end - onNow.start)).coerceIn(0f, 1f)
                         Box(Modifier.padding(vertical = 6.dp).width(420.dp).height(3.dp).background(WtvColors.Surface)) {
                             Box(Modifier.fillMaxWidth(elapsed).height(3.dp).background(WtvColors.Accent))
@@ -477,4 +495,8 @@ private const val SEEK_MS = 30_000L
 /** Held for this many key repeats (about a second), a step is 2 minutes. */
 private const val HELD_REPEATS = 10
 private const val SEEK_HELD_MS = 120_000L
+/** While a key is held, at most one step in this time. */
+private const val HELD_STEP_GAP_MS = 400L
+/** A forward step stops this far before the end: the end returns to live. */
+private const val END_MARGIN_MS = 10_000L
 private const val POSITION_TICK_MS = 500L
