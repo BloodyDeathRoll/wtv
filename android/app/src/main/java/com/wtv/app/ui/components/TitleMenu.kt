@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,7 +35,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -63,7 +63,11 @@ fun Modifier.ignoresOpeningPress(): Modifier {
 /** Opens the long-press menu for a title card; the app frame provides it. */
 val LocalTitleMenu = staticCompositionLocalOf<(Title) -> Unit> { {} }
 
-/** A title card held down: Watchlist, Info, Play (focused), Close, each an icon with its name. Back closes. */
+/**
+ * A title card held down: a list of Watchlist, Info, Play (focused), Close,
+ * each a row with its icon at the start and its name after it (mirrored in
+ * Hebrew). Back closes.
+ */
 @Composable
 fun TitleMenu(title: Title, onInfo: () -> Unit, onPlay: () -> Unit, onDismiss: () -> Unit) {
     val catalog = (LocalContext.current.applicationContext as WtvApplication).catalog
@@ -72,15 +76,13 @@ fun TitleMenu(title: Title, onInfo: () -> Unit, onPlay: () -> Unit, onDismiss: (
     var onWatchlist by remember(title.id) { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(title.id) { onWatchlist = runCatching { catalog.marks(title).onWatchlist }.getOrDefault(false) }
     val play = remember { FocusRequester() }
-    // Four buttons are wider than a default dialog.
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(
-            Modifier.ignoresOpeningPress().background(WtvColors.Surface, RoundedCornerShape(12.dp)).padding(horizontal = 32.dp, vertical = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+            Modifier.ignoresOpeningPress().width(MENU_WIDTH).background(WtvColors.Surface, RoundedCornerShape(12.dp)).padding(horizontal = 24.dp, vertical = 24.dp),
         ) {
-            Text(title.displayName(isHebrew()), style = MaterialTheme.typography.titleLarge, color = WtvColors.TextPrimary, maxLines = 1)
-            Spacer(Modifier.height(20.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title.displayName(isHebrew()), style = MaterialTheme.typography.titleLarge, color = WtvColors.TextPrimary, maxLines = 2)
+            Spacer(Modifier.height(16.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 val on = onWatchlist
                 MenuItem(
                     if (on == true) Icons.Outlined.Check else Icons.Outlined.Add,
@@ -103,13 +105,17 @@ fun TitleMenu(title: Title, onInfo: () -> Unit, onPlay: () -> Unit, onDismiss: (
     }
 }
 
+/** Wide enough for the longest label in either language on one line. */
+private val MENU_WIDTH = 440.dp
+
+/** A row of the menu: the icon at the start (left in English, right in Hebrew), then its name. */
 @Composable
 private fun MenuItem(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Button(onClick = onClick, modifier = modifier.width(132.dp)) {
-        Column(Modifier.padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(28.dp))
-            Spacer(Modifier.height(6.dp))
-            Text(label, style = MaterialTheme.typography.labelMedium, textAlign = TextAlign.Center, maxLines = 2)
+    Button(onClick = onClick, modifier = modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(26.dp))
+            Spacer(Modifier.width(16.dp))
+            Text(label, style = MaterialTheme.typography.titleMedium)
         }
     }
 }
