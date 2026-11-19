@@ -191,6 +191,7 @@ class CatalogTest {
             assertTrue(part, inCategory.contains(part))
         }
         assertFalse(latestPath(Kind.Series, null, 10).contains("category_ids"))
+        assertTrue(latestPath(Kind.Series, 18, 10, genre = true).contains("&tmdb_genre_ids=cs.%7B18%7D"))
     }
 
     @Test fun `poster prefers TMDB, then the provider's`() {
