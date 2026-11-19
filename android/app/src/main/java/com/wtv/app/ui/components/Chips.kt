@@ -10,19 +10,19 @@ import com.wtv.app.ui.theme.WtvColors
 
 /**
  * A choice chip (sort, filter, season, group, setting): dark and borderless,
- * its text white at 70%, or full white on a slightly darker chip when
- * selected. Focused, it turns light like the tabs.
+ * its text white at 50%, or full white on a darker chip when selected.
+ * Focused, it turns light like the tabs.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun ChoiceChip(selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    val dim = WtvColors.TextPrimary.copy(alpha = 0.7f)
+    val dim = WtvColors.TextPrimary.copy(alpha = 0.5f)
     FilterChip(
         selected = selected,
         onClick = onClick,
         modifier = modifier,
         colors = FilterChipDefaults.colors(
-            containerColor = WtvColors.Surface,
+            containerColor = WtvColors.Chip,
             contentColor = dim,
             focusedContainerColor = WtvColors.TextPrimary,
             focusedContentColor = WtvColors.Background,
