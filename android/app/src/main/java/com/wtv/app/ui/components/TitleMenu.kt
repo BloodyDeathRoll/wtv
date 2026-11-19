@@ -106,11 +106,11 @@ fun TitleMenu(title: Title, onInfo: () -> Unit, onPlay: () -> Unit, onDismiss: (
 }
 
 /** Wide enough for the longest label in either language on one line. */
-private val MENU_WIDTH = 440.dp
+internal val MENU_WIDTH = 440.dp
 
-/** A row of the menu: the icon at the start (left in English, right in Hebrew), then its name. */
+/** A row of a hold-OK menu: the icon at the start (left in English, right in Hebrew), then its name. */
 @Composable
-private fun MenuItem(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun MenuItem(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Button(onClick = onClick, modifier = modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(26.dp))
