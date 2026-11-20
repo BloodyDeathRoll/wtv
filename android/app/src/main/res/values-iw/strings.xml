@@ -15,7 +15,7 @@
     <string name="tab_home">בית</string>
     <string name="tab_movies">סרטים</string>
     <string name="tab_series">סדרות</string>
-    <string name="tab_live">שידור חי</string>
+    <string name="tab_live">טלויזיה</string>
     <string name="row_recent_movies">סרטים שנוספו לאחרונה</string>
     <string name="row_recent_series">סדרות שנוספו לאחרונה</string>
     <string name="more">עוד</string>
@@ -88,6 +88,13 @@
     <string name="play_episode">צפייה: %1$s</string>
     <string name="up_next">הפרק הבא</string>
     <string name="play_next_in">הפעלה עכשיו (%1$d)</string>
+    <string name="player_pause">השהיה</string>
+    <string name="player_previous">הפרק הקודם</string>
+    <string name="player_next">הפרק הבא</string>
+    <string name="player_subtitles">כתוביות</string>
+    <string name="player_subtitles_off">ללא</string>
+    <string name="player_audio">שמע</string>
+    <string name="player_speed">מהירות</string>
     <string name="live_favorites">מועדפים</string>
     <string name="live_hint">לחיצה ארוכה על OK: מועדפים והסתרה</string>
     <string name="live_favorite_added">נוסף למועדפים</string>

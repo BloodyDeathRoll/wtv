@@ -16,7 +16,7 @@ val WtvTypography = Typography(
     displayMedium = TextStyle(fontSize = 36.sp, lineHeight = 42.sp, fontWeight = FontWeight.Bold, textDirection = TextDirection.Content),
     // Person name, big page titles.
     headlineMedium = TextStyle(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.Bold, textDirection = TextDirection.Content),
-    // Row titles ("Customers also liked").
+    // Row titles ("Viewers also liked").
     titleMedium = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, textDirection = TextDirection.Content),
     // Meta line, highlight line.
     titleSmall = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium, textDirection = TextDirection.Content),

@@ -31,8 +31,8 @@ header for the focused title over a backdrop image, rows of cards below).
 - The same header, with Play, Love / Like / Dislike, add to watchlist and more
   info.
 - **Series:** row 1 is seasons and episodes (the header shows the synopsis of
-  the episode in focus), row 2 is "Customers also liked", row 3 is cast.
-- **Movies:** row 1 is "Customers also liked", row 2 is cast.
+  the episode in focus), row 2 is "Viewers also liked", row 3 is cast.
+- **Movies:** row 1 is "Viewers also liked", row 2 is cast.
 - A click on a cast member lists that person's titles the provider has.
 
 ### Live TV
@@ -93,7 +93,7 @@ code, no endpoints, no tables, no data writes. WTV only reads.
   (`src/modules/engine/scoring/taste-weights.ts` in WTW) and scores provider
   titles against `titles.taste_vec`. If the WTW team changes the formula, the
   copy is updated by hand.
-- **"Customers also liked":** the provider titles nearest to the seed title by
+- **"Viewers also liked":** the provider titles nearest to the seed title by
   WTW's title vectors. For a title WTW has not scored: TMDB's recommendations,
   kept only where the provider has them.
 - **Cast click:** WTW's own person search is a TMDB call, so WTV calls TMDB
@@ -199,7 +199,7 @@ milestone.
 | P4-2 | Love / Like / Dislike and watchlist, stored in WTV |
 | P4-3 | Ranking function: copy of WTW's taste-weights formula, scores per user, refreshed when the fingerprint changes |
 | P4-4 | "Recommended" sort and the Home tab |
-| P4-5 | "Customers also liked" row |
+| P4-5 | "Viewers also liked" row |
 | P4-6 | "Watch again" row and pre-filled ratings from WTW |
 | P4-7 | Fallback for users with no WTW ratings and for unscored titles |
 

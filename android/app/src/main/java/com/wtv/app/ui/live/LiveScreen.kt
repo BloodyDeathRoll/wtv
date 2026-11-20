@@ -81,7 +81,8 @@ private sealed interface Load {
  * The Live TV page: a chip per group (Favourites, then the provider's
  * categories) over a grid of channel cards. Moving onto a chip shows its
  * group. OK on a card watches the channel, with the group as the channel
- * list; holding OK opens a menu: favourite, hide the channel, hide its group.
+ * list; holding OK opens a menu: favourite, hide the channel, hide its group
+ * (not the main one, the provider's first).
  * Hidden things come back in Settings.
  */
 @Composable
@@ -252,7 +253,7 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
         ChannelMenu(
             channel = c,
             favorite = c.id in favorites,
-            group = shown.category,
+            group = shown.category?.takeIf { it != state.categories.firstOrNull() },
             groupLabel = shown.label,
             onFavorite = { menu = null; toggle(c) },
             onHide = { menu = null; pendingHide = { hideChannel(c) } },
@@ -273,7 +274,7 @@ fun LiveScreen(firstFocus: FocusRequester, up: FocusRequester, onWatch: (List<Ch
     }
 }
 
-/** Held OK on a channel: favourite, hide it, hide the group it is shown in (not Favourites), or close; a list like the title menu. Back closes. */
+/** Held OK on a channel: favourite, hide it, hide the group it is shown in (not Favourites or the main group), or close; a list like the title menu. Back closes. */
 @Composable
 private fun ChannelMenu(
     channel: Channel,

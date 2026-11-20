@@ -58,6 +58,7 @@ import com.wtv.app.data.Episode
 import com.wtv.app.data.Kind
 import com.wtv.app.data.Title
 import com.wtv.app.data.episodeAfter
+import com.wtv.app.data.episodeBefore
 import com.wtv.app.player.LivePlayerScreen
 import com.wtv.app.player.PlayerScreen
 import com.wtv.app.player.ProviderLogin
@@ -156,6 +157,7 @@ private sealed interface Page {
     ) : Page {
         override val id get() = "player"
         val next: Episode? get() = episodeAfter(episodes, episodeId)
+        val previous: Episode? get() = episodeBefore(episodes, episodeId)
     }
 }
 
@@ -238,9 +240,8 @@ fun WtvApp() {
         }
     }
     fun episodeTitle(series: String, e: Episode) = "$series · ${seasonEpisode.format(e.season, e.number)}"
-    // The next episode replaces the player on top: Back still returns to the series page.
-    fun playNext(p: Page.Player) {
-        val e = p.next ?: return
+    // Another episode (the next, the previous) replaces the player on top: Back still returns to the series page.
+    fun playEpisode(p: Page.Player, e: Episode) {
         val login = ProviderLogin.load(context)?.takeIf { it.isComplete }
         if (login == null) {
             Toast.makeText(context, noLogin, Toast.LENGTH_LONG).show()
@@ -448,7 +449,9 @@ fun WtvApp() {
                                 startSecs = p.startSecs,
                                 firstFocus = entry.first,
                                 next = p.next?.let { e -> listOfNotNull(seasonEpisode.format(e.season, e.number), e.displayName(hebrew)).joinToString(" · ") },
-                                onNext = { playNext(p) },
+                                episode = p.episodeId != null,
+                                onNext = { p.next?.let { e -> playEpisode(p, e) } },
+                                onPrevious = p.previous?.let { e -> { playEpisode(p, e) } },
                                 onProgress = { position, duration, final -> saveProgress(p, position, duration, final) },
                                 onClose = { close { stack.removeAt(stack.lastIndex) } },
                             )
