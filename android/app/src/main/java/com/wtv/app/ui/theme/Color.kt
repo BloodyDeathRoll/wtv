@@ -11,8 +11,8 @@ object WtvColors {
     val TextSecondary = Color(0xFFC7CBD1)
     val TextMuted = Color(0xFF8197A4)
 
-    /** Highlight line under the title (awards, "New episode"). */
-    val Accent = Color(0xFF1BC4BD)
+    /** Highlight line under the title (awards, "New episode"); the app icon's orange yellow. */
+    val Accent = Color(0xFFFFA900)
 
     /** Focus ring on cards and buttons. */
     val Focus = Color(0xFFFFFFFF)

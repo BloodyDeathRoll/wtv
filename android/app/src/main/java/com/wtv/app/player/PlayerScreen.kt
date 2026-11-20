@@ -102,9 +102,10 @@ import kotlinx.coroutines.delay
  * [SEEK_MS]; held, the steps grow the longer the key is held ([scrubTo]), and
  * the picture follows when the key is let go. Down (or Up) goes to the buttons.
  *
- * The controls look like Live TV's catch-up banner: the title, then one line of
- * play or pause, the time in, the time bar, the length, the previous and next
- * episode (`episode` only), subtitles, settings (audio track and speed). They
+ * The controls look like Live TV's catch-up banner: the title, then a line of
+ * the time in, the time bar and the length, then a line of buttons: play or
+ * pause, the previous and next episode (`episode` only), subtitles, settings
+ * (audio track and speed). They
  * show while paused; while playing they go [HIDE_MS] after the last key
  * ([BUTTONS_HIDE_MS] with a button focused). What has the focus is in the
  * accent colour: a button, or the time bar (with a knob) when the keys are the
@@ -461,7 +462,7 @@ fun PlayerScreen(
     }
 }
 
-/** The controls along the bottom, like Live TV's catch-up banner; the line is left to right in Hebrew too, like a clock. */
+/** The controls along the bottom, like Live TV's catch-up banner; the lines are left to right in Hebrew too, like a clock. */
 @Composable
 private fun BoxScope.Controls(
     title: String,
@@ -490,6 +491,19 @@ private fun BoxScope.Controls(
         if (paused) Text(stringResource(R.string.live_catchup_paused), style = MaterialTheme.typography.labelLarge, color = WtvColors.Accent)
         Spacer(Modifier.height(6.dp))
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            val done = if (length > 0) (position.toFloat() / length).coerceIn(0f, 1f) else 0f
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(duration(position), style = MaterialTheme.typography.titleSmall, color = WtvColors.TextPrimary)
+                Box(Modifier.weight(1f).height(4.dp).background(WtvColors.Surface)) {
+                    Box(
+                        Modifier.fillMaxWidth(done).height(4.dp).background(WtvColors.Accent)
+                            // The knob: Left and Right move through the video now.
+                            .drawBehind { if (barFocused) drawCircle(WtvColors.Accent, 9.dp.toPx(), Offset(size.width, size.height / 2)) },
+                    )
+                }
+                Text(duration(length), style = MaterialTheme.typography.titleSmall, color = WtvColors.TextSecondary)
+            }
+            Spacer(Modifier.height(10.dp))
             Row(
                 Modifier.onFocusChanged { onFocus(it.hasFocus) },
                 verticalAlignment = Alignment.CenterVertically,
@@ -502,16 +516,6 @@ private fun BoxScope.Controls(
                     // The row's ends: the focus stays.
                     Modifier.focusRequester(playButton).focusProperties { left = FocusRequester.Cancel },
                 )
-                Text(duration(position), style = MaterialTheme.typography.titleSmall, color = WtvColors.TextPrimary)
-                val done = if (length > 0) (position.toFloat() / length).coerceIn(0f, 1f) else 0f
-                Box(Modifier.weight(1f).height(4.dp).background(WtvColors.Surface)) {
-                    Box(
-                        Modifier.fillMaxWidth(done).height(4.dp).background(WtvColors.Accent)
-                            // The knob: Left and Right move through the video now.
-                            .drawBehind { if (barFocused) drawCircle(WtvColors.Accent, 9.dp.toPx(), Offset(size.width, size.height / 2)) },
-                    )
-                }
-                Text(duration(length), style = MaterialTheme.typography.titleSmall, color = WtvColors.TextSecondary)
                 if (episode) {
                     ControlButton(Icons.Filled.SkipPrevious, stringResource(R.string.player_previous), onPrevious)
                     ControlButton(Icons.Filled.SkipNext, stringResource(R.string.player_next), onNext)
