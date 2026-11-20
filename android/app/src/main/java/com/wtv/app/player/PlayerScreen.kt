@@ -52,7 +52,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onKeyEvent
@@ -61,6 +60,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -102,12 +102,13 @@ import kotlinx.coroutines.delay
  * [SEEK_MS]; held, the steps grow the longer the key is held ([scrubTo]), and
  * the picture follows when the key is let go. Down (or Up) goes to the buttons.
  *
- * The controls are one line: play or pause, the time bar, the time out of the
- * length, the previous and next episode (`episode` only), subtitles, settings
- * (audio track and speed). They show while paused; while playing they go
- * [HIDE_MS] after the last key ([BUTTONS_HIDE_MS] with a button focused).
- * What has the focus is yellow: a button, or the time bar when the keys are
- * the picture's. The subtitle choice is kept for the next video ([Subtitles]).
+ * The controls look like Live TV's catch-up banner: the title, then one line of
+ * play or pause, the time in, the time bar, the length, the previous and next
+ * episode (`episode` only), subtitles, settings (audio track and speed). They
+ * show while paused; while playing they go [HIDE_MS] after the last key
+ * ([BUTTONS_HIDE_MS] with a button focused). What has the focus is in the
+ * accent colour: a button, or the time bar (with a knob) when the keys are the
+ * picture's. The subtitle choice is kept for the next video ([Subtitles]).
  *
  * Starts at `startSecs`. Reports the position (seconds, and the length when
  * known) every [SAVE_EVERY_MS] while playing, on pause, at the end, when the
@@ -371,6 +372,7 @@ fun PlayerScreen(
         )
         if (shown && !overlay) {
             Controls(
+                title = title,
                 paused = paused,
                 position = scrub ?: position,
                 length = length,
@@ -459,9 +461,10 @@ fun PlayerScreen(
     }
 }
 
-/** The controls along the bottom, in one line; left to right in Hebrew too, like a clock. */
+/** The controls along the bottom, like Live TV's catch-up banner; the line is left to right in Hebrew too, like a clock. */
 @Composable
 private fun BoxScope.Controls(
+    title: String,
     paused: Boolean,
     position: Long,
     length: Long,
@@ -475,19 +478,22 @@ private fun BoxScope.Controls(
     onSubtitles: (() -> Unit)?,
     onSettings: () -> Unit,
 ) {
-    Box(
+    Column(
         Modifier
             .fillMaxWidth()
             .align(Alignment.BottomStart)
             // Dark enough to read over any picture.
-            .background(Brush.verticalGradient(0f to Color.Transparent, 1f to Color(0xE6000000)))
-            .padding(start = 48.dp, end = 48.dp, top = 72.dp, bottom = 32.dp),
+            .background(Brush.verticalGradient(0f to Color.Transparent, 0.3f to Color(0xCC000000), 1f to Color(0xF2000000)))
+            .padding(start = 64.dp, end = 64.dp, top = 64.dp, bottom = 40.dp),
     ) {
+        Text(title, style = MaterialTheme.typography.headlineSmall, color = WtvColors.TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (paused) Text(stringResource(R.string.live_catchup_paused), style = MaterialTheme.typography.labelLarge, color = WtvColors.Accent)
+        Spacer(Modifier.height(6.dp))
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
             Row(
                 Modifier.onFocusChanged { onFocus(it.hasFocus) },
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 ControlButton(
                     if (paused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
@@ -496,18 +502,16 @@ private fun BoxScope.Controls(
                     // The row's ends: the focus stays.
                     Modifier.focusRequester(playButton).focusProperties { left = FocusRequester.Cancel },
                 )
+                Text(duration(position), style = MaterialTheme.typography.titleSmall, color = WtvColors.TextPrimary)
                 val done = if (length > 0) (position.toFloat() / length).coerceIn(0f, 1f) else 0f
-                val played = if (barFocused) WtvColors.PlayerFocus else WtvColors.TextPrimary
-                Box(
-                    Modifier.weight(1f).height(24.dp).padding(horizontal = 12.dp).drawBehind {
-                        val y = size.height / 2
-                        val at = size.width * done
-                        drawLine(Color(0x66FFFFFF), Offset(0f, y), Offset(size.width, y), 6.dp.toPx(), StrokeCap.Round)
-                        drawLine(played, Offset(0f, y), Offset(at, y), 6.dp.toPx(), StrokeCap.Round)
-                        if (barFocused) drawCircle(played, 11.dp.toPx(), Offset(at, y))
-                    },
-                )
-                Text("${duration(position)} / ${duration(length)}", style = MaterialTheme.typography.titleSmall, color = WtvColors.TextPrimary)
+                Box(Modifier.weight(1f).height(4.dp).background(WtvColors.Surface)) {
+                    Box(
+                        Modifier.fillMaxWidth(done).height(4.dp).background(WtvColors.Accent)
+                            // The knob: Left and Right move through the video now.
+                            .drawBehind { if (barFocused) drawCircle(WtvColors.Accent, 9.dp.toPx(), Offset(size.width, size.height / 2)) },
+                    )
+                }
+                Text(duration(length), style = MaterialTheme.typography.titleSmall, color = WtvColors.TextSecondary)
                 if (episode) {
                     ControlButton(Icons.Filled.SkipPrevious, stringResource(R.string.player_previous), onPrevious)
                     ControlButton(Icons.Filled.SkipNext, stringResource(R.string.player_next), onNext)
@@ -519,7 +523,7 @@ private fun BoxScope.Controls(
     }
 }
 
-/** A round button of the controls, yellow when focused; with no `onClick` it is greyed and skipped. */
+/** A round button of the controls, in the accent colour when focused; with no `onClick` it is greyed and skipped. */
 @Composable
 private fun ControlButton(icon: ImageVector, label: String, onClick: (() -> Unit)?, modifier: Modifier = Modifier) {
     IconButton(
@@ -530,9 +534,9 @@ private fun ControlButton(icon: ImageVector, label: String, onClick: (() -> Unit
         colors = IconButtonDefaults.colors(
             containerColor = Color.Transparent,
             contentColor = WtvColors.TextPrimary,
-            focusedContainerColor = WtvColors.PlayerFocus,
+            focusedContainerColor = WtvColors.Accent,
             focusedContentColor = Color.Black,
-            pressedContainerColor = WtvColors.PlayerFocus,
+            pressedContainerColor = WtvColors.Accent,
             pressedContentColor = Color.Black,
             disabledContainerColor = Color.Transparent,
             disabledContentColor = WtvColors.TextMuted.copy(alpha = 0.5f),
