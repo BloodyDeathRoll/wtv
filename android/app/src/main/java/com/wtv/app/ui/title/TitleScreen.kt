@@ -102,7 +102,7 @@ private data class Extras(
 /**
  * A title's page: the header with Play and the title's actions; for a series
  * its seasons and episodes, the header following the focused episode; then the
- * cast. "Customers also liked" comes with P4-5.
+ * cast. "Viewers also liked" comes with P4-5.
  *
  * Play resumes: a movie where it stopped, a series at its next episode. The
  * saved positions reload when `progressVersion` changes (a player closed).
@@ -272,7 +272,9 @@ fun TitleScreen(
                         Row(showsTitle, verticalAlignment = Alignment.CenterVertically) {
                             PlayButton(
                                 playLabel,
-                                onClick = ::pressPlay,
+                                // A lambda, not ::pressPlay: a function reference compares equal across recompositions,
+                                // so the button kept the first one, from before the saved position was loaded.
+                                onClick = { pressPlay() },
                                 modifier = Modifier.focusRequester(play),
                             )
                             Spacer(Modifier.width(12.dp))

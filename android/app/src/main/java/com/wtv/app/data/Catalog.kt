@@ -183,7 +183,7 @@ class Catalog(private val api: Api) {
     /** Home: of the newest titles, the ranking's best, unrated. */
     suspend fun newForYou(limit: Int = 20): List<Title> = api.get("rpc/new_for_you?select=$TITLE_COLUMNS&p_limit=$limit").objects().map(::title)
 
-    /** "Customers also liked": the cards nearest in WTW's taste space, the user's best first. */
+    /** "Viewers also liked": the cards nearest in WTW's taste space, the user's best first. */
     suspend fun alsoLiked(title: Title, limit: Int = 20): List<Title> =
         api.get("rpc/also_liked?select=$TITLE_COLUMNS&p_title=${title.id}&p_limit=$limit").objects().map(::title)
 

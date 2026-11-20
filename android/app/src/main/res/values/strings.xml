@@ -2,7 +2,7 @@
     <string name="app_name">WTV</string>
     <string name="play">Play</string>
     <string name="recommended_by_wtw">Recommended by WTW</string>
-    <string name="row_also_liked">Customers also liked</string>
+    <string name="row_also_liked">Viewers also liked</string>
     <string name="add_to_watchlist">Add to watchlist</string>
     <string name="rate_love">Love</string>
     <string name="rate_like">Like</string>
@@ -89,6 +89,13 @@
     <string name="play_episode">Play %1$s</string>
     <string name="up_next">Up next</string>
     <string name="play_next_in">Play now (%1$d)</string>
+    <string name="player_pause">Pause</string>
+    <string name="player_previous">Previous episode</string>
+    <string name="player_next">Next episode</string>
+    <string name="player_subtitles">Subtitles</string>
+    <string name="player_subtitles_off">Off</string>
+    <string name="player_audio">Audio</string>
+    <string name="player_speed">Speed</string>
     <string name="live_favorites">Favourites</string>
     <string name="live_hint">Hold OK for favourites and hiding</string>
     <string name="live_favorite_added">Added to favourites</string>

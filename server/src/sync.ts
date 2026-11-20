@@ -10,6 +10,7 @@
  */
 
 import { categoryNames } from './category-names.ts'
+import { liveNames, withSports } from './live-groups.ts'
 import { createDb, type Db, type Row } from './db.ts'
 import { refreshGroupsOrNull } from './groups.ts'
 import { createXtream, type Category, type Channel, type Title, type Xtream } from './xtream.ts'
@@ -85,7 +86,8 @@ const channelRow = (providerId: number, seenAt: string) => (c: Channel): Row => 
 })
 
 const categoryRow = (providerId: number) => (c: Category): Row => {
-  const { en, he } = categoryNames(c.name)
+  const names = categoryNames(c.name)
+  const { en, he } = c.kind === 'live' ? liveNames(names) : names
   return {
     provider_id: providerId,
     kind: c.kind,
@@ -109,7 +111,7 @@ export async function syncCatalog(xtream: Xtream, db: Db, providerName: string, 
   const kept = (t: Title) => !skipped.some(c => c.kind === t.kind && t.categoryIds.includes(c.extId))
   const movies = (await xtream.movies()).filter(kept)
   const series = (await xtream.series()).filter(kept)
-  const channels = await xtream.channels()
+  const channels = withSports(await xtream.channels(), categoryLists[kinds.indexOf('live')]!, name => categoryNames(name).en)
 
   const provider = await db.upsertOne<{ id: number }>('providers', 'name', { name: providerName, kind: 'xtream' })
   const byProvider = `provider_id=eq.${provider.id}`

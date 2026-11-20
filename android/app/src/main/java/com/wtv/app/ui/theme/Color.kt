@@ -17,6 +17,9 @@ object WtvColors {
     /** Focus ring on cards and buttons. */
     val Focus = Color(0xFFFFFFFF)
 
+    /** What has the focus in the player's controls: bright, to find it over any picture. */
+    val PlayerFocus = Color(0xFFFFE100)
+
     /** An unselected chip: a little lighter than [Surface]. */
     val Chip = Color(0xFF253241)
 
