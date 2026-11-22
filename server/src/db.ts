@@ -82,8 +82,8 @@ export function createDb(config: DbConfig, fetchFn: typeof fetch = fetch) {
       const all: T[] = []
       for (let after = -1; ; ) {
         const path = `${table}?select=${columns}&id=gt.${after}&order=id&limit=1000${filter ? `&${filter}` : ''}`
-        // A page that hits the statement timeout (57014) is read once more, at once:
-        // the first read loaded the rows into the database's cache, so the second is faster.
+        // A page that hits the statement timeout (57014) is read once more, at once.
+        // The same read usually passes a moment later; if it stops helping, wait before it.
         // Only here: the other reads are single small calls.
         const res = await request('GET', path).catch(e => {
           if (e instanceof DbError && e.code === '57014') return request('GET', path)

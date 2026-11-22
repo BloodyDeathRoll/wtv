@@ -88,6 +88,12 @@ test('selectAll reads a page again once after a statement timeout, and fails on 
   assert.equal(other.calls.length, 1)
 })
 
+test('an error answer that is not JSON has no code and is not read again', async () => {
+  const { fetchFn, calls } = fakeFetch(() => new Response('<html>Bad Gateway 57014</html>', { status: 502 }))
+  await assert.rejects(createDb(config, fetchFn).selectAll('titles', 'id'), (e: unknown) => e instanceof DbError && e.code === undefined)
+  assert.equal(calls.length, 1)
+})
+
 test('upsert of nothing makes no call', async () => {
   const { fetchFn, calls } = fakeFetch()
   await createDb(config, fetchFn).upsert('titles', 'x', [])
