@@ -70,7 +70,13 @@ export function createDb(config: DbConfig, fetchFn: typeof fetch = fetch) {
     async selectAll<T extends { id: number }>(table: string, columns: string, filter = ''): Promise<T[]> {
       const all: T[] = []
       for (let after = -1; ; ) {
-        const page = (await (await request('GET', `${table}?select=${columns}&id=gt.${after}&order=id&limit=1000${filter ? `&${filter}` : ''}`)).json()) as T[]
+        const path = `${table}?select=${columns}&id=gt.${after}&order=id&limit=1000${filter ? `&${filter}` : ''}`
+        // A page that hits the statement timeout (57014) is read once more: a slow moment passes.
+        const res = await request('GET', path).catch(e => {
+          if (e instanceof DbError && e.message.includes('"57014"')) return request('GET', path)
+          throw e
+        })
+        const page = (await res.json()) as T[]
         all.push(...page)
         const last = page.at(-1)
         if (page.length < 1000 || !last) return all
