@@ -72,6 +72,28 @@ test('selectAll stops after an exactly full last page with one more call', async
   assert.equal(calls.length, 2)
 })
 
+test('selectAll reads a page again once after a statement timeout, and fails on a second one', async () => {
+  const timeout = () => Response.json({ code: '57014', message: 'canceling statement due to statement timeout' }, { status: 500 })
+  let n = 0
+  const once = fakeFetch(() => (n++ === 0 ? timeout() : Response.json([{ id: 1 }])))
+  assert.deepEqual(await createDb(config, once.fetchFn).selectAll('titles', 'id'), [{ id: 1 }])
+  assert.equal(once.calls.length, 2)
+
+  const always = fakeFetch(timeout)
+  await assert.rejects(createDb(config, always.fetchFn).selectAll('titles', 'id'), DbError)
+  assert.equal(always.calls.length, 2)
+
+  const other = fakeFetch(() => Response.json({ code: '42501' }, { status: 500 }))
+  await assert.rejects(createDb(config, other.fetchFn).selectAll('titles', 'id'), DbError)
+  assert.equal(other.calls.length, 1)
+})
+
+test('an error answer that is not JSON has no code and is not read again', async () => {
+  const { fetchFn, calls } = fakeFetch(() => new Response('<html>Bad Gateway 57014</html>', { status: 502 }))
+  await assert.rejects(createDb(config, fetchFn).selectAll('titles', 'id'), (e: unknown) => e instanceof DbError && e.code === undefined)
+  assert.equal(calls.length, 1)
+})
+
 test('upsert of nothing makes no call', async () => {
   const { fetchFn, calls } = fakeFetch()
   await createDb(config, fetchFn).upsert('titles', 'x', [])
