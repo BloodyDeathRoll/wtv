@@ -11,7 +11,10 @@ export interface DbConfig {
 
 export type Row = Record<string, unknown>
 
-export class DbError extends Error {}
+export class DbError extends Error {
+  /** The database's error code (e.g. `57014`, statement timeout), when the answer carried one. */
+  code?: string
+}
 
 export function createDb(config: DbConfig, fetchFn: typeof fetch = fetch) {
   async function request(method: string, path: string, body?: unknown, prefer?: string): Promise<Response> {
@@ -28,7 +31,15 @@ export function createDb(config: DbConfig, fetchFn: typeof fetch = fetch) {
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(60_000),
     })
-    if (!res.ok) throw new DbError(`${method} ${path.split('?')[0]}: HTTP ${res.status} ${(await res.text()).slice(0, 300)}`)
+    if (!res.ok) {
+      const text = await res.text()
+      const error = new DbError(`${method} ${path.split('?')[0]}: HTTP ${res.status} ${text.slice(0, 300)}`)
+      try {
+        const code: unknown = (JSON.parse(text) as { code?: unknown } | null)?.code
+        if (typeof code === 'string') error.code = code
+      } catch { /* not JSON: no code */ }
+      throw error
+    }
     return res
   }
 
@@ -71,9 +82,11 @@ export function createDb(config: DbConfig, fetchFn: typeof fetch = fetch) {
       const all: T[] = []
       for (let after = -1; ; ) {
         const path = `${table}?select=${columns}&id=gt.${after}&order=id&limit=1000${filter ? `&${filter}` : ''}`
-        // A page that hits the statement timeout (57014) is read once more: a slow moment passes.
+        // A page that hits the statement timeout (57014) is read once more, at once:
+        // the first read loaded the rows into the database's cache, so the second is faster.
+        // Only here: the other reads are single small calls.
         const res = await request('GET', path).catch(e => {
-          if (e instanceof DbError && e.message.includes('"57014"')) return request('GET', path)
+          if (e instanceof DbError && e.code === '57014') return request('GET', path)
           throw e
         })
         const page = (await res.json()) as T[]
