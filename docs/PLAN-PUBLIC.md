@@ -25,7 +25,9 @@ Terms and rules:
 - WTW is opt-in. Without it the app is the Goal 1 player.
 - Today's mode, where our server syncs one provider, stays selectable in the
   app until G2-6. Current testers lose nothing in between.
-- The look, the player, Live TV and sign-in stay as they are.
+- The look, the player and Live TV stay as they are.
+- Google sign-in stays in Settings and stays optional. Goal 1 does not use it;
+  today's mode and Goal 2 do.
 
 ## 2. Architecture
 
@@ -42,12 +44,13 @@ Rules that carry over from WTV:
 - WTW is read-only (`docs/PLAN.md`, section 2).
 
 Rejected: our server syncs every user's provider. It would store users'
-provider passwords, and a catalog copy of about 20 MB per user.
+provider passwords, and a catalog copy of about 20 MB per user (the estimate
+in issue #89).
 
 ### Known costs
 
 - The first run of a new playlist in Goal 2 fills in TMDB details for every
-  title. Estimated at 10–15 minutes for about 20,000 titles; not measured.
+  title. Estimated at 10–15 minutes for about 20,000 titles; G2-2 measures it.
 - Matching by name and year is less exact than a provider's TMDB id. When the
   provider gives the id, it is used.
 - English category names work only for name patterns the app recognises.
@@ -56,7 +59,7 @@ provider passwords, and a catalog copy of about 20 MB per user.
 
 | # | Point | Decide by |
 |---|---|---|
-| O1 | TMDB text and images in Goal 1 or Goal 2. Planned in Goal 2, so that Goal 1 needs no server. Moving them up gives the plain player English names, backdrops and cast | G1-8 |
+| O1 | TMDB text and images in Goal 1 or Goal 2. Planned in Goal 2, so that Goal 1 needs no server. Moving them up gives the plain player English names, backdrops and cast, and changes the local database and G1-8 | G1-1 |
 | O2 | Programme guide for M3U playlists (XMLTV). Not in Goal 1: M3U channels have no now-and-next until it is added | G1-5 |
 
 ## 4. Work packages
@@ -72,24 +75,24 @@ milestone.
 | G1-2 | Xtream client on the TV: a Kotlin port of `server/src/xtream.ts`. Lists refresh when the app opens and every few hours; movie details and episodes load when a title opens |
 | G1-3 | `Catalog` reads the local database: rows, grids, sorts, search, HD/4K copies, live groups. The screens stay as they are |
 | G1-4 | User data on the device: resume, Continue watching, watchlist, favourites, hidden channels and groups, the radio switch |
-| G1-5 | M3U playlists: parse, and sort entries into movies, series and channels. A link that carries an Xtream login is used as an Xtream account |
+| G1-5 | M3U playlists: parse, and sort entries into movies, series and channels. A link that carries an Xtream login is used as an Xtream account, and stored encrypted like one |
 | G1-6 | First run and Settings: an "Add playlist" screen, the saved playlists, a per-category hide. The app opens with no sign-in |
-| G1-7 | Remove the single-provider rules: the Hebrew category table, the Israel-specific live groups, the Turkish Series skip, the fixed `ts` live output |
+| G1-7 | No single-provider rules in the local path: no Hebrew category table, no Israel-specific live groups, no Turkish Series skip, and live output in a format the account allows. The server keeps these rules for today's mode until G2-7 |
 | G1-8 | Hide what needs WTW or TMDB: Home picks, Recommended sort, % match, Viewers also liked, cast and person pages, genres, Love / Like / Dislike |
 | G1-9 | Release on the Play internal test track |
-| G1-10 | Play Store public listing for TV: store listing, TV banner, privacy policy, review (was P6-4) |
+| G1-10 | Play Store public listing for TV: store listing, TV banner, privacy policy, review (issue #41, left out of P6-4) |
 
 ### Goal 2 — WTW on top
 
 | Id | Work package |
 |---|---|
-| G2-1 | Match function on the server: title names, years and provider TMDB ids in, never logins; TMDB data out, from a shared cache |
+| G2-1 | Match function on the server: title names, years and provider TMDB ids in, never logins; TMDB data out, from a shared cache. It stores nothing per user |
 | G2-2 | The TV applies the matches in background batches: English and Hebrew text, images, genres, cast. Cast, person pages and genres return |
 | G2-3 | Ranking by TMDB key: `rank` and `wtw-scores` take keys sent by the TV, and the TV stores the scores. Recommended sort, Home picks and % match return |
 | G2-4 | Viewers also liked and Watch again, by TMDB key |
 | G2-5 | Ratings on the server by TMDB key, because the ranking reads them |
 | G2-6 | Move current testers' data (progress, watchlist, ratings, favourites, hidden channels) to the new keys; then remove today's server-backed mode from the app |
-| G2-7 | Retire the 4-hourly sync and the server's copy of the catalog; keep the TMDB cache. This deletes data: it runs only on Shahar's explicit go-ahead |
+| G2-7 | Retire the 4-hourly sync and the server's copy of the catalog; keep the TMDB cache. This deletes data: the issue lists what goes, and it runs only on Shahar's explicit go-ahead |
 
 ## 5. Later
 

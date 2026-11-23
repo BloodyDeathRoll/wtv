@@ -8,8 +8,8 @@ Status lives in GitHub Issues and the project board. This file holds the
 decisions and the work packages. Decided on 2026-11-17 unless a line says
 otherwise.
 
-Version 1 is complete (2026-11-23): every work package in section 4 is done,
-except P6-4, the public Play listing. P6-4 and the general multi-provider
+Version 1 is complete (2026-11-23): every work package in section 4 is done.
+The public Play listing, which P6-4 left out, and the general multi-provider
 player (M3U, several accounts) continue in `docs/PLAN-PUBLIC.md`.
 
 ## 1. Product
