@@ -4,10 +4,19 @@ import 'data/catalog.dart';
 import 'data/google_sign_in.dart';
 import 'data/provider_login.dart';
 import 'data/session.dart';
+import 'player/engine.dart';
+import 'player/mpv_engine.dart';
 
 /// The app-wide services (the TV app's `WtvApplication`).
 class Services {
-  Services({required this.session, required this.wtw, required this.google, required this.catalog, required this.provider});
+  Services({
+    required this.session,
+    required this.wtw,
+    required this.google,
+    required this.catalog,
+    required this.provider,
+    VideoEngine Function() engine = MpvEngine.new,
+  }) : _newEngine = engine;
 
   final Session session;
 
@@ -16,6 +25,11 @@ class Services {
   final GoogleSignIn google;
   final Catalog catalog;
   final ProviderLoginStore provider;
+
+  final VideoEngine Function() _newEngine;
+
+  /// The one video engine, for films and Live TV. Started at the first play: the browse screens do not wait for it.
+  late final VideoEngine engine = _newEngine();
 }
 
 /// Set once in `main`, before the app is shown.

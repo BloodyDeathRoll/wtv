@@ -579,6 +579,8 @@ class _ProviderSectionState extends State<_ProviderSection> {
       spacing: 10,
       children: [
         Padding(padding: const EdgeInsets.only(bottom: 2), child: heading),
+        // Sent here by Play: why.
+        if (widget.focus != null) Text(l.providerMissing, style: text.bodyMedium!.copyWith(color: WtvColors.accent)),
         _SettingField(l.providerServer, _server, focusNode: _firstField, onChanged: _typed),
         _SettingField(l.providerUser, _user, onChanged: _typed),
         _SettingField(l.providerPassword, _password, secret: true, onChanged: _typed),

@@ -201,6 +201,7 @@
       }
     }
   },
+  "playCutOff": "The stream stopped. Another device may have opened one stream too many on this provider account.",
   "playerPause": "Pause",
   "playerPrevious": "Previous episode",
   "playerNext": "Next episode",

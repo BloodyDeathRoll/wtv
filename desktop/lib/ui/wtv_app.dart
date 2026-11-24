@@ -2,7 +2,10 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart' hide Title;
 
+import '../app_language.dart';
 import '../data/catalog.dart';
+import '../data/progress.dart';
+import '../data/provider_login.dart';
 import '../l10n/app_localizations.dart';
 import '../services.dart';
 import 'browse/browse_screen.dart';
@@ -14,6 +17,7 @@ import 'components/side_rail.dart';
 import 'components/title_menu.dart';
 import 'grid/grid_screen.dart';
 import 'person/person_screen.dart';
+import 'player/player_screen.dart';
 import 'search/search_screen.dart';
 import 'settings/settings_screen.dart';
 import 'theme.dart';
@@ -22,7 +26,7 @@ import 'title/title_screen.dart';
 /// The four sections in the top tabs.
 enum Section { home, movies, series, liveTv }
 
-/// A page opened over the section. The player's pages come with their work package.
+/// A page opened over the section. Live TV's player comes with its work package.
 sealed class AppPage {
   const AppPage();
 
@@ -97,6 +101,34 @@ class SettingsPage extends AppPage {
 
   @override
   String get id => 'settings';
+}
+
+/// A film or an episode, full screen. `titleId` is the copy played; `episodeId` is set for an episode.
+/// For an episode, `series` is the series' name and `episodes` its episodes in order, so the next one can follow.
+class PlayerPage extends AppPage {
+  const PlayerPage({
+    required this.url,
+    required this.title,
+    required this.titleId,
+    required this.episodeId,
+    required this.startSecs,
+    this.series,
+    this.episodes = const [],
+  });
+
+  final String url;
+  final String title;
+  final int titleId;
+  final int? episodeId;
+  final int startSecs;
+  final String? series;
+  final List<Episode> episodes;
+
+  @override
+  String get id => 'player';
+
+  Episode? get next => episodeAfter(episodes, episodeId);
+  Episode? get previous => episodeBefore(episodes, episodeId);
 }
 
 /// One screen of the stack: the section under the tabs (`page` null), or a page over it.
@@ -231,6 +263,66 @@ class _WtvShellState extends State<WtvShell> {
 
   void _openTitle(Title title) => _open(TitlePage(title));
 
+  /// The saved provider login: a stream needs it. With none, Settings opens on it
+  /// (`replace`: in the player's place) and this is null.
+  ProviderLogin? _login({required bool replace}) {
+    final login = services.provider.login;
+    if (login != null && login.isComplete) return login;
+    const settings = SettingsPage(providerFirst: true);
+    replace ? _setStack(() => _stack[_stack.length - 1] = _Entry(settings)) : _open(settings);
+    return null;
+  }
+
+  void _play(PlayerPage Function(ProviderLogin login) page) {
+    final login = _login(replace: false);
+    if (login != null) _open(page(login));
+  }
+
+  String _episodeTitle(String series, Episode e) => '$series · ${AppLocalizations.of(context)!.seasonEpisode(e.season, e.number)}';
+
+  /// Another episode (the next, the previous) replaces the player on top: Back still returns to the series page.
+  void _playEpisode(PlayerPage p, Episode e) {
+    final login = _login(replace: true);
+    if (login == null) return;
+    final page = PlayerPage(
+      url: streamUrl(login, StreamKind.episode, e.extId, e.containerExt),
+      title: _episodeTitle(p.series ?? '', e),
+      titleId: p.titleId,
+      episodeId: e.id,
+      startSecs: 0,
+      series: p.series,
+      episodes: p.episodes,
+    );
+    _setStack(() => _stack[_stack.length - 1] = _Entry(page));
+  }
+
+  // Saved positions: one save at a time. Reports that arrive meanwhile collapse into the latest
+  // for that film or episode, which carries the whole position (a held seek key sends many).
+  final _saves = <(int, int?), Future<void> Function()>{};
+  // Those with a final report waiting: the pages showing positions reload once it is in.
+  final _finals = <(int, int?)>{};
+  var _saving = false;
+
+  Future<void> _saveProgress(PlayerPage p, int positionSecs, int? durationSecs, bool isFinal) async {
+    final key = (p.titleId, p.episodeId);
+    if (isFinal) _finals.add(key);
+    _saves[key] = () async {
+      try {
+        await services.catalog.saveProgress(p.titleId, p.episodeId, positionSecs, durationSecs);
+      } on Exception catch (e) {
+        // shortcut: a failed save is dropped; the next one (every 15 s) carries the position.
+        debugPrint('Saving the position failed: $e');
+      }
+      if (_finals.remove(key)) progressVersion.value++;
+    };
+    if (_saving) return;
+    _saving = true;
+    while (_saves.isNotEmpty) {
+      await _saves.remove(_saves.keys.first)!();
+    }
+    _saving = false;
+  }
+
   /// A card's menu, over whatever page the card is on.
   Future<void> _menu(Title title, {required bool continuing}) async {
     final choice = await showDialog<TitleMenuChoice>(context: context, builder: (_) => TitleMenu(title, continuing: continuing));
@@ -282,6 +374,7 @@ class _WtvShellState extends State<WtvShell> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
     final text = Theme.of(context).textTheme;
+    final hebrew = isHebrew(context);
     final tabLabels = {
       Section.home: l.tabHome,
       Section.movies: l.tabMovies,
@@ -379,9 +472,29 @@ class _WtvShellState extends State<WtvShell> {
                       title,
                       autoPlay: autoPlay,
                       play: entry.first,
-                      // The player comes with its work package: until then Play starts nothing.
-                      onPlay: (_, _) {},
-                      onPlayEpisode: (_, _, _) {},
+                      onPlay: (copy, start) => _play(
+                        (login) => PlayerPage(
+                          url: streamUrl(login, StreamKind.movie, copy.extId, copy.containerExt),
+                          title: title.displayName(hebrew: hebrew),
+                          titleId: copy.id,
+                          episodeId: null,
+                          startSecs: start,
+                        ),
+                      ),
+                      onPlayEpisode: (e, start, episodes) {
+                        final series = title.displayName(hebrew: hebrew);
+                        _play(
+                          (login) => PlayerPage(
+                            url: streamUrl(login, StreamKind.episode, e.extId, e.containerExt),
+                            title: _episodeTitle(series, e),
+                            titleId: title.id,
+                            episodeId: e.id,
+                            startSecs: start,
+                            series: series,
+                            episodes: episodes,
+                          ),
+                        );
+                      },
                       onPerson: (person) => _open(PersonPage(person)),
                       onOpen: _openTitle,
                     ),
@@ -395,6 +508,26 @@ class _WtvShellState extends State<WtvShell> {
                       kinds: true,
                       header: (context, _) => Text(l.railWatchlist, style: text.displayMedium),
                     ),
+                    final PlayerPage p => PlayerScreen(
+                      url: p.url,
+                      title: p.title,
+                      startSecs: p.startSecs,
+                      firstFocus: entry.first,
+                      episode: p.episodeId != null,
+                      next: switch (p.next) {
+                        null => null,
+                        final e => [l.seasonEpisode(e.season, e.number), ?e.displayName(hebrew: hebrew)].join(' · '),
+                      },
+                      onNext: () {
+                        if (p.next case final e?) _playEpisode(p, e);
+                      },
+                      onPrevious: switch (p.previous) {
+                        null => null,
+                        final e => () => _playEpisode(p, e),
+                      },
+                      onProgress: (position, duration, isFinal) => _saveProgress(p, position, duration, isFinal),
+                      onClose: _back,
+                    ),
                     SearchPage(:final scope) => SearchScreen(
                       scope: scope,
                       field: entry.first,
@@ -403,18 +536,20 @@ class _WtvShellState extends State<WtvShell> {
                     ),
                   },
                 ),
-              PositionedDirectional(
-                start: 0,
-                top: 0,
-                bottom: 0,
-                child: SideRail(
-                  nodes: _rail,
-                  onSelect: _select,
-                  onLeave: _leaveRail,
-                  // Categories lists movie or series tags: not on Home or Live TV.
-                  showCategories: _section == Section.movies || _section == Section.series,
+              // Not over the video: the player is the whole screen.
+              if (_stack.lastOrNull?.page is! PlayerPage)
+                PositionedDirectional(
+                  start: 0,
+                  top: 0,
+                  bottom: 0,
+                  child: SideRail(
+                    nodes: _rail,
+                    onSelect: _select,
+                    onLeave: _leaveRail,
+                    // Categories lists movie or series tags: not on Home or Live TV.
+                    showCategories: _section == Section.movies || _section == Section.series,
+                  ),
                 ),
-              ),
             ],
           ),
         ),
