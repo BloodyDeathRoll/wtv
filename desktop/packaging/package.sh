@@ -4,8 +4,11 @@
 #   - an AppImage: the mpv engine and its libraries are inside.
 # Needs flutter, dpkg-dev, squashfs-tools, rsync, curl and docker, and the build
 # packages the README lists.
-# shortcut: built on this machine, so both packages need its C library or a
-# newer one; build in an older system's container when other machines need it.
+# shortcut: the AppImage carries libraries of this machine's release, so it needs
+# that release's C library or a newer one; build in an older release's container
+# when other machines need it. The .deb uses the system's own libraries.
+# shortcut: Ubuntu only: the engine's libraries come from the Docker Hub image
+# named by /etc/os-release.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -30,13 +33,13 @@ fi
 # path into the app, and that must not be this user's home folder.
 work="${TMPDIR:-/tmp}/wtv-desktop-build"
 install -d -m 700 "$work"
-[ -O "$work" ] || fail "$work belongs to someone else"
+[ -O "$work" ] && [ ! -L "$work" ] || fail "$work belongs to someone else or is a link"
 rsync -a --delete --exclude /build --exclude /.dart_tool --exclude /linux/flutter/ephemeral "$project/" "$work/src/"
 (cd "$work/src" && flutter build linux --release --dart-define-from-file=.env)
 bundle="$work/src/build/linux/x64/release/bundle"
 # `wtv` is the binary's name in linux/CMakeLists.txt.
 [ -x "$bundle/wtv" ] || fail "the build left no app in $bundle"
-if grep -rlaF "$HOME" "$bundle" | grep -q .; then fail "the built app holds the path $HOME"; fi
+if [ -n "$HOME" ] && [ "$HOME" != / ] && grep -rlaF "$HOME" "$bundle" | grep -q .; then fail "the built app holds the path $HOME"; fi
 # A library that searched the build folder for its own libraries would load whatever is put there.
 if find "$bundle" -type f ! -name libdartjni.so -exec readelf -d {} + 2>/dev/null | grep -E 'R(UN)?PATH' | grep -vF '[$ORIGIN'; then
   fail "a built file searches for libraries outside the app"
@@ -65,8 +68,8 @@ TEXT
 # The packages the app's files need, the mpv engine among them (the video plugin links to it).
 mkdir -p "$work/shlibs/debian"
 printf 'Source: wtv-desktop\n\nPackage: wtv-desktop\nArchitecture: amd64\n' > "$work/shlibs/debian/control"
-depends="$(cd "$work/shlibs" && dpkg-shlibdeps -O --ignore-missing-info -l"$bundle/lib" "${own[@]/#/-e}" 2>/dev/null | sed -n 's/^shlibs:Depends=//p')"
-[[ "$depends" == *libmpv* ]] || fail "the .deb's dependencies do not name the mpv engine: $depends"
+depends="$(cd "$work/shlibs" && dpkg-shlibdeps -O --ignore-missing-info -l"$bundle/lib" "${own[@]/#/-e}" 2> "$work/shlibs.log" | sed -n 's/^shlibs:Depends=//p')"
+[[ "$depends" == *libmpv* && "$depends" == *libgtk-3* ]] || { cat "$work/shlibs.log" >&2; fail "the .deb's dependencies miss the mpv engine or GTK: $depends"; }
 # Flutter opens OpenGL ES by name when it starts, so no file links to it.
 depends="$depends, libgles2"
 cat > "$deb/DEBIAN/control" <<TEXT

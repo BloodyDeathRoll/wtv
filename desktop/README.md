@@ -51,10 +51,14 @@ puts a `.deb` and an AppImage in `build/packages/`. It needs `docker`,
   taken from a clean container of this machine's Ubuntu release, so they are
   the release's own builds and their source is public. `licenses/SOURCES.txt`
   in the AppImage names each library's package, source package and version.
-- Both need this machine's C library or a newer one: built on Ubuntu 26.04,
-  the AppImage does not start on 24.04. The `.deb` was checked on both.
-- Builds go on a draft GitHub release, which only the repository's owner can
-  see or download. A signed-out download of a draft's file was checked to fail
+- The AppImage needs this machine's C library or a newer one: built on Ubuntu
+  26.04, it does not start on 24.04. The `.deb` uses the system's libraries and
+  was checked on both. The script works on Ubuntu only.
+- The libraries inside the AppImage include GPL and LGPL ones (mpv, ffmpeg).
+  `SOURCES.txt` points to their source; before a build is published, the
+  source offer has to be settled.
+- Builds go on a draft GitHub release, which only people with write access to
+  the repository can see or download. A signed-out download of a draft's file was checked to fail
   (HTTP 404) on 2026-11-24.
 
 ## Notes
