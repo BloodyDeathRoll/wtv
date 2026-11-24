@@ -15,6 +15,15 @@ class _Broken extends FlutterSecureStorage {
       throw Exception('locked');
 }
 
+/// A keyring that refuses to forget.
+class _NoDelete extends FlutterSecureStorage {
+  const _NoDelete();
+
+  @override
+  Future<void> delete({required String key, AppleOptions? iOptions, AndroidOptions? aOptions, LinuxOptions? lOptions, WebOptions? webOptions, AppleOptions? mOptions, WindowsOptions? wOptions}) =>
+      throw Exception('locked');
+}
+
 void main() {
   const now = 1000000;
   final calls = <http.Request>[];
@@ -170,6 +179,37 @@ void main() {
     // The next use starts again as a new anonymous user.
     server = {'auth/v1/signup': (_) => http.Response(answer('n1', 'nr1'), 200)};
     expect(await s.token(), 'n1');
+  });
+
+  test('sign-out after a refused token still ends the session on the server', () async {
+    final s = session();
+    await s.token();
+    await s.invalidate('a1');
+    server = {
+      'auth/v1/token?grant_type=refresh_token': (_) => http.Response(answer('a2', 'r2'), 200),
+      'auth/v1/logout?scope=local': (_) => http.Response('', 204),
+    };
+    await s.signOut();
+    await pumpEventQueue();
+    expect(paths(), ['auth/v1/signup', 'auth/v1/token?grant_type=refresh_token', 'auth/v1/logout?scope=local']);
+    expect(calls.last.headers['Authorization'], 'Bearer a2');
+  });
+
+  test('a sign-out the keyring refuses changes nothing', () async {
+    final s = session(storage: const _NoDelete());
+    await s.token();
+    await expectLater(s.signOut(), throwsA(isA<ApiException>()));
+    await pumpEventQueue();
+    expect(await s.token(), 'a1');
+    expect(paths(), ['auth/v1/signup']);
+  });
+
+  test('a stored session with values of the wrong type is read as none', () async {
+    FlutterSecureStorage.setMockInitialValues({'session': '{"access_token":5,"refresh_token":["r"],"expires_at":"soon","email":true}'});
+    final s = session();
+    expect(await s.token(), 'a1');
+    expect(s.email, isNull);
+    expect(paths(), ['auth/v1/signup']);
   });
 
   test('a refused token is forgotten, unless a newer one is already stored', () async {

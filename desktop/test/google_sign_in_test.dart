@@ -82,6 +82,21 @@ void main() {
     );
   });
 
+  test('a Google server error does not end the sign-in; six in a row do', () async {
+    http.Response errorPage() => http.Response('<html>Service unavailable</html>', 503);
+    final sign = google([errorPage, () => json(500, {'error': 'internal_failure'}), () => json(200, {'id_token': 'abc'})]);
+    expect(await sign.awaitIdToken(code(), cancelled: () => false), 'abc');
+    await expectLater(
+      google(List.filled(6, errorPage)).awaitIdToken(code(), cancelled: () => false),
+      throwsA(isA<ApiException>().having((e) => e.message, 'message', 'Google sign-in failed (HTTP 503)')),
+    );
+    // An error Google names is final at once.
+    await expectLater(
+      google([() => json(400, {'error': 'invalid_grant'})]).awaitIdToken(code(), cancelled: () => false),
+      throwsA(isA<ApiException>().having((e) => e.message, 'message', 'Google sign-in failed (invalid_grant)')),
+    );
+  });
+
   test('declined, expired and cancelled', () async {
     await expectLater(
       google([() => json(403, {'error': 'access_denied'})]).awaitIdToken(code(), cancelled: () => false),

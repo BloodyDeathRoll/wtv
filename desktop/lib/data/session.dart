@@ -89,10 +89,12 @@ class Session {
       throw ApiException('The system keyring could not be read');
     }
     final stored = text == null ? null : _json(text);
-    _access = stored?['access_token'] as String?;
-    _refresh = stored?['refresh_token'] as String?;
-    _expiresAt = stored?['expires_at'] as int? ?? 0;
-    _email = stored?['email'] as String?;
+    // A value of the wrong type is read as missing, not as a crash at the start.
+    String? text_(String name) => stored?[name] is String ? stored![name]! as String : null;
+    _access = text_('access_token');
+    _refresh = text_('refresh_token');
+    _expiresAt = stored?['expires_at'] is int ? stored!['expires_at']! as int : 0;
+    _email = text_('email');
     _loaded = true;
   }
 
@@ -136,6 +138,8 @@ class Session {
     requireConfigured(url, key, settingNames);
     await _load();
     Map<String, Object?> body() => {'provider': 'google', 'id_token': idToken};
+    // No bearer when the anonymous user's refresh token was rejected: that user
+    // is already out of reach, so there is nothing to link or move.
     final bearer = link && _email == null ? _current() ?? await _refreshed() : null;
     if (bearer != null) {
       try {
@@ -160,17 +164,26 @@ class Session {
   /// device's session ends: the user stays signed in elsewhere.
   Future<void> signOut() => _locked(() async {
     await _load();
-    final stored = _access;
-    final fresh = isFresh(_expiresAt, _nowSeconds);
-    final refresh = _refresh;
+    final (stored, refresh, email, expiresAt) = (_access, _refresh, _email, _expiresAt);
+    final fresh = isFresh(expiresAt, _nowSeconds);
     _access = _refresh = _email = null;
     _expiresAt = 0;
-    await _save();
-    if (stored == null) return;
+    try {
+      await _save();
+    } on ApiException {
+      // The keyring refused: nothing has changed, so the user is still signed in here and at the next start.
+      _access = stored;
+      _refresh = refresh;
+      _email = email;
+      _expiresAt = expiresAt;
+      rethrow;
+    }
+    // After a refused token only the refresh token is left: it still ends the session.
+    if (stored == null && refresh == null) return;
     unawaited(
       _bestEffort(() async {
         // The server refuses an expired access token, which would leave the session alive there.
-        final token = fresh ? stored : (refresh == null ? null : await _freshToken(refresh));
+        final token = stored != null && fresh ? stored : (refresh == null ? null : await _freshToken(refresh));
         if (token == null) return;
         await _post('auth/v1/logout?scope=local', null, bearer: token);
       }),

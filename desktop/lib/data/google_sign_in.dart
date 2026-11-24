@@ -67,21 +67,23 @@ class GoogleSignIn {
       await _wait(Duration(seconds: interval));
       if (cancelled()) return null;
       // The user may take minutes on the phone: a short network drop must not end the sign-in.
-      final int status;
-      final Map<String, Object?> json;
+      final Poll result;
       try {
-        (status, json) = await _post('token', {
+        final (status, json) = await _post('token', {
           'client_id': clientId,
           'client_secret': clientSecret,
           'device_code': code.deviceCode,
           'grant_type': 'urn:ietf:params:oauth:grant-type:device_code',
         });
+        result = pollResult(status, json);
+        // Nor must a Google server error, or an answer that names no error (an error page).
+        if (result is PollFailed && (status >= 500 || json['error'] is! String)) throw ApiException(result.reason);
         offline = 0;
       } on ApiException {
         if (++offline >= 6) rethrow;
         continue;
       }
-      switch (pollResult(status, json)) {
+      switch (result) {
         case PollToken(:final idToken):
           return idToken;
         case PollPending():

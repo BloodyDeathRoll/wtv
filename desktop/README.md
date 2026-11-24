@@ -32,7 +32,8 @@ grep -E '^(SUPABASE_URL|SUPABASE_PUBLISHABLE_KEY|GOOGLE_TV_CLIENT_ID|GOOGLE_TV_C
 ```
 
 Never pass the whole key file to a build: every value in it would go into the
-app. A build without `.env` starts, and says which setting is missing when it
+app. `GOOGLE_TV_CLIENT_SECRET` is not a real secret: Google's device flow has
+every app carry it, as the TV app's build does. A build without `.env` starts, and says which setting is missing when it
 needs one.
 
 ## Notes

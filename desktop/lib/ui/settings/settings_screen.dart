@@ -144,6 +144,7 @@ class _AccountSectionState extends State<_AccountSection> {
       await services.session.signOut();
       appGeneration.value++;
     } on ApiException catch (e) {
+      // A refused sign-out changed nothing (see `Session.signOut`): the screens stay, with the reason.
       if (mounted) setState(() => _error = e.message);
     }
   }
