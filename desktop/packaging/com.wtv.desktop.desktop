@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=WTV
+Comment=Movies, series and live TV
+Exec=wtv-desktop
+Icon=com.wtv.desktop
+Categories=AudioVideo;Video;Player;TV;
+StartupWMClass=com.wtv.desktop
+Terminal=false

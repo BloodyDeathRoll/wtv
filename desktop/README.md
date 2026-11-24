@@ -36,6 +36,31 @@ app. `GOOGLE_TV_CLIENT_SECRET` is not a real secret: Google's device flow has
 every app carry it, as the TV app's build does. A build without `.env` starts, and says which setting is missing when it
 needs one.
 
+## Packages
+
+```
+packaging/package.sh
+```
+
+puts a `.deb` and an AppImage in `build/packages/`. It needs `docker`,
+`dpkg-dev`, `binutils`, `squashfs-tools`, `rsync` and `curl` besides the build packages.
+
+- **`.deb`:** the app in `/opt/wtv-desktop`. The system installs the mpv
+  engine (`libmpv2`) with it.
+- **AppImage:** one file with the mpv engine and its libraries inside. They are
+  taken from a clean container of this machine's Ubuntu release, so they are
+  the release's own builds and their source is public. `licenses/SOURCES.txt`
+  in the AppImage names each library's package, source package and version.
+- The AppImage needs this machine's C library or a newer one: built on Ubuntu
+  26.04, it does not start on 24.04. The `.deb` uses the system's libraries and
+  was checked on both. The script works on Ubuntu only.
+- The libraries inside the AppImage include GPL and LGPL ones (mpv, ffmpeg).
+  `SOURCES.txt` points to their source; before a build is published, the
+  source offer has to be settled.
+- Builds go on a draft GitHub release, which only people with write access to
+  the repository can see or download. A signed-out download of a draft's file was checked to fail
+  (HTTP 404) on 2026-11-24.
+
 ## Notes
 
 - **Layout.** The window shows the TV app's 960 x 540 layout scaled to fit

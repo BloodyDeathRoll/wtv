@@ -1,0 +1,6 @@
+#!/bin/sh
+# Starts the app from inside the AppImage with the libraries packed beside it.
+here="$(dirname "$(readlink -f "$0")")"
+# Needed: without it the system's mpv engine, if any, is loaded instead. The app starts no other program.
+export LD_LIBRARY_PATH="$here/app/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+exec "$here/app/wtv" "$@"

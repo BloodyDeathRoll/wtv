@@ -15,6 +15,9 @@ cmake_policy(SET CMP0063 NEW)
 
 # Load bundled libraries from the lib/ directory relative to the binary.
 set(CMAKE_INSTALL_RPATH "$ORIGIN/lib")
+# The plugins' libraries keep no search path into the build folder: installed, they
+# would look for their libraries in a folder that someone else may own.
+set(CMAKE_SKIP_BUILD_RPATH TRUE)
 
 # Root filesystem for cross-building.
 if(FLUTTER_TARGET_PLATFORM_SYSROOT)
