@@ -45,7 +45,8 @@ class WtwScores extends ChangeNotifier {
       _known.clear();
       _asked.clear();
       _account = email;
-      if (had) notifyListeners();
+      // Told after this call returns: it may be made while a page is being built.
+      if (had) scheduleMicrotask(notifyListeners);
     }
     final fresh = ids.where(_asked.add).toList();
     for (var i = 0; i < fresh.length; i += _perCall) {
