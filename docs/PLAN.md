@@ -1,7 +1,7 @@
 # WTV — plan
 
-WTV is an IPTV player for Android TV, later for the web. It plays the content of
-an Xtream account and uses WTW (What To Watch) to recommend from what the
+WTV is an IPTV player for Android TV, later for the desktop. It plays the content
+of an Xtream account and uses WTW (What To Watch) to recommend from what the
 provider actually has.
 
 Status lives in GitHub Issues and the project board. This file holds the
@@ -11,6 +11,8 @@ otherwise.
 Version 1 is complete (2026-11-23): every work package in section 4 is done.
 The public Play listing, which P6-4 left out, and the general multi-provider
 player (M3U, several accounts) continue in `docs/PLAN-PUBLIC.md`.
+The desktop app (Linux, then Mac and Windows) is planned in
+`docs/PLAN-DESKTOP.md`.
 
 ## 1. Product
 
@@ -63,7 +65,7 @@ choice.
 
 ### Other
 
-- Search is text only. Voice comes with the web version.
+- Search is text only.
 - One profile per device.
 - Distribution: sideload (APK) and Play Store as an internal test track for invited testers only, no public listing (decided 2026-11-18). One signing key for both, registered with Play as the app signing key, so either install updates the other.
 
@@ -233,7 +235,7 @@ Not in version 1:
 - M3U playlists.
 - Several provider accounts.
 - Several profiles per device.
-- Web version, with voice search. Browsers cannot play `ts` directly, so live
-  TV on the web needs a conversion step.
+- Desktop app (`docs/PLAN-DESKTOP.md`). The web version was dropped on
+  2026-11-24: browsers cannot play most of the provider's files in full.
 - Sending WTV ratings to WTW, if it proves useful. This would need the WTW
   team's agreement, since WTW is read-only for this project.
