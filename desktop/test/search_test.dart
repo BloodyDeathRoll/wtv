@@ -173,6 +173,15 @@ void main() {
     await tester.pump(typingPause);
     await tester.pumpAndSettle();
     expect(focusedCard(), 'Mara Actor');
+
+    // Enter, then on to a suggestion before the results are in: they do not take the focus from it.
+    await tester.enterText(find.byType(TextField), 'ma');
+    await enter(tester);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(focusedSuggestion(tester), 'Mara Actor');
+    await tester.pump(typingPause);
+    await tester.pumpAndSettle();
+    expect(focusedSuggestion(tester), 'Mara Actor');
   });
 
   testWidgets('nothing found says so; a failed search says why; without the actors the titles still show', (tester) async {

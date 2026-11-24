@@ -153,7 +153,8 @@ class _SearchScreenState extends State<SearchScreen> {
       setState(() => _results = next);
       if (!_toResults) return;
       _toResults = false;
-      if (next is _Found && !next.empty) {
+      // Not when the focus has moved on meanwhile (to a suggestion, to the side rail).
+      if (next is _Found && !next.empty && widget.field.hasPrimaryFocus) {
         // Once the results are laid out.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && _firstResult.context != null) _firstResult.requestFocus();
@@ -165,10 +166,11 @@ class _SearchScreenState extends State<SearchScreen> {
   /// Enter in the field moves on to the results, now or when they arrive.
   void _submit() {
     final r = _results;
-    // Results for an earlier query may still be on screen: wait for this one's.
-    if (r is _Found && r.query == _query.trim() && _firstResult.context != null) {
-      _firstResult.requestFocus();
+    if (r is _Found && r.query == _query.trim()) {
+      // This query's results are in: to the first one, if there is any.
+      if (_firstResult.context != null) _firstResult.requestFocus();
     } else {
+      // Results for an earlier query may still be on screen: wait for this one's.
       _toResults = true;
     }
   }
