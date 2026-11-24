@@ -236,6 +236,7 @@ Not in version 1:
 - Several provider accounts.
 - Several profiles per device.
 - Desktop app (`docs/PLAN-DESKTOP.md`). The web version was dropped on
-  2026-11-24: browsers cannot play most of the provider's files in full.
+  2026-11-24: browsers cannot play the provider's MKV files in full, and those
+  are 63% of the movies.
 - Sending WTV ratings to WTW, if it proves useful. This would need the WTW
   team's agreement, since WTW is read-only for this project.

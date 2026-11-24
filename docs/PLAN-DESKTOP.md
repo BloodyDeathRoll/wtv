@@ -21,7 +21,8 @@ the decisions and the work packages. Decided on 2026-11-24.
   private until Shahar opens them.
 - **Credentials are never published.** The provider login is typed in Settings
   and kept in the system keyring. It never goes into code, a build, an issue or
-  a pull request.
+  a pull request. The app's own keys are inside every build and can be read out
+  of it, as with the TV app's build; keeping builds private covers them too.
 - **Order of work.** WTV-public (`docs/PLAN-PUBLIC.md`) starts first. The two
   plans touch different folders and may run in parallel.
 
@@ -35,16 +36,17 @@ the decisions and the work packages. Decided on 2026-11-24.
 | Sign-in | The TV's Google sign-in by a code entered on a phone, with the same client. No new Google or WTW setup |
 | Provider login | The system keyring |
 | Build keys | Read at build time from a git-ignored local file, as the TV build does |
-| Licence | GPL-3 for `desktop/`, because the standard mpv build is GPL |
-| Packages | `.deb` and AppImage with the engine included, attached to a draft GitHub release |
+| Licence | GPL-3 for `desktop/` only, because the standard mpv build is GPL. The rest of the repository has no licence file and is not changed. `desktop/` imports nothing from it. Each package carries the engine's source offer (D1-13) |
+| Packages | `.deb` and AppImage with the engine included, attached to a draft GitHub release if it passes the D1-13 test (open point O3) |
 
 ### Rejected
 
 Checked on 2026-11-24:
 
-- **A web player in a browser.** Firefox did not load MKV, which is 63% of the
-  movies. Chrome played it without the subtitles inside the file. Neither
-  played AC3 sound or offered an audio-track choice.
+- **A web player in a browser.** Tested in headless Firefox 157 and Chrome
+  157. Firefox did not load MKV, which is 63% of the movies. Chrome played it
+  without the subtitles inside the file. Neither played AC3 sound or offered an
+  audio-track choice.
 - **Electron or Tauri with an engine inside.** Neither can draw our panels over
   mpv video on Linux. The Tauri mpv plugins state that window embedding does
   not work on Linux, and IPTVnator marks its embedded MPV as experimental.
@@ -82,7 +84,7 @@ Provider facts measured the same day:
 - The 3 streams are shared between the TV and the desktop.
 - `media_kit`'s graphics-card drawing path did not start on the proof machine
   ("EGL display or context is invalid"), so it drew in software. That was
-  smooth there at 4K and is unproven on weak computers. D1-2 looks at it.
+  smooth there at 4K and is unproven on weak computers. D1-2 settles it.
 - GitHub documents that draft releases are listed only for people with push
   access. It does not say whether a signed-out person with the direct file link
   can download. D1-13 tests that with a dummy file before the first real build.
@@ -93,8 +95,8 @@ Provider facts measured the same day:
 
 | # | Point | Decide by |
 |---|---|---|
-| O1 | Mac: a real Mac for testing, and an Apple Developer account ($99 a year) for a build that opens without a warning | D2-1 |
-| O2 | Windows: a PC for testing, and a signing certificate or an accepted warning on first run | D3-1 |
+| O1 | Mac: a real Mac for testing, and an Apple Developer account ($99 a year) for a build that opens without a warning. Without a Mac, Phase 2 waits | Before Phase 2 starts |
+| O2 | Windows: a PC for testing, and a signing certificate or an accepted warning on first run. Without a PC, Phase 3 waits | Before Phase 3 starts |
 | O3 | Where private builds live if a draft release fails the D1-13 test. Fallback: a private repository | D1-13 |
 
 ## 4. Work packages
@@ -106,18 +108,18 @@ Each work package is one pull request.
 | Id | Work package |
 |---|---|
 | D1-1 | Playback proof. Done on 2026-11-24 with a throwaway app outside the repository |
-| D1-2 | App shell: the Flutter project in `desktop/`, CI, theme, side menu, routes, both languages, focus by arrow keys and mouse, the GPL-3 licence file. Look at the graphics-card drawing path |
+| D1-2 | App shell: the Flutter project in `desktop/`, CI, theme, side menu, routes, both languages, focus by arrow keys and mouse, the GPL-3 licence file. Graphics-card drawing: the 4K HEVC live channel plays with no dropped frames with it on, or the plan records that software drawing stays |
 | D1-3 | Sign-in: an anonymous start, then Google by code, as on the TV |
 | D1-4 | Data layer: a Dart port of `Catalog`, `Live`, `Progress`, `Marks`, `WtwScores` and the guide calls (`Epg`, `OnNow`) |
 | D1-5 | Browse: Home, Movies, Series, category pages, the More grid with its sorts and filters |
 | D1-6 | Title and person pages: episodes, watchlist, Love / Like / Dislike, the title menu |
 | D1-7 | Search: titles and people |
-| D1-8 | Film and episode player: resume, auto-next, previous and next episode, subtitles, audio track, speed |
-| D1-9 | Live TV: groups, guide, catch-up, channel numbers, favourites, hidden channels and groups, radio |
+| D1-8 | Film and episode player: resume, auto-next, previous and next episode, subtitles, audio track, speed. The old stream closes before the next opens, and the provider's too-many-streams answer is shown as a message |
+| D1-9 | Live TV: groups, guide, catch-up, channel numbers, favourites, hidden channels and groups, radio. The same stream rules as D1-8 |
 | D1-10 | Settings: provider login, language, WTW connect, sign out |
 | D1-11 | WTW: picks rows, % match, Recommended sort, Viewers also liked |
 | D1-12 | Parity check: every screen compared with the TV app |
-| D1-13 | Packaging and private release: `.deb` and AppImage on a draft release, after the dummy-file test |
+| D1-13 | Packaging and private release: `.deb` and AppImage with the engine's source offer, on a draft release after the dummy-file test |
 
 ### Phase 2 — Mac
 
@@ -134,7 +136,8 @@ Each work package is one pull request.
 ## 5. Effect on WTV-public
 
 - G2-7 deletes the server's catalog copy. Desktop version 1 reads that copy, so
-  G2-7 waits until the general desktop version exists.
+  G2-7 waits until the desktop app no longer reads it. That is the general
+  desktop version (section 6), which has no work packages yet.
 - G2-3 and G2-5 change the ranking and ratings calls. The desktop app moves
   with them.
 
@@ -144,4 +147,5 @@ Not in this plan:
 
 - The general desktop version, for any Xtream account or M3U link.
 - Auto-update.
+- Voice search, which `docs/PLAN.md` had planned for the web version.
 - A public release.
