@@ -39,9 +39,9 @@ rsync -a --delete --exclude /build --exclude /.dart_tool --exclude /linux/flutte
 bundle="$work/src/build/linux/x64/release/bundle"
 # `wtv` is the binary's name in linux/CMakeLists.txt.
 [ -x "$bundle/wtv" ] || fail "the build left no app in $bundle"
-if [ -n "$HOME" ] && [ "$HOME" != / ] && grep -rlaF "$HOME" "$bundle" | grep -q .; then fail "the built app holds the path $HOME"; fi
+if [ -n "${HOME:-}" ] && [ "$HOME" != / ] && grep -rlaF "$HOME" "$bundle" | grep -q .; then fail "the built app holds the path $HOME"; fi
 # A library that searched the build folder for its own libraries would load whatever is put there.
-if find "$bundle" -type f ! -name libdartjni.so -exec readelf -d {} + 2>/dev/null | grep -E 'R(UN)?PATH' | grep -vF '[$ORIGIN'; then
+if find "$bundle" -type f ! -name libdartjni.so -exec readelf -d {} + 2>/dev/null | grep -E 'R(UN)?PATH' | grep -vE '\[\$ORIGIN(/[^:]*)?\]$'; then
   fail "a built file searches for libraries outside the app"
 fi
 
@@ -68,7 +68,8 @@ TEXT
 # The packages the app's files need, the mpv engine among them (the video plugin links to it).
 mkdir -p "$work/shlibs/debian"
 printf 'Source: wtv-desktop\n\nPackage: wtv-desktop\nArchitecture: amd64\n' > "$work/shlibs/debian/control"
-depends="$(cd "$work/shlibs" && dpkg-shlibdeps -O --ignore-missing-info -l"$bundle/lib" "${own[@]/#/-e}" 2> "$work/shlibs.log" | sed -n 's/^shlibs:Depends=//p')"
+depends="$(cd "$work/shlibs" && dpkg-shlibdeps -O --ignore-missing-info -l"$bundle/lib" "${own[@]/#/-e}" 2> "$work/shlibs.log" | sed -n 's/^shlibs:Depends=//p')" \
+  || { cat "$work/shlibs.log" >&2; fail "dpkg-shlibdeps failed"; }
 [[ "$depends" == *libmpv* && "$depends" == *libgtk-3* ]] || { cat "$work/shlibs.log" >&2; fail "the .deb's dependencies miss the mpv engine or GTK: $depends"; }
 # Flutter opens OpenGL ES by name when it starts, so no file links to it.
 depends="$depends, libgles2"
