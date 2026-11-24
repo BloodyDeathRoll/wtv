@@ -41,9 +41,10 @@ bundle="$work/src/build/linux/x64/release/bundle"
 [ -x "$bundle/wtv" ] || fail "the build left no app in $bundle"
 if [ -n "${HOME:-}" ] && [ "$HOME" != / ] && grep -rlaF "$HOME" "$bundle" | grep -q .; then fail "the built app holds the path $HOME"; fi
 # A library that searched the build folder for its own libraries would load whatever is put there.
-if find "$bundle" -type f ! -name libdartjni.so -exec readelf -d {} + 2>/dev/null | grep -E 'R(UN)?PATH' | grep -vE '\[\$ORIGIN(/[^:]*)?\]$'; then
-  fail "a built file searches for libraries outside the app"
-fi
+# readelf fails on the files that are not libraries: only grep's output counts.
+bad="$(find "$bundle" -type f ! -name libdartjni.so -exec readelf -d {} + 2>/dev/null \
+  | grep -E 'R(UN)?PATH' | grep -vE '\[\$ORIGIN(/[^:]*)?\]$' || true)"
+[ -z "$bad" ] || { echo "$bad" >&2; fail "a built file searches for libraries outside the app"; }
 
 # The app's own files. libdartjni.so is for Android (it needs Java) and is never loaded here.
 mapfile -t own < <(find "$bundle/wtv" "$bundle/lib" -maxdepth 1 -type f ! -name libdartjni.so | sort)
