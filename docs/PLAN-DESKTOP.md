@@ -4,8 +4,9 @@ WTV desktop is an installable desktop app: Linux first, then Mac, then Windows.
 Version 1 is a copy of the TV app as built (`docs/PLAN.md`). It lives in the
 same repository, in `desktop/`.
 
-Issues and a project board are created when the work starts. This file holds
-the decisions and the work packages. Decided on 2026-11-24.
+Status lives in GitHub Issues and the WTV-desktop project board; issue #167
+tracks the whole plan. This file holds the decisions and the work packages.
+Decided on 2026-11-24.
 
 ## 1. Product
 
@@ -101,7 +102,8 @@ Provider facts measured the same day:
 
 ## 4. Work packages
 
-Each work package is one pull request.
+Each work package is one GitHub issue, with the id in its title, and one pull
+request. A phase is a milestone.
 
 ### Phase 1 — Linux
 
