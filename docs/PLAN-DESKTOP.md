@@ -102,7 +102,7 @@ Provider facts measured the same day:
 |---|---|---|
 | O1 | Mac: a real Mac for testing, and an Apple Developer account ($99 a year) for a build that opens without a warning. Without a Mac, Phase 2 waits | Before Phase 2 starts |
 | O2 | Windows: a PC for testing, and a signing certificate or an accepted warning on first run. Without a PC, Phase 3 waits | Before Phase 3 starts |
-| O3 | Where private builds live if a draft release fails the D1-13 test. Fallback: a private repository | D1-13 |
+| O3 | Decided 2026-11-24: draft releases. A signed-out download of a draft's file, its page and its API record all gave HTTP 404 | D1-13 |
 
 ## 4. Work packages
 
