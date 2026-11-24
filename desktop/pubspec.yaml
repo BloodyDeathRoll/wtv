@@ -24,5 +24,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    # TMDB's official "blue short" logo, required by TMDB's API terms (Settings → About).
+    - assets/tmdb_logo.png
   # Builds lib/l10n/app_localizations*.dart from the ARB files.
   generate: true

@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import 'epg.dart';
 
 /// The Xtream provider login, typed in Settings and kept on this device only.
@@ -9,6 +13,46 @@ class ProviderLogin {
   final String password;
 
   bool get isComplete => server.trim().isNotEmpty && user.trim().isNotEmpty && password.trim().isNotEmpty;
+}
+
+/// Keeps the login in the system keyring (libsecret), as the session is: never in a file, never sent anywhere but to the provider.
+class ProviderLoginStore {
+  ProviderLoginStore([this._storage = const FlutterSecureStorage()]);
+
+  final FlutterSecureStorage _storage;
+  static const _key = 'provider_login';
+
+  /// The saved login; null when there is none (or before [load]).
+  ProviderLogin? get login => _login;
+  ProviderLogin? _login;
+
+  /// Reads the saved login, once at the start. One that cannot be read counts as none: Settings then asks for it.
+  Future<void> load() async {
+    try {
+      final text = await _storage.read(key: _key);
+      final json = text == null ? null : jsonDecode(text);
+      if (json is! Map) return;
+      String field(String name) => json[name] is String ? json[name] as String : '';
+      _login = ProviderLogin(field('server'), field('user'), field('password'));
+    } catch (_) {
+      // Never printed: the error may quote the stored value.
+    }
+  }
+
+  /// False if the keyring refused; nothing is stored then. Server and user name are trimmed, the password is kept as typed.
+  Future<bool> save(ProviderLogin login) async {
+    final trimmed = ProviderLogin(login.server.trim(), login.user.trim(), login.password);
+    try {
+      await _storage.write(
+        key: _key,
+        value: jsonEncode({'server': trimmed.server, 'user': trimmed.user, 'password': trimmed.password}),
+      );
+    } catch (_) {
+      return false;
+    }
+    _login = trimmed;
+    return true;
+  }
 }
 
 /// What to play: a movie copy, an episode, or (P5) a channel.

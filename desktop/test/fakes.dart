@@ -10,6 +10,7 @@ import 'package:wtv/app_language.dart';
 import 'package:wtv/data/api.dart';
 import 'package:wtv/data/catalog.dart';
 import 'package:wtv/data/google_sign_in.dart';
+import 'package:wtv/data/provider_login.dart';
 import 'package:wtv/data/session.dart';
 import 'package:wtv/l10n/app_localizations.dart';
 import 'package:wtv/main.dart';
@@ -96,12 +97,22 @@ void fakeServices({Rest? rest}) {
         'user': {'email': 'me@example.com'},
       }),
       'db.test/auth/v1/logout' => http.Response('', 204),
+      // WTW's own sign-in, with the same Google account.
+      'wtw.test/auth/v1/token' => _json({
+        'access_token': 'wtw-access',
+        'refresh_token': 'wtw-refresh',
+        'expires_at': DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600,
+        'user': {'email': 'me@example.com'},
+      }),
+      'wtw.test/auth/v1/logout' => http.Response('', 204),
       _ => fail('unexpected call: $path'),
     };
   });
   final session = Session(client, url: 'https://db.test', key: 'public-key');
   services = Services(
     session: session,
+    wtw: Session(client, name: 'wtw_session', url: 'https://wtw.test', key: 'wtw-key', anonymous: false),
+    provider: ProviderLoginStore(),
     google: GoogleSignIn(client, clientId: 'client', clientSecret: 'secret'),
     catalog: Catalog(Api(session, client, url: 'https://db.test', key: 'public-key')),
   );

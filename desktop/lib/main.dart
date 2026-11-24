@@ -4,7 +4,9 @@ import 'package:material_ui/material_ui.dart';
 import 'app_language.dart';
 import 'data/api.dart';
 import 'data/catalog.dart';
+import 'config.dart' as config;
 import 'data/google_sign_in.dart';
+import 'data/provider_login.dart';
 import 'data/session.dart';
 import 'l10n/app_localizations.dart';
 import 'services.dart';
@@ -15,14 +17,30 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final client = http.Client();
   final session = Session(client);
-  services = Services(session: session, google: GoogleSignIn(client), catalog: Catalog(Api(session, client)));
+  services = Services(
+    session: session,
+    wtw: Session(
+      client,
+      name: 'wtw_session',
+      url: config.wtwSupabaseUrl,
+      key: config.wtwSupabaseKey,
+      anonymous: false,
+      settingNames: 'WTW_SUPABASE_URL, WTW_SUPABASE_ANON_KEY',
+    ),
+    google: GoogleSignIn(client),
+    catalog: Catalog(Api(session, client)),
+    provider: ProviderLoginStore(),
+  );
   await loadLanguage();
   // So Settings knows who is signed in. A failure shows again, with its reason, at the first use of the session.
+  // One try for both: a WTW session read without the WTV one would be ended by Settings as a leftover.
   try {
     await services.session.load();
+    await services.wtw.load();
   } on ApiException catch (e) {
     debugPrint('Reading the session failed: $e');
   }
+  await services.provider.load();
   runApp(const WtvApp());
 }
 
