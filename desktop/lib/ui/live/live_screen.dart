@@ -274,10 +274,14 @@ class _LiveScreenState extends State<LiveScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     child: Row(
                       children: [
+                        // As on the TV, the row does not scroll: groups past the window's edge are cut off.
                         Flexible(
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
+                          child: UnconstrainedBox(
+                            alignment: AlignmentDirectional.centerStart,
+                            constrainedAxis: Axis.vertical,
+                            clipBehavior: Clip.hardEdge,
                             child: Row(
+                              mainAxisSize: MainAxisSize.min,
                               spacing: 8,
                               children: [
                                 for (final g in _groups)

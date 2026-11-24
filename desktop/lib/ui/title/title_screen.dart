@@ -575,16 +575,16 @@ class _MoreInfo extends StatelessWidget {
       padding: 28,
       spacing: 12,
       children: [
-        ContentText(title.displayName(hebrew: hebrew), style: text.headlineMedium, maxLines: 1),
-        // Ten lines at most: the panel always fits the window.
-        if (title.synopsis(hebrew: hebrew) case final synopsis?) ContentText(synopsis, style: quiet, maxLines: 10),
+        // Full texts, as on the TV.
+        ContentText(title.displayName(hebrew: hebrew), style: text.headlineMedium),
+        if (title.synopsis(hebrew: hebrew) case final synopsis?) ContentText(synopsis, style: quiet),
         for (final (label, value) in [
           if (title.director case final director?) (l.infoDirector, director),
           if (castLine.isNotEmpty) (l.infoCast, castLine),
           if (title.originalLanguage case final language?) (l.infoLanguage, language.toUpperCase()),
           if (title.tmdbRating case final rating?) (l.infoRating, l.infoRatingValue(rating.toStringAsFixed(1))),
         ])
-          Text('$label: $value', style: quiet, maxLines: 2, overflow: TextOverflow.ellipsis),
+          Text('$label: $value', style: quiet),
         ActionButton(label: l.close, autofocus: true, onPressed: () => Navigator.pop(context)),
       ],
     );
