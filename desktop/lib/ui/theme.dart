@@ -62,6 +62,8 @@ final wtvTheme = ThemeData(
     // Badges and card labels.
     labelLarge: _style(14, 18, FontWeight.w600),
     labelMedium: _style(12, 16, FontWeight.bold),
+    // The match on a card, a channel's number (the TV library's own size: the TV app sets none).
+    labelSmall: _style(11, 16, FontWeight.w500),
   ),
 );
 
@@ -86,7 +88,13 @@ class DesignScale extends StatelessWidget {
         child: SizedBox.fromSize(
           size: canvas,
           child: MediaQuery(
-            data: media.copyWith(size: canvas, devicePixelRatio: media.devicePixelRatio * scale),
+            // The system's text size is not applied: the layout has the TV's fixed heights, and
+            // a bigger window makes everything bigger, text included.
+            data: media.copyWith(
+              size: canvas,
+              devicePixelRatio: media.devicePixelRatio * scale,
+              textScaler: TextScaler.noScaling,
+            ),
             child: child,
           ),
         ),

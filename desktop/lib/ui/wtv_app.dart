@@ -1,20 +1,70 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:material_ui/material_ui.dart' hide Title;
 
+import '../data/catalog.dart';
 import '../l10n/app_localizations.dart';
+import 'browse/browse_screen.dart';
+import 'categories/categories_screen.dart';
 import 'components/buttons.dart';
 import 'components/chips.dart';
 import 'components/pressable.dart';
 import 'components/side_rail.dart';
+import 'grid/grid_screen.dart';
 import 'settings/settings_screen.dart';
 import 'theme.dart';
 
 /// The four sections in the top tabs.
 enum Section { home, movies, series, liveTv }
 
-/// A page opened over the section. The grid, title, person and player pages come with their work packages.
-enum AppPage { search, categories, watchlist, settings }
+/// A page opened over the section. The title, person and player pages come with their work packages.
+sealed class AppPage {
+  const AppPage();
+
+  /// Which page this is: opening one already on the stack goes back to it.
+  String get id;
+}
+
+class SearchPage extends AppPage {
+  const SearchPage();
+
+  @override
+  String get id => 'search';
+}
+
+/// Side rail → Categories: the provider's categories and the genres of a kind.
+class CategoriesPage extends AppPage {
+  const CategoriesPage(this.kind);
+
+  final Kind kind;
+
+  @override
+  String get id => 'categories';
+}
+
+/// A whole category, in rows of four.
+class GridPage extends AppPage {
+  const GridPage(this.category);
+
+  final Category category;
+
+  @override
+  String get id => 'grid:${category.kind.name}:${category.genre ? 'genre:' : ''}${category.id}';
+}
+
+class WatchlistPage extends AppPage {
+  const WatchlistPage();
+
+  @override
+  String get id => 'watchlist';
+}
+
+class SettingsPage extends AppPage {
+  const SettingsPage();
+
+  @override
+  String get id => 'settings';
+}
 
 /// One screen of the stack: the section under the tabs (`page` null), or a page over it.
 class _Entry {
@@ -63,6 +113,8 @@ class _WtvShellState extends State<WtvShell> {
   final _rail = {for (final item in RailItem.values) item: FocusNode()};
   // Whether the focus was on the tabs (rather than the page) before it went to the rail: the arrow back returns there.
   var _lastOnTabs = true;
+  // True while a tab has the focus: the section's page is then back at its top.
+  final _tabsFocused = ValueNotifier(false);
 
   FocusNode get _selectedTab => _tabs[_section]!;
 
@@ -80,6 +132,7 @@ class _WtvShellState extends State<WtvShell> {
     for (final node in [..._tabs.values, ..._rail.values]) {
       node.dispose();
     }
+    _tabsFocused.dispose();
     super.dispose();
   }
 
@@ -109,7 +162,7 @@ class _WtvShellState extends State<WtvShell> {
 
   /// Opening a page already on the stack goes back to it, rather than stacking a second copy.
   void _open(AppPage page) {
-    final existing = _stack.indexWhere((e) => e.page == page);
+    final existing = _stack.indexWhere((e) => e.page!.id == page.id);
     _setStack(() => existing < 0 ? _stack.add(_Entry(page)) : _stack.removeRange(existing + 1, _stack.length));
   }
 
@@ -129,12 +182,15 @@ class _WtvShellState extends State<WtvShell> {
   }
 
   void _select(RailItem item) => switch (item) {
-    RailItem.search => _open(AppPage.search),
-    RailItem.categories => _open(AppPage.categories),
+    RailItem.search => _open(const SearchPage()),
+    RailItem.categories => _open(CategoriesPage(_section == Section.series ? Kind.series : Kind.movie)),
     RailItem.mainMenu => _stack.isEmpty ? _selectedTab.requestFocus() : _setStack(_stack.clear, toTabs: true),
-    RailItem.watchlist => _open(AppPage.watchlist),
-    RailItem.settings => _open(AppPage.settings),
+    RailItem.watchlist => _open(const WatchlistPage()),
+    RailItem.settings => _open(const SettingsPage()),
   };
+
+  /// The title page comes with its work package: until then a card opens nothing.
+  void _openTitle(Title title) {}
 
   /// From the rail back to where the focus was.
   void _leaveRail() {
@@ -187,8 +243,23 @@ class _WtvShellState extends State<WtvShell> {
                 _base,
                 covered: _stack.isNotEmpty,
                 onFocus: () => _lastOnTabs = false,
-                // The section's rows come with the browse work package.
-                child: const SizedBox.expand(),
+                child: switch (_section) {
+                  // Live TV comes with its work package.
+                  Section.liveTv => const SizedBox.expand(),
+                  _ => BrowseScreen(
+                    // A section's page is its own: its rows, its place and its header.
+                    key: ValueKey(_section),
+                    kind: switch (_section) {
+                      Section.movies => Kind.movie,
+                      Section.series => Kind.series,
+                      _ => null,
+                    },
+                    firstFocus: _base.first,
+                    tabsFocused: _tabsFocused,
+                    onMore: (category) => _open(GridPage(category)),
+                    onOpen: _openTitle,
+                  ),
+                },
                 over: PositionedDirectional(
                   start: 88,
                   top: 18,
@@ -213,6 +284,7 @@ class _WtvShellState extends State<WtvShell> {
                             // Nothing more on a press: the click gives the tab the focus, and the focus switches the section.
                             onPressed: () {},
                             onFocusChange: (focused) {
+                              _tabsFocused.value = _tabs.values.any((tab) => tab.hasFocus);
                               if (!focused) return;
                               _lastOnTabs = true;
                               if (section != _section) setState(() => _section = section);
@@ -236,11 +308,16 @@ class _WtvShellState extends State<WtvShell> {
                   entry,
                   covered: entry != _stack.last,
                   child: switch (entry.page!) {
-                    AppPage.settings => SettingsScreen(firstFocus: entry.first),
+                    SettingsPage() => SettingsScreen(firstFocus: entry.first),
+                    CategoriesPage(:final kind) => CategoriesScreen(
+                      kind,
+                      firstFocus: entry.first,
+                      onOpen: (category) => _open(GridPage(category)),
+                    ),
+                    GridPage(:final category) => GridScreen(category, firstFocus: entry.first, onOpen: _openTitle),
                     // Each is a heading until its work package.
-                    AppPage.search => _Heading(l.railSearch),
-                    AppPage.categories => _Heading(l.railCategories),
-                    AppPage.watchlist => _Heading(l.railWatchlist),
+                    SearchPage() => _Heading(l.railSearch),
+                    WatchlistPage() => _Heading(l.railWatchlist),
                   },
                 ),
               PositionedDirectional(
