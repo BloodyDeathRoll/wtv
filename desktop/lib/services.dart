@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' show Client;
 
 import 'data/catalog.dart';
 import 'data/google_sign_in.dart';
@@ -15,6 +16,7 @@ class Services {
     required this.google,
     required this.catalog,
     required this.provider,
+    required this.http,
     VideoEngine Function() engine = MpvEngine.new,
   }) : _newEngine = engine;
 
@@ -25,6 +27,9 @@ class Services {
   final GoogleSignIn google;
   final Catalog catalog;
   final ProviderLoginStore provider;
+
+  /// For the provider's guide: what is on each channel.
+  final Client http;
 
   final VideoEngine Function() _newEngine;
 

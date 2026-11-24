@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart' hide Title;
 
 import '../app_language.dart';
 import '../data/catalog.dart';
+import '../data/live.dart';
 import '../data/progress.dart';
 import '../data/provider_login.dart';
 import '../l10n/app_localizations.dart';
@@ -16,7 +17,9 @@ import 'components/pressable.dart';
 import 'components/side_rail.dart';
 import 'components/title_menu.dart';
 import 'grid/grid_screen.dart';
+import 'live/live_screen.dart';
 import 'person/person_screen.dart';
+import 'player/live_player_screen.dart';
 import 'player/player_screen.dart';
 import 'search/search_screen.dart';
 import 'settings/settings_screen.dart';
@@ -26,7 +29,7 @@ import 'title/title_screen.dart';
 /// The four sections in the top tabs.
 enum Section { home, movies, series, liveTv }
 
-/// A page opened over the section. Live TV's player comes with its work package.
+/// A page opened over the section.
 sealed class AppPage {
   const AppPage();
 
@@ -129,6 +132,20 @@ class PlayerPage extends AppPage {
 
   Episode? get next => episodeAfter(episodes, episodeId);
   Episode? get previous => episodeBefore(episodes, episodeId);
+}
+
+/// A live channel, full screen: `channels[index]`, with `channels` as the list Left and Right move through.
+/// `all` is every channel the user can watch, for a number typed that is not in `channels`.
+class LivePage extends AppPage {
+  const LivePage(this.channels, this.index, this.all, this.login);
+
+  final List<Channel> channels;
+  final int index;
+  final List<Channel> all;
+  final ProviderLogin login;
+
+  @override
+  String get id => 'live';
 }
 
 /// One screen of the stack: the section under the tabs (`page` null), or a page over it.
@@ -251,8 +268,8 @@ class _WtvShellState extends State<WtvShell> {
       SearchPage(switch (_section) {
         Section.movies => SearchScope.movies,
         Section.series => SearchScope.series,
-        // The channel search comes with Live TV's work package.
-        Section.home || Section.liveTv => SearchScope.all,
+        Section.liveTv => SearchScope.live,
+        Section.home => SearchScope.all,
       }),
     ),
     RailItem.categories => _open(CategoriesPage(_section == Section.series ? Kind.series : Kind.movie)),
@@ -276,6 +293,11 @@ class _WtvShellState extends State<WtvShell> {
   void _play(PlayerPage Function(ProviderLogin login) page) {
     final login = _login(replace: false);
     if (login != null) _open(page(login));
+  }
+
+  void _watch(List<Channel> channels, int index, List<Channel> all) {
+    final login = _login(replace: false);
+    if (login != null) _open(LivePage(channels, index, all, login));
   }
 
   String _episodeTitle(String series, Episode e) => '$series · ${AppLocalizations.of(context)!.seasonEpisode(e.season, e.number)}';
@@ -397,8 +419,7 @@ class _WtvShellState extends State<WtvShell> {
                 covered: _stack.isNotEmpty,
                 onFocus: () => _lastOnTabs = false,
                 child: switch (_section) {
-                  // Live TV comes with its work package.
-                  Section.liveTv => const SizedBox.expand(),
+                  Section.liveTv => LiveScreen(firstFocus: _base.first, onWatch: _watch),
                   _ => BrowseScreen(
                     // A section's page is its own: its rows, its place and its header.
                     key: ValueKey(_section),
@@ -419,10 +440,25 @@ class _WtvShellState extends State<WtvShell> {
                   child: Focus(
                     canRequestFocus: false,
                     skipTraversal: true,
-                    // Down from the tabs enters the page, never the rail.
                     onKeyEvent: (_, event) {
-                      if (event.logicalKey != LogicalKeyboardKey.arrowDown) return KeyEventResult.ignored;
-                      if (event is KeyDownEvent && _base.hasItems) _base.enter();
+                      final key = event.logicalKey;
+                      // Down from the tabs enters the page, never the rail.
+                      if (key == LogicalKeyboardKey.arrowDown) {
+                        if (event is KeyDownEvent && _base.hasItems) _base.enter();
+                        return KeyEventResult.handled;
+                      }
+                      // Left and Right go along the tabs: the nearest item, which the framework would take,
+                      // can be the page under them (from Series it is, not Live TV).
+                      final step = key == LogicalKeyboardKey.arrowRight
+                          ? 1
+                          : key == LogicalKeyboardKey.arrowLeft
+                          ? -1
+                          : 0;
+                      final rtl = Directionality.of(context) == TextDirection.rtl;
+                      final to = step == 0 ? null : Section.values.elementAtOrNull(_section.index + (rtl ? -step : step));
+                      // Past the first tab is the rail, as the framework finds it.
+                      if (to == null) return KeyEventResult.ignored;
+                      if (event is! KeyUpEvent) _tabs[to]!.requestFocus();
                       return KeyEventResult.handled;
                     },
                     child: Row(
@@ -533,11 +569,19 @@ class _WtvShellState extends State<WtvShell> {
                       field: entry.first,
                       onOpen: _openTitle,
                       onPerson: (person) => _open(PersonPage(person)),
+                      onWatch: (channels, index) => _watch(channels, index, channels),
+                    ),
+                    LivePage(:final channels, :final index, :final all, :final login) => LivePlayerScreen(
+                      channels: channels,
+                      start: index,
+                      all: all,
+                      login: login,
+                      firstFocus: entry.first,
                     ),
                   },
                 ),
-              // Not over the video: the player is the whole screen.
-              if (_stack.lastOrNull?.page is! PlayerPage)
+              // Not over the video: a player is the whole screen.
+              if (_stack.lastOrNull?.page case final top when top is! PlayerPage && top is! LivePage)
                 PositionedDirectional(
                   start: 0,
                   top: 0,

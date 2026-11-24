@@ -173,3 +173,126 @@ class ImageCard extends StatelessWidget {
     );
   }
 }
+
+/// A live channel: its logo (or its name, when there is none or it does not
+/// load) on a plain card, the provider's number in the corner, a star when it
+/// is a favourite, and under the name the programme on now (null while
+/// unknown or without a guide). The card fills the width it is given.
+class ChannelCard extends StatelessWidget {
+  const ChannelCard({
+    super.key,
+    required this.logo,
+    required this.name,
+    required this.number,
+    required this.favorite,
+    required this.onPressed,
+    this.onNow,
+    this.onMenu,
+    this.focusNode,
+  });
+
+  final String? logo;
+  final String name;
+  final int? number;
+  final bool favorite;
+  final VoidCallback onPressed;
+  final String? onNow;
+
+  /// Opens the channel's menu (see [Pressable.onMenu]).
+  final VoidCallback? onMenu;
+  final FocusNode? focusNode;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final onNow = this.onNow;
+    Widget now() => ContentText(onNow!, style: text.labelSmall!.copyWith(color: WtvColors.accent), maxLines: 1);
+    const under = EdgeInsets.symmetric(horizontal: 8, vertical: 6);
+    final plain = Stack(
+      fit: StackFit.expand,
+      children: [
+        Center(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: ContentText(name, style: text.titleSmall, textAlign: TextAlign.center, maxLines: 2),
+          ),
+        ),
+        if (onNow != null) Align(alignment: Alignment.bottomCenter, child: Padding(padding: under, child: now())),
+      ],
+    );
+    final logo = this.logo;
+    return Pressable(
+      onPressed: onPressed,
+      focusNode: focusNode,
+      onMenu: onMenu,
+      semanticLabel: name,
+      builder: (context, focused) => AnimatedScale(
+        scale: focused ? 1.04 : 1,
+        duration: const Duration(milliseconds: 150),
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: BoxDecoration(
+              borderRadius: _shape,
+              border: focused ? Border.all(color: WtvColors.focus, width: 3) : null,
+            ),
+            child: ClipRRect(
+              borderRadius: _shape,
+              child: ColoredBox(
+                color: WtvColors.surface,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (logo == null)
+                      plain
+                    else
+                      Image.network(
+                        logo,
+                        fit: BoxFit.contain,
+                        excludeFromSemantics: true,
+                        errorBuilder: (_, _, _) => plain,
+                        // The name goes under a logo that loaded: without one it is the card's middle.
+                        frameBuilder: (_, image, _, _) => Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Padding(padding: EdgeInsets.fromLTRB(20, 14, 20, onNow != null ? 46 : 30), child: image),
+                            Align(
+                              alignment: Alignment.bottomCenter,
+                              child: Padding(
+                                padding: under,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    ContentText(name, style: text.labelMedium!.copyWith(color: WtvColors.textSecondary), maxLines: 1),
+                                    if (onNow != null) now(),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (number != null)
+                      Align(
+                        alignment: AlignmentDirectional.topStart,
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Text('$number', style: text.labelSmall!.copyWith(color: WtvColors.textMuted)),
+                        ),
+                      ),
+                    if (favorite)
+                      const Align(
+                        alignment: AlignmentDirectional.topEnd,
+                        child: Padding(padding: EdgeInsets.all(6), child: Icon(Icons.star, size: 18, color: WtvColors.accent)),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

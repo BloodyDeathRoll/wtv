@@ -1,4 +1,5 @@
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 const _scroll = Duration(milliseconds: 200);
@@ -88,4 +89,24 @@ class _NearestRowPolicy extends ReadingOrderTraversalPolicy {
     );
     return true;
   }
+}
+
+/// The Up arrow on `child` gives the focus to `target`.
+class UpTo extends StatelessWidget {
+  const UpTo(this.target, {super.key, required this.child});
+
+  final FocusNode target;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Focus(
+    canRequestFocus: false,
+    skipTraversal: true,
+    onKeyEvent: (_, event) {
+      if (event.logicalKey != LogicalKeyboardKey.arrowUp) return KeyEventResult.ignored;
+      if (event is! KeyUpEvent) target.requestFocus();
+      return KeyEventResult.handled;
+    },
+    child: child,
+  );
 }

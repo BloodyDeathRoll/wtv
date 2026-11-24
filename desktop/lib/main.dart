@@ -30,6 +30,7 @@ Future<void> main() async {
     google: GoogleSignIn(client),
     catalog: Catalog(Api(session, client)),
     provider: ProviderLoginStore(),
+    http: client,
   );
   await loadLanguage();
   // So Settings knows who is signed in. A failure shows again, with its reason, at the first use of the session.

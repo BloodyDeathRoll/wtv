@@ -97,7 +97,13 @@ void main() {
     addTearDown(field.dispose);
     await showScreen(
       tester,
-      SearchScreen(scope: scope, field: field, onOpen: (t) => opened.add(t.name), onPerson: (p) => opened.add(p.name)),
+      SearchScreen(
+        scope: scope,
+        field: field,
+        onOpen: (t) => opened.add(t.name),
+        onPerson: (p) => opened.add(p.name),
+        onWatch: (channels, i) => opened.add('${channels[i].name} of ${channels.length}'),
+      ),
       rest: database,
     );
     field.requestFocus();
