@@ -314,7 +314,13 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
       // The keyboard's own play and pause keys set the state rather than toggle it.
       case LogicalKeyboardKey.mediaPlay || LogicalKeyboardKey.mediaPause:
         if (!catchup) return KeyEventResult.ignored;
-        if (down && _engine.paused == (key == LogicalKeyboardKey.mediaPlay)) _toggle();
+        if (!down) return KeyEventResult.handled;
+        // As on the TV: the banner shows even when the key changes nothing.
+        if (_engine.paused == (key == LogicalKeyboardKey.mediaPlay)) {
+          _toggle();
+        } else {
+          _showBanner();
+        }
       case LogicalKeyboardKey.mediaFastForward || LogicalKeyboardKey.mediaRewind:
         if (!_seek(event, forward: key == LogicalKeyboardKey.mediaFastForward)) return KeyEventResult.ignored;
       default:

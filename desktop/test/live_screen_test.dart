@@ -510,6 +510,12 @@ void main() {
       expect(engine.opened.last, (shifted, engine.position.inSeconds));
       expect(engine.opened.length, 3);
 
+      // As on the TV, Play while playing changes nothing but shows the banner.
+      await afterBanner(tester);
+      expect(find.text('Morning show'), findsNothing);
+      await press(tester, LogicalKeyboardKey.mediaPlay);
+      expect([engine.paused, find.text('Morning show')], [isFalse, findsOneWidget]);
+
       // Paused, the banner stays.
       await press(tester, LogicalKeyboardKey.enter);
       expect([engine.paused, find.text(en.liveCatchupPaused)], [isTrue, findsOneWidget]);
