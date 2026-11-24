@@ -5,6 +5,7 @@ import 'data/catalog.dart';
 import 'data/google_sign_in.dart';
 import 'data/provider_login.dart';
 import 'data/session.dart';
+import 'data/wtw_scores.dart';
 import 'player/engine.dart';
 import 'player/mpv_engine.dart';
 
@@ -30,6 +31,9 @@ class Services {
 
   /// For the provider's guide: what is on each channel.
   final Client http;
+
+  /// WTW's own "% match" for the cards on screen.
+  late final wtwScores = WtwScores(catalog, wtw);
 
   final VideoEngine Function() _newEngine;
 

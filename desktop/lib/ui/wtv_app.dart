@@ -67,6 +67,16 @@ class GridPage extends AppPage {
   String get id => 'grid:${category.kind.name}:${category.genre ? 'genre:' : ''}${category.id}';
 }
 
+/// "Recommended for You": the ranking's best, unrated, of one kind or (null) both.
+class RecommendationsPage extends AppPage {
+  const RecommendationsPage(this.kind);
+
+  final Kind? kind;
+
+  @override
+  String get id => 'recommendations:${kind?.name}';
+}
+
 class TitlePage extends AppPage {
   const TitlePage(this.title, {this.autoPlay = false});
 
@@ -432,6 +442,7 @@ class _WtvShellState extends State<WtvShell> {
                     tabsFocused: _tabsFocused,
                     onMore: (category) => _open(GridPage(category)),
                     onOpen: _openTitle,
+                    onForYou: (kind) => _open(RecommendationsPage(kind)),
                   ),
                 },
                 over: PositionedDirectional(
@@ -504,6 +515,14 @@ class _WtvShellState extends State<WtvShell> {
                       onOpen: (category) => _open(GridPage(category)),
                     ),
                     GridPage(:final category) => GridScreen(category, firstFocus: entry.first, onOpen: _openTitle),
+                    RecommendationsPage(:final kind) => PosterGrid(
+                      label: l.rowRecommended,
+                      firstFocus: entry.first,
+                      onOpen: _openTitle,
+                      sorts: false,
+                      pageSize: _recommendationsPage,
+                      fetch: (_, offset, limit) => services.catalog.topPicksPage(kind, offset: offset, limit: limit),
+                    ),
                     TitlePage(:final title, :final autoPlay) => TitleScreen(
                       title,
                       autoPlay: autoPlay,
@@ -632,6 +651,9 @@ class _WtvShellState extends State<WtvShell> {
     );
   }
 }
+
+/// Recommendations come 50 at a time; the next 50 load as the focus nears the end.
+const _recommendationsPage = 50;
 
 /// Arrow keys move the focus inside the screen's focus scope, which they cannot leave; at its edge, `onEdge` decides.
 class _ArrowAction extends Action<DirectionalFocusIntent> {

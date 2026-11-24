@@ -101,10 +101,17 @@ class _TitleScreenState extends State<TitleScreen> {
   int get _movieStart => (_progress ?? const <Progress>[]).where((p) => !p.isEpisode).firstOrNull?.resumeSecs ?? 0;
   EpisodePlay? get _next => nextEpisode(_episodes ?? const [], _progress ?? const []);
 
+  // WTW's own match for the title: asked for when it came without one.
+  final _scores = services.wtwScores;
+
+  void _onScores() => setState(() {});
+
   @override
   void initState() {
     super.initState();
     progressVersion.addListener(_loadProgress);
+    _scores.addListener(_onScores);
+    _scores.requestFor([_title]);
     _loadExtras();
     _loadProgress();
     _loadMarks();
@@ -115,6 +122,7 @@ class _TitleScreenState extends State<TitleScreen> {
   @override
   void dispose() {
     progressVersion.removeListener(_loadProgress);
+    _scores.removeListener(_onScores);
     super.dispose();
   }
 
@@ -293,6 +301,7 @@ class _TitleScreenState extends State<TitleScreen> {
       fit: StackFit.expand,
       children: [
         Backdrop(title.heroImage),
+        if (_scores.matchOf(title) case final match?) HeaderMatch(match),
         Padding(
           // 8 less than the page's 88: the rows keep that room for the focused card's lift.
           padding: const EdgeInsetsDirectional.only(start: 80, top: headerTop),

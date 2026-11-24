@@ -38,6 +38,13 @@ typedef Guide = Object? Function(String action, int streamId);
 /// Each guide call the app made, as "action stream-id".
 final guideCalls = <String>[];
 
+/// Each server function the app ran, as "name body" ("rank", "wtw-scores").
+final ran = <String>[];
+
+/// Answers a server function ("rank", "wtw-scores") from its JSON body. Without one, `rank`
+/// says its ranking is still fresh, and `wtw-scores` has no scores.
+typedef Functions = Object? Function(String name, Map<String, Object?> body);
+
 /// A programme as the provider's guide sends it: times in Unix seconds, the texts base64-encoded.
 Map<String, Object?> programme(String title, int start, int end, {String? description, bool archived = false}) => {
   'title': base64.encode(utf8.encode(title)),
@@ -159,7 +166,7 @@ http.Response _json(Object? body, [int status = 200]) =>
 /// The app's services in English, with an empty keyring and settings file, a server
 /// that signs anyone in, and Google's answers from [googleAnswers]. The database is
 /// empty unless `rest` answers its reads, and so is the provider's guide unless `guide` answers.
-void fakeServices({Rest? rest, Guide? guide}) {
+void fakeServices({Rest? rest, Guide? guide, Functions? functions}) {
   SharedPreferences.setMockInitialValues({});
   FlutterSecureStorage.setMockInitialValues({});
   appLanguage.value = AppLanguage.english;
@@ -169,6 +176,7 @@ void fakeServices({Rest? rest, Guide? guide}) {
   forgetBrowseRows();
   OnNow.forget();
   guideCalls.clear();
+  ran.clear();
   googleAnswers = [
     {'error': 'authorization_pending'},
   ];
@@ -195,6 +203,12 @@ void fakeServices({Rest? rest, Guide? guide}) {
       reads.add(read);
       final answer = rest == null ? const <Object?>[] : rest(read);
       return answer is http.Response ? answer : _json(answer);
+    }
+    if (path.startsWith('db.test/functions/v1/')) {
+      final name = path.substring('db.test/functions/v1/'.length);
+      ran.add('$name ${request.body}');
+      final answer = functions?.call(name, jsonDecode(request.body) as Map<String, Object?>);
+      return answer is http.Response ? answer : _json(answer ?? {'fresh': true, 'scores': <String, Object?>{}});
     }
     if (path == 'tv.example.com/player_api.php') {
       final asked = request.url.queryParameters;
@@ -246,6 +260,12 @@ void fakeServices({Rest? rest, Guide? guide}) {
   );
 }
 
+/// Connects WTW (as me@example.com), as Settings does after the Google code.
+Future<void> connectWtw() async {
+  await services.wtw.signInWithGoogle('id-token', link: false);
+  calls.clear();
+}
+
 /// Saves the provider login of the tests, as Settings does.
 Future<void> saveLogin() => services.provider.save(const ProviderLogin('tv.example.com', 'me', 'secret'));
 
@@ -257,18 +277,30 @@ void _tvScreen(WidgetTester tester) {
 }
 
 /// Starts the app over [fakeServices], on the TV's screen size; `login`: with the provider login saved.
-Future<void> startApp(WidgetTester tester, {Rest? rest, Guide? guide, bool login = false}) async {
-  fakeServices(rest: rest, guide: guide);
+/// `wtw`: with WTW connected.
+Future<void> startApp(WidgetTester tester, {Rest? rest, Guide? guide, Functions? functions, bool login = false, bool wtw = false}) async {
+  fakeServices(rest: rest, guide: guide, functions: functions);
   if (login) await saveLogin();
+  if (wtw) await connectWtw();
   _tvScreen(tester);
   await tester.pumpWidget(const WtvApp());
   await tester.pump();
 }
 
 /// Shows one screen by itself over [fakeServices], on the TV's screen size; `login`: with the provider login saved.
-Future<void> showScreen(WidgetTester tester, Widget screen, {Rest? rest, Guide? guide, bool login = false}) async {
-  fakeServices(rest: rest, guide: guide);
+/// `wtw`: with WTW connected.
+Future<void> showScreen(
+  WidgetTester tester,
+  Widget screen, {
+  Rest? rest,
+  Guide? guide,
+  Functions? functions,
+  bool login = false,
+  bool wtw = false,
+}) async {
+  fakeServices(rest: rest, guide: guide, functions: functions);
   if (login) await saveLogin();
+  if (wtw) await connectWtw();
   _tvScreen(tester);
   await tester.pumpWidget(
     MaterialApp(

@@ -92,13 +92,25 @@ class _PosterGridState extends State<PosterGrid> {
   final _chips = FocusNode();
   // Genre names are a nicety: without them the header's meta line just has no genres.
   var _genres = const <(Kind, int), Genre>{};
+  // WTW's own match: listeners are told as the answers arrive.
+  final _scores = services.wtwScores;
 
   @override
   void initState() {
     super.initState();
+    _scores.addListener(_onScores);
     services.catalog.genres().then((genres) {
       if (mounted) setState(() => _genres = genres);
     }, onError: (Object _) {});
+  }
+
+  void _onScores() => setState(() {});
+
+  /// WTW's match is asked for the two rows on screen and the one under them, as the focus moves.
+  void _askScores() {
+    final focused = _focused;
+    final at = focused == null ? 0 : _titles.indexOf(focused);
+    _scores.requestFor(_titles.skip((at < 0 ? 0 : at) ~/ _columns * _columns).take(3 * _columns));
   }
 
   @override
@@ -112,6 +124,7 @@ class _PosterGridState extends State<PosterGrid> {
 
   @override
   void dispose() {
+    _scores.removeListener(_onScores);
     _chips.dispose();
     super.dispose();
   }
@@ -148,6 +161,7 @@ class _PosterGridState extends State<PosterGrid> {
     }
     final addedNothing = _error == null && _titles.length == before;
     setState(() => _loading = false);
+    _askScores();
     // A page made only of repeats: no new card to focus, so fetch the next one now.
     if (addedNothing) return _loadMore();
     // The page had nothing to focus while it loaded; when the first titles arrive, the first card takes the focus.
@@ -170,6 +184,8 @@ class _PosterGridState extends State<PosterGrid> {
       fit: StackFit.expand,
       children: [
         Backdrop(focused?.heroImage),
+        if (focused != null)
+          if (_scores.matchOf(focused) case final match?) HeaderMatch(match),
         // The name and the sort chips sit where the tabs are on the browse pages: the name
         // at the start, the chips across from it at the end, in line with the rows' end.
         PositionedDirectional(
@@ -247,10 +263,12 @@ class _PosterGridState extends State<PosterGrid> {
                               final card = ImageCard.landscape(
                                 imageUrl: t.cardImage,
                                 title: t.displayName(hebrew: hebrew),
+                                match: _scores.matchOf(t),
                                 onPressed: () => widget.onOpen(t),
                                 onMenu: () => TitleMenuScope.open(context, t),
                                 onFocused: () {
                                   setState(() => _focused = t);
+                                  _askScores();
                                   if (i >= _titles.length - _preload) _loadMore();
                                 },
                                 focusNode: i == 0 ? widget.firstFocus : null,

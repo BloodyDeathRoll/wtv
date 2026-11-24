@@ -9,6 +9,16 @@ const headerTop = 60.0;
 /// The header's height on browse pages: two rows of cards fit under it.
 const headerHeight = 148.0;
 
+/// WTW's "% match" across from a page's header, in line with its top. Goes in the page's [Stack].
+class HeaderMatch extends StatelessWidget {
+  const HeaderMatch(this.percent, {super.key});
+
+  final int percent;
+
+  @override
+  Widget build(BuildContext context) => PositionedDirectional(top: headerTop, end: 64, child: MatchBadge(percent));
+}
+
 const _fade = Duration(milliseconds: 300);
 const _imageWidth = 0.72;
 const _imageHeight = 0.8;
