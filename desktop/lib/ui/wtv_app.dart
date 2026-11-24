@@ -1,0 +1,356 @@
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
+
+import '../l10n/app_localizations.dart';
+import 'components/chips.dart';
+import 'components/pressable.dart';
+import 'components/side_rail.dart';
+import 'settings/settings_screen.dart';
+import 'theme.dart';
+
+/// The four sections in the top tabs.
+enum Section { home, movies, series, liveTv }
+
+/// A page opened over the section. The grid, title, person and player pages come with their work packages.
+enum AppPage { search, categories, watchlist, settings }
+
+/// One screen of the stack: the section under the tabs (`page` null), or a page over it.
+class _Entry {
+  _Entry(this.page);
+
+  final AppPage? page;
+
+  /// Holds the screen's items. It remembers the one that last had the focus,
+  /// so Back from a title page lands on the card it was opened from.
+  final scope = FocusScopeNode();
+
+  /// The screen's first item: where the focus goes when it opens.
+  final first = FocusNode();
+
+  bool get hasItems => scope.traversalDescendants.isNotEmpty;
+
+  /// Focuses the item that last had the focus, or else the first one. A screen with no items holds the focus itself.
+  void enter() => (scope.focusedChild == null && first.context != null ? first : scope).requestFocus();
+
+  void dispose() {
+    scope.dispose();
+    first.dispose();
+  }
+}
+
+/// The app frame: top tabs, the side rail, and the page in between.
+///
+/// Keys and mouse, as on the TV's remote:
+/// - Moving the focus onto a tab switches the section; so does a click on it.
+/// - Back (Esc, or the mouse's back button) from inside a page goes to the tabs; Back on the tabs asks before leaving.
+/// - A rail item opens its page over the section; Back closes it. Main menu closes every page and returns to the tabs.
+class WtvShell extends StatefulWidget {
+  const WtvShell({super.key});
+
+  @override
+  State<WtvShell> createState() => _WtvShellState();
+}
+
+class _WtvShellState extends State<WtvShell> {
+  var _section = Section.home;
+  final _base = _Entry(null);
+  // Pages opened over the section, in order; Back pops one.
+  final _stack = <_Entry>[];
+  // One per tab: Back focuses the selected tab, not the first one (which would switch section).
+  final _tabs = {for (final s in Section.values) s: FocusNode()};
+  final _rail = {for (final item in RailItem.values) item: FocusNode()};
+  // Whether the focus was on the tabs (rather than the page) before it went to the rail: the arrow back returns there.
+  var _lastOnTabs = true;
+
+  FocusNode get _selectedTab => _tabs[_section]!;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusTop(toTabs: true);
+  }
+
+  @override
+  void dispose() {
+    for (final entry in [_base, ..._stack]) {
+      entry.dispose();
+    }
+    for (final node in [..._tabs.values, ..._rail.values]) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  /// After the stack changed and the screens are rebuilt, the one on top takes the focus.
+  void _focusTop({bool toTabs = false}) => WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted) return;
+    if (_stack.isNotEmpty) {
+      _stack.last.enter();
+    } else if (toTabs || !_base.hasItems) {
+      _selectedTab.requestFocus();
+    } else {
+      _base.enter();
+    }
+  });
+
+  void _setStack(void Function() change, {bool toTabs = false}) {
+    final before = [..._stack];
+    setState(change);
+    // Once their widgets are gone.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final entry in before.where((e) => !_stack.contains(e))) {
+        entry.dispose();
+      }
+    });
+    _focusTop(toTabs: toTabs);
+  }
+
+  /// Opening a page already on the stack goes back to it, rather than stacking a second copy.
+  void _open(AppPage page) {
+    final existing = _stack.indexWhere((e) => e.page == page);
+    _setStack(() => existing < 0 ? _stack.add(_Entry(page)) : _stack.removeRange(existing + 1, _stack.length));
+  }
+
+  void _back() {
+    if (_stack.isNotEmpty) {
+      _setStack(_stack.removeLast);
+    } else if (!_selectedTab.hasFocus) {
+      _selectedTab.requestFocus();
+    } else {
+      _askExit();
+    }
+  }
+
+  Future<void> _askExit() async {
+    final leave = await showDialog<bool>(context: context, builder: (_) => const _ExitDialog());
+    if (leave ?? false) await SystemNavigator.pop();
+  }
+
+  void _select(RailItem item) => switch (item) {
+    RailItem.search => _open(AppPage.search),
+    RailItem.categories => _open(AppPage.categories),
+    RailItem.mainMenu => _stack.isEmpty ? _selectedTab.requestFocus() : _setStack(_stack.clear, toTabs: true),
+    RailItem.watchlist => _open(AppPage.watchlist),
+    RailItem.settings => _open(AppPage.settings),
+  };
+
+  /// From the rail back to where the focus was.
+  void _leaveRail() {
+    if (_stack.isNotEmpty) {
+      _stack.last.enter();
+    } else if (_lastOnTabs || !_base.hasItems) {
+      _selectedTab.requestFocus();
+    } else {
+      _base.enter();
+    }
+  }
+
+  /// An arrow key at the edge of a screen: up to the tabs (from the section), sideways to the nearest rail item.
+  void _onEdge(_Entry entry, TraversalDirection direction) {
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    if (direction == TraversalDirection.up && entry == _base) {
+      _selectedTab.requestFocus();
+    } else if (direction == (rtl ? TraversalDirection.right : TraversalDirection.left)) {
+      final y = FocusManager.instance.primaryFocus!.rect.center.dy;
+      double distance(FocusNode node) => (node.rect.center.dy - y).abs();
+      _rail.values.where((n) => n.context != null).reduce((a, b) => distance(a) <= distance(b) ? a : b).requestFocus();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final text = Theme.of(context).textTheme;
+    final tabLabels = {
+      Section.home: l.tabHome,
+      Section.movies: l.tabMovies,
+      Section.series: l.tabSeries,
+      Section.liveTv: l.tabLive,
+    };
+    return Actions(
+      actions: {DismissIntent: CallbackAction<DismissIntent>(onInvoke: (_) => _back())},
+      child: Listener(
+        onPointerDown: (event) {
+          if (event.buttons & kBackMouseButton != 0) _back();
+        },
+        child: Material(
+          color: WtvColors.background,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _layer(
+                _base,
+                covered: _stack.isNotEmpty,
+                onFocus: () => _lastOnTabs = false,
+                // The section's rows come with the browse work package.
+                child: const SizedBox.expand(),
+                over: PositionedDirectional(
+                  start: 88,
+                  top: 18,
+                  child: Focus(
+                    canRequestFocus: false,
+                    skipTraversal: true,
+                    // Down from the tabs enters the page, never the rail.
+                    onKeyEvent: (_, event) {
+                      if (event.logicalKey != LogicalKeyboardKey.arrowDown) return KeyEventResult.ignored;
+                      if (event is KeyDownEvent && _base.hasItems) _base.enter();
+                      return KeyEventResult.handled;
+                    },
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: 20,
+                      children: [
+                        for (final section in Section.values)
+                          Pressable(
+                            focusNode: _tabs[section],
+                            hoverFocuses: false,
+                            onPressed: () {},
+                            onFocusChange: (focused) {
+                              if (!focused) return;
+                              _lastOnTabs = true;
+                              if (section != _section) setState(() => _section = section);
+                            },
+                            builder: (context, focused) => Pill(
+                              focused: focused,
+                              color: section == _section ? WtvColors.surface : null,
+                              textColor: section == _section ? WtvColors.textPrimary : WtvColors.textSecondary,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                              style: text.titleSmall,
+                              label: tabLabels[section]!,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              for (final entry in _stack)
+                _layer(
+                  entry,
+                  covered: entry != _stack.last,
+                  child: switch (entry.page!) {
+                    AppPage.settings => SettingsScreen(firstFocus: entry.first),
+                    // Each is a heading until its work package.
+                    AppPage.search => _Heading(l.railSearch),
+                    AppPage.categories => _Heading(l.railCategories),
+                    AppPage.watchlist => _Heading(l.railWatchlist),
+                  },
+                ),
+              PositionedDirectional(
+                start: 0,
+                top: 0,
+                bottom: 0,
+                child: SideRail(
+                  nodes: _rail,
+                  onSelect: _select,
+                  onLeave: _leaveRail,
+                  // Categories lists movie or series tags: not on Home or Live TV.
+                  showCategories: _section == Section.movies || _section == Section.series,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// One screen of the stack. Screens under the top one stay built (no reload,
+  /// same scroll) but cannot take the focus and are not drawn. `over` lies on
+  /// the screen, outside its focus scope.
+  Widget _layer(_Entry entry, {required bool covered, required Widget child, VoidCallback? onFocus, Widget? over}) {
+    return ExcludeFocus(
+      // Keyed by the entry, so a page keeps its state while pages open over it.
+      key: ObjectKey(entry),
+      excluding: covered,
+      child: Offstage(
+        offstage: covered,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Actions(
+              actions: {DirectionalFocusIntent: _ArrowAction((direction) => _onEdge(entry, direction))},
+              child: FocusScope(
+                node: entry.scope,
+                onFocusChange: (hasFocus) {
+                  if (hasFocus) onFocus?.call();
+                },
+                child: child,
+              ),
+            ),
+            ?over,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Arrow keys move the focus inside the screen's focus scope, which they cannot leave; at its edge, `onEdge` decides.
+class _ArrowAction extends Action<DirectionalFocusIntent> {
+  _ArrowAction(this.onEdge);
+
+  final ValueChanged<TraversalDirection> onEdge;
+
+  @override
+  void invoke(DirectionalFocusIntent intent) {
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus == null) return;
+    // A screen with no items holds the focus itself, and every arrow is at its edge.
+    final empty = focus is FocusScopeNode && focus.traversalDescendants.isEmpty;
+    if (empty || !focus.focusInDirection(intent.direction)) onEdge(intent.direction);
+  }
+}
+
+/// A page's heading, where its content will be.
+class _Heading extends StatelessWidget {
+  const _Heading(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: AlignmentDirectional.topStart,
+    child: Padding(
+      padding: const EdgeInsetsDirectional.only(start: 88, top: 48),
+      child: Text(title, style: Theme.of(context).textTheme.displayMedium),
+    ),
+  );
+}
+
+/// "Exit the app?" with Yes (focused) and No; Back answers No.
+class _ExitDialog extends StatelessWidget {
+  const _ExitDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    Widget button(String label, bool answer) => Pressable(
+      autofocus: answer,
+      onPressed: () => Navigator.pop(context, answer),
+      builder: (context, focused) => Pill(
+        focused: focused,
+        color: WtvColors.chip,
+        textColor: WtvColors.textPrimary,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        label: label,
+      ),
+    );
+    return Dialog(
+      backgroundColor: WtvColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(l.exitQuestion, style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 24),
+            Row(mainAxisSize: MainAxisSize.min, spacing: 16, children: [button(l.yes, true), button(l.no, false)]),
+          ],
+        ),
+      ),
+    );
+  }
+}

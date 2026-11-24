@@ -1,0 +1,302 @@
+{
+  "@@locale": "en",
+  "appName": "WTV",
+  "play": "Play",
+  "recommendedByWtw": "Recommended by WTW",
+  "rowAlsoLiked": "Viewers also liked",
+  "addToWatchlist": "Add to watchlist",
+  "rateLove": "Love",
+  "rateLike": "Like",
+  "rateDislike": "Dislike",
+  "moreInfo": "More info",
+  "railSearch": "Search",
+  "railCategories": "Categories",
+  "railWatchlist": "Watchlist",
+  "railSettings": "Settings",
+  "tabHome": "Home",
+  "tabMovies": "Movies",
+  "tabSeries": "Series",
+  "tabLive": "Live TV",
+  "rowRecentMovies": "Recently added movies",
+  "rowRecentSeries": "Recently added series",
+  "more": "More",
+  "loading": "Loading…",
+  "loadFailed": "Could not load: {error}",
+  "@loadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "nothingHere": "Nothing here yet",
+  "retry": "Retry",
+  "sortAdded": "Date added",
+  "sortYear": "Year",
+  "sortName": "Name",
+  "sortRating": "Rating",
+  "rowCast": "Cast",
+  "runtimeHours": "{hours} h {minutes} min",
+  "@runtimeHours": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "runtimeMinutes": "{minutes} min",
+  "@runtimeMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "chooseCopy": "Play in",
+  "infoDirector": "Director",
+  "infoCast": "Cast",
+  "infoLanguage": "Original language",
+  "infoRating": "Rating",
+  "close": "Close",
+  "infoRatingValue": "{rating} / 10 (TMDB)",
+  "@infoRatingValue": {
+    "placeholders": {
+      "rating": {
+        "type": "String"
+      }
+    }
+  },
+  "rowEpisodes": "Seasons and Episodes",
+  "seasonNumber": "Season {season}",
+  "@seasonNumber": {
+    "placeholders": {
+      "season": {
+        "type": "int"
+      }
+    }
+  },
+  "episodeNumber": "Episode {episode}",
+  "@episodeNumber": {
+    "placeholders": {
+      "episode": {
+        "type": "int"
+      }
+    }
+  },
+  "seasonEpisode": "S{season} E{episode}",
+  "@seasonEpisode": {
+    "placeholders": {
+      "season": {
+        "type": "int"
+      },
+      "episode": {
+        "type": "int"
+      }
+    }
+  },
+  "seasons": "{count, plural, one{{count} season} other{{count} seasons}}",
+  "@seasons": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "personTitles": "{count, plural, one{{count} title on this service} other{{count} titles on this service}}",
+  "@personTitles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchHint": "Search movies and series",
+  "searching": "Searching…",
+  "noResults": "Nothing found for “{query}”",
+  "@noResults": {
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "settingLanguage": "Language",
+  "languageEnglish": "English",
+  "languageHebrew": "עברית",
+  "settingAccount": "Account",
+  "accountSignedOut": "Sign in with Google to keep your favourites and progress on every device",
+  "connectWtw": "Connect WTW",
+  "connectWtwConfirm": "I already use WTW: connect",
+  "connectWtwHint": "Only if you already use WTW: for a new account this would create one",
+  "wtwConnected": "WTW connected: {email}",
+  "@wtwConnected": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "signInGoogle": "Sign in with Google",
+  "signInCode": "On your phone, open {url} and enter this code:",
+  "@signInCode": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
+  "signedIn": "Signed in:",
+  "signOut": "Sign out",
+  "signInFailed": "Sign-in failed: {error}",
+  "@signInFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "cancel": "Cancel",
+  "settingProvider": "Provider details",
+  "providerServer": "Server",
+  "providerUser": "User name",
+  "providerPassword": "Password",
+  "save": "Save",
+  "saved": "Saved",
+  "providerMissing": "Add your provider login in Settings to play",
+  "playFailed": "This could not be played ({reason})",
+  "@playFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "providerIncomplete": "Fill in all three fields",
+  "providerSaveFailed": "Could not save on this device",
+  "rowContinue": "Continue watching",
+  "rowTopPicks": "Top picks for you",
+  "rowNewForYou": "New for you",
+  "rowWatchAgain": "Watch it again",
+  "sortRecommended": "Recommended",
+  "filterAll": "All",
+  "resume": "Resume",
+  "startOver": "Start over",
+  "playEpisode": "Play {episode}",
+  "@playEpisode": {
+    "placeholders": {
+      "episode": {
+        "type": "String"
+      }
+    }
+  },
+  "upNext": "Up next",
+  "playNextIn": "Play now ({seconds})",
+  "@playNextIn": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "playerPause": "Pause",
+  "playerPrevious": "Previous episode",
+  "playerNext": "Next episode",
+  "playerSubtitles": "Subtitles",
+  "playerSubtitlesOff": "Off",
+  "playerAudio": "Audio",
+  "playerSpeed": "Speed",
+  "liveFavorites": "Favourites",
+  "liveHint": "Hold OK for favourites and hiding",
+  "liveFavoriteAdded": "Added to favourites",
+  "liveFavoriteRemoved": "Removed from favourites",
+  "liveFailed": "This channel is not available right now",
+  "liveHidden": "Hidden. Bring it back in Settings.",
+  "liveMenuFavorite": "Add to favourites",
+  "liveMenuUnfavorite": "Remove from favourites",
+  "liveMenuHide": "Hide this channel",
+  "liveMenuHideGroup": "Hide the group “{group}”",
+  "@liveMenuHideGroup": {
+    "placeholders": {
+      "group": {
+        "type": "String"
+      }
+    }
+  },
+  "settingLive": "Live TV",
+  "settingRadio": "Radio channels",
+  "settingOn": "On",
+  "settingOff": "Off",
+  "settingHidden": "Hidden",
+  "settingHiddenNone": "Nothing hidden",
+  "settingHiddenHint": "Select one to show it again",
+  "liveNext": "Next  {time}  {title}",
+  "@liveNext": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "liveEarlier": "Earlier programmes",
+  "liveEarlierHint": "▲  Earlier programmes    ▼  Guide    ◀ ▶  Channels    OK  Channel list",
+  "liveGuideHint": "▼  Guide    ◀ ▶  Channels    OK  Channel list",
+  "liveGuide": "Coming up",
+  "liveGuideFailed": "The guide could not be loaded",
+  "liveNoGuide": "No guide for this channel",
+  "liveCatchupPaused": "Paused",
+  "liveCatchupHint": "◀ ▶ Back or forward 30 s (hold for faster)    OK Pause",
+  "liveCatchup": "Catch-up · Back returns to live",
+  "liveArchiveFailed": "Earlier programmes could not be loaded",
+  "liveNoArchive": "No earlier programmes to play back yet",
+  "removeFromWatchlist": "Remove from watchlist",
+  "menuRemove": "Remove",
+  "removeFromContinue": "Remove from Continue watching",
+  "settingAbout": "About",
+  "aboutTmdb": "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+  "aboutVersion": "Version {version}",
+  "@aboutVersion": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "edit": "Edit",
+  "signOutWtw": "Disconnect WTW",
+  "exitQuestion": "Exit the app?",
+  "yes": "Yes",
+  "no": "No",
+  "railMainMenu": "Main menu",
+  "categoriesProviders": "Categories",
+  "categoriesGenres": "Genres",
+  "categoriesAllMovies": "All movies",
+  "categoriesAllSeries": "All series",
+  "rowRecommended": "Recommended for You",
+  "searchActor": "Actor",
+  "searchHintMovies": "Search movies and actors",
+  "searchHintSeries": "Search series and actors",
+  "searchHintLive": "Search channels",
+  "liveNoChannel": "No channel {number}",
+  "@liveNoChannel": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "liveChannels": "Channels",
+  "wtwMatch": "{percent}% match",
+  "@wtwMatch": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  }
+}
