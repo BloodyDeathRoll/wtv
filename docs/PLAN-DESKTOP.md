@@ -83,9 +83,12 @@ Provider facts measured the same day:
 
 - Two codebases: each later TV feature is built again for the desktop.
 - The 3 streams are shared between the TV and the desktop.
-- `media_kit`'s graphics-card drawing path did not start on the proof machine
-  ("EGL display or context is invalid"), so it drew in software. That was
-  smooth there at 4K and is unproven on weak computers. D1-2 settles it.
+- Software drawing stays. `media_kit` 1.2.6's graphics-card drawing path does
+  not start on Flutter 3.50.1 ("EGL display or context is invalid"): D1-2
+  tried Flutter's current renderer and its older one, on Wayland and on X11.
+  Decoding still runs on the graphics card. With the current renderer the 4K
+  HEVC live channel dropped no frames on the proof machine; weak computers are
+  unproven. To try again on a newer `media_kit`.
 - GitHub documents that draft releases are listed only for people with push
   access. It does not say whether a signed-out person with the direct file link
   can download. D1-13 tests that with a dummy file before the first real build.
@@ -110,7 +113,7 @@ request. A phase is a milestone.
 | Id | Work package |
 |---|---|
 | D1-1 | Playback proof. Done on 2026-11-24 with a throwaway app outside the repository |
-| D1-2 | App shell: the Flutter project in `desktop/`, CI, theme, side menu, routes, both languages, focus by arrow keys and mouse, the GPL-3 licence file. Graphics-card drawing: the 4K HEVC live channel plays with no dropped frames with it on, or the plan records that software drawing stays |
+| D1-2 | App shell: the Flutter project in `desktop/`, CI, theme, side menu, routes, both languages, focus by arrow keys and mouse, the GPL-3 licence file. Graphics-card drawing was tried and does not start, so software drawing stays (Known costs) |
 | D1-3 | Sign-in: an anonymous start, then Google by code, as on the TV |
 | D1-4 | Data layer: a Dart port of `Catalog`, `Live`, `Progress`, `Marks`, `WtwScores` and the guide calls (`Epg`, `OnNow`) |
 | D1-5 | Browse: Home, Movies, Series, category pages, the More grid with its sorts and filters |
