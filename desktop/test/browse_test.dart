@@ -8,6 +8,7 @@ import 'package:wtv/data/catalog.dart';
 import 'package:wtv/data/progress.dart';
 import 'package:wtv/l10n/app_localizations.dart';
 import 'package:wtv/ui/browse/browse_screen.dart';
+import 'package:wtv/ui/components/buttons.dart';
 import 'package:wtv/ui/components/cards.dart';
 import 'package:wtv/ui/components/chips.dart';
 
@@ -223,6 +224,24 @@ void main() {
     // Back: the section again, on the card the category was opened from.
     await press(tester, LogicalKeyboardKey.escape);
     expect(focusedCard(), en.more);
+  });
+
+  testWidgets('a later page that fails: Down reaches the Retry under the grid, which reads the page again', (tester) async {
+    var down = false;
+    await startApp(tester, rest: (read) => down && read.contains('p_offset=60') ? http.Response('', 500) : section(read));
+    await openMovies(tester);
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    await press(tester, LogicalKeyboardKey.arrowRight, times: 3);
+    await press(tester, LogicalKeyboardKey.enter);
+    down = true;
+    // 60 titles in rows of four: the fifteenth row is the last.
+    await press(tester, LogicalKeyboardKey.arrowDown, times: 14);
+    expect(focusedCard(), 'Pick 156');
+    await press(tester, LogicalKeyboardKey.arrowDown);
+    expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<ActionButton>()?.label, en.retry);
+    down = false;
+    await press(tester, LogicalKeyboardKey.enter);
+    expect(card('Pick 160'), findsOneWidget);
   });
 
   testWidgets('Categories lists the tags with their numbers; a tag opens its titles', (tester) async {

@@ -116,6 +116,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
   late int _ratingsSeen = _catalog.ratingsVersion.value;
   // Each load's number: the answer of one that a newer load has replaced is dropped.
   int _run = 0;
+  int _watchingRun = 0;
   List<BrowseRow>? _rows;
 
   Catalog get _catalog => services.catalog;
@@ -189,6 +190,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
 
   Future<void> _loadWatching() async {
     if (!_home) return;
+    final run = ++_watchingRun;
     final owner = _owner;
     // Starts from the last one loaded, so Home back from Live TV does not wait.
     final last = _lastWatching;
@@ -205,6 +207,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
     } on Exception {
       got = null;
     }
+    if (run != _watchingRun) return;
     // Only a real answer is kept: after a failure, Home waits for the row again next time.
     if (got != null) _lastWatching = (owner, got);
     if (!mounted) return;

@@ -28,6 +28,7 @@ class RowsAtTop extends StatelessWidget {
     for (var list = Scrollable.maybeOf(node.context!); list != null; list = Scrollable.maybeOf(list.context)) {
       final position = list.position;
       if (axisDirectionToAxis(list.axisDirection) == Axis.horizontal) {
+        // Each policy scrolls only when the card is cut off on its side: together, just far enough to show it.
         for (final policy in const [ScrollPositionAlignmentPolicy.keepVisibleAtEnd, ScrollPositionAlignmentPolicy.keepVisibleAtStart]) {
           position.ensureVisible(
             inner,
