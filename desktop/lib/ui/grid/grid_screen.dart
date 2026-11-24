@@ -218,7 +218,8 @@ class _PosterGridState extends State<PosterGrid> {
                 Padding(
                   padding: const EdgeInsetsDirectional.only(start: 8),
                   child: _error != null
-                      ? _Message(l.loadFailed(_error!), focusNode: widget.firstFocus, onRetry: _loadMore)
+                      // While a retry runs the button stays, holding the focus, and the text says so.
+                      ? _Message(_loading ? l.loading : l.loadFailed(_error!), focusNode: widget.firstFocus, onRetry: _loadMore)
                       : _Message(_end ? l.nothingHere : l.loading),
                 )
               else
