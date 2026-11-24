@@ -40,12 +40,17 @@ needs one.
 
 - **Layout.** The window shows the TV app's 960 x 540 layout scaled to fit
   (`DesignScale` in `lib/ui/theme.dart`), so a size in this code is the TV
-  app's number.
+  app's number. The system's text size is not applied: a bigger window makes
+  everything bigger, text included.
 - **Strings.** `lib/l10n/app_en.arb` and `app_he.arb` hold the TV app's strings
   (`android/app/src/main/res/values*/strings.xml`). `flutter pub get` builds
   the Dart classes from them.
 - **Keys and mouse.** Arrow keys move the focus, Enter or Space presses, Esc or
-  the mouse's back button goes back. The pointer moves the focus too.
+  the mouse's back button goes back. The pointer moves the focus too. Under the
+  arrow keys the focused row of cards goes to the top; the mouse does not
+  scroll that way, its wheel does.
+- **Images.** Posters and backdrops are kept in memory only, so each start
+  loads them again.
 - **Session.** The signed-in session is kept in the system keyring (libsecret),
   not in a file.
 

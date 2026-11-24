@@ -2,6 +2,8 @@ import 'package:http/http.dart' as http;
 import 'package:material_ui/material_ui.dart';
 
 import 'app_language.dart';
+import 'data/api.dart';
+import 'data/catalog.dart';
 import 'data/google_sign_in.dart';
 import 'data/session.dart';
 import 'l10n/app_localizations.dart';
@@ -12,7 +14,8 @@ import 'ui/wtv_app.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final client = http.Client();
-  services = Services(session: Session(client), google: GoogleSignIn(client));
+  final session = Session(client);
+  services = Services(session: session, google: GoogleSignIn(client), catalog: Catalog(Api(session, client)));
   await loadLanguage();
   // So Settings knows who is signed in. A failure shows again, with its reason, at the first use of the session.
   try {

@@ -16,6 +16,9 @@ enum AppLanguage {
   static AppLanguage fromTag(String? tag) => values.firstWhere((l) => l.tag == tag, orElse: () => english);
 }
 
+/// True when the app runs in Hebrew.
+bool isHebrew(BuildContext context) => Localizations.localeOf(context).languageCode == AppLanguage.hebrew.tag;
+
 const _key = 'language';
 
 /// The language in use; the app rebuilds when it changes.
