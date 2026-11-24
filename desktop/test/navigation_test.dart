@@ -7,8 +7,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wtv/app_language.dart';
 import 'package:wtv/l10n/app_localizations.dart';
-import 'package:wtv/main.dart';
 import 'package:wtv/ui/theme.dart';
+
+import 'fakes.dart';
 
 /// The keyboard's and the mouse's Back and focus rules in `ui/wtv_app.dart`:
 /// the TV app's `NavigationTest`, plus the mouse.
@@ -16,16 +17,7 @@ void main() {
   final en = lookupAppLocalizations(const Locale('en'));
   final he = lookupAppLocalizations(const Locale('he'));
 
-  Future<void> start(WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({});
-    appLanguage.value = AppLanguage.english;
-    // The TV's screen, so positions here are the design's.
-    tester.view.physicalSize = DesignScale.screen;
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    await tester.pumpWidget(const WtvApp());
-    await tester.pump();
-  }
+  const start = startApp;
 
   Future<void> press(WidgetTester tester, LogicalKeyboardKey key) async {
     await tester.sendKeyEvent(key);
@@ -141,6 +133,7 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focused(tester, find.text(en.languageHebrew)), isTrue);
     await press(tester, LogicalKeyboardKey.arrowLeft);
+    // The row of chips ends here. The account's button, lower and further left, is another row: not where Left goes.
     await press(tester, LogicalKeyboardKey.arrowLeft);
     // On the rail, which opens and names its icons. The nearest icon has the focus, and shows it.
     expect(find.text(en.railWatchlist), findsOneWidget);
