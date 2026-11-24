@@ -43,7 +43,7 @@ packaging/package.sh
 ```
 
 puts a `.deb` and an AppImage in `build/packages/`. It needs `docker`,
-`dpkg-dev`, `squashfs-tools`, `rsync` and `curl` besides the build packages.
+`dpkg-dev`, `binutils`, `squashfs-tools`, `rsync` and `curl` besides the build packages.
 
 - **`.deb`:** the app in `/opt/wtv-desktop`. The system installs the mpv
   engine (`libmpv2`) with it.

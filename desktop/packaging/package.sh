@@ -2,7 +2,7 @@
 # Builds the Linux packages into build/packages/:
 #   - a .deb: the system's package manager installs the mpv engine with it;
 #   - an AppImage: the mpv engine and its libraries are inside.
-# Needs flutter, dpkg-dev, squashfs-tools, rsync, curl and docker, and the build
+# Needs flutter, dpkg-dev, binutils, squashfs-tools, rsync, curl and docker, and the build
 # packages the README lists.
 # shortcut: the AppImage carries libraries of this machine's release, so it needs
 # that release's C library or a newer one; build in an older release's container
@@ -39,8 +39,10 @@ rsync -a --delete --exclude /build --exclude /.dart_tool --exclude /linux/flutte
 bundle="$work/src/build/linux/x64/release/bundle"
 # `wtv` is the binary's name in linux/CMakeLists.txt.
 [ -x "$bundle/wtv" ] || fail "the build left no app in $bundle"
-if [ -n "${HOME:-}" ] && [ "$HOME" != / ] && grep -rlaF "$HOME" "$bundle" | grep -q .; then fail "the built app holds the path $HOME"; fi
+# All of grep's output is read: a pipe into `grep -q` could end it early and hide the match.
+[ -z "${HOME:-}" ] || [ "$HOME" = / ] || [ -z "$(grep -rlaF "$HOME" "$bundle" || true)" ] || fail "the built app holds the path $HOME"
 # A library that searched the build folder for its own libraries would load whatever is put there.
+command -v readelf > /dev/null || fail "readelf is missing (binutils)"
 # readelf fails on the files that are not libraries: only grep's output counts.
 bad="$(find "$bundle" -type f ! -name libdartjni.so -exec readelf -d {} + 2>/dev/null \
   | grep -E 'R(UN)?PATH' | grep -vE '\[\$ORIGIN(/[^:]*)?\]$' || true)"
