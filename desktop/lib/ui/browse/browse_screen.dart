@@ -13,6 +13,7 @@ import '../components/buttons.dart';
 import '../components/cards.dart';
 import '../components/hero.dart';
 import '../components/rows.dart';
+import '../components/title_menu.dart';
 import '../theme.dart';
 
 /// A row on the page. Its "More" card opens `category`'s grid. `progress`
@@ -419,6 +420,8 @@ class _RowsState extends State<_Rows> {
                                     label: episode,
                                     progress: watched,
                                     onPressed: () => widget.onOpen(t),
+                                    // From Continue watching the menu can also take the title out of that row.
+                                    onMenu: () => TitleMenuScope.open(context, t, continuing: row.progress.isNotEmpty),
                                     onFocused: () => setState(() => _focused = t),
                                     focusNode: at == 0 && i == 0 ? widget.firstFocus : null,
                                   );

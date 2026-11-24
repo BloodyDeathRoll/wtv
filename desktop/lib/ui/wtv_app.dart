@@ -4,20 +4,24 @@ import 'package:material_ui/material_ui.dart' hide Title;
 
 import '../data/catalog.dart';
 import '../l10n/app_localizations.dart';
+import '../services.dart';
 import 'browse/browse_screen.dart';
 import 'categories/categories_screen.dart';
 import 'components/buttons.dart';
 import 'components/chips.dart';
 import 'components/pressable.dart';
 import 'components/side_rail.dart';
+import 'components/title_menu.dart';
 import 'grid/grid_screen.dart';
+import 'person/person_screen.dart';
 import 'settings/settings_screen.dart';
 import 'theme.dart';
+import 'title/title_screen.dart';
 
 /// The four sections in the top tabs.
 enum Section { home, movies, series, liveTv }
 
-/// A page opened over the section. The title, person and player pages come with their work packages.
+/// A page opened over the section. The player's pages come with their work package.
 sealed class AppPage {
   const AppPage();
 
@@ -50,6 +54,28 @@ class GridPage extends AppPage {
 
   @override
   String get id => 'grid:${category.kind.name}:${category.genre ? 'genre:' : ''}${category.id}';
+}
+
+class TitlePage extends AppPage {
+  const TitlePage(this.title, {this.autoPlay = false});
+
+  final Title title;
+
+  /// Opened from a card's menu with Play: Play is pressed once the page is in.
+  final bool autoPlay;
+
+  @override
+  String get id => 'title:${title.id}';
+}
+
+class PersonPage extends AppPage {
+  const PersonPage(this.person);
+
+  final CastMember person;
+
+  /// The same person from two casts (different characters) is one page.
+  @override
+  String get id => 'person:${person.personId}';
 }
 
 class WatchlistPage extends AppPage {
@@ -189,8 +215,28 @@ class _WtvShellState extends State<WtvShell> {
     RailItem.settings => _open(const SettingsPage()),
   };
 
-  /// The title page comes with its work package: until then a card opens nothing.
-  void _openTitle(Title title) {}
+  void _openTitle(Title title) => _open(TitlePage(title));
+
+  /// A card's menu, over whatever page the card is on.
+  Future<void> _menu(Title title, {required bool continuing}) async {
+    final choice = await showDialog<TitleMenuChoice>(context: context, builder: (_) => TitleMenu(title, continuing: continuing));
+    if (!mounted) return;
+    switch (choice) {
+      case TitleMenuChoice.info:
+        _open(TitlePage(title));
+      case TitleMenuChoice.play:
+        _open(TitlePage(title, autoPlay: true));
+      case TitleMenuChoice.remove:
+        final catalog = services.catalog;
+        try {
+          await catalog.clearProgress({for (final p in await catalog.progress(title)) p.titleId});
+          progressVersion.value++;
+        } on Exception catch (e) {
+          debugPrint('Removing the positions failed: $e');
+        }
+      case null:
+    }
+  }
 
   /// From the rail back to where the focus was.
   void _leaveRail() {
@@ -315,9 +361,28 @@ class _WtvShellState extends State<WtvShell> {
                       onOpen: (category) => _open(GridPage(category)),
                     ),
                     GridPage(:final category) => GridScreen(category, firstFocus: entry.first, onOpen: _openTitle),
-                    // Each is a heading until its work package.
+                    TitlePage(:final title, :final autoPlay) => TitleScreen(
+                      title,
+                      autoPlay: autoPlay,
+                      play: entry.first,
+                      // The player comes with its work package: until then Play starts nothing.
+                      onPlay: (_, _) {},
+                      onPlayEpisode: (_, _, _) {},
+                      onPerson: (person) => _open(PersonPage(person)),
+                      onOpen: _openTitle,
+                    ),
+                    PersonPage(:final person) => PersonScreen(person, firstFocus: entry.first, onOpen: _openTitle),
+                    WatchlistPage() => TitlesPage(
+                      load: services.catalog.watchlist,
+                      // Read again after a watchlist change (a title removed on its page, say).
+                      reload: services.catalog.watchlistVersion,
+                      firstFocus: entry.first,
+                      onOpen: _openTitle,
+                      kinds: true,
+                      header: (context, _) => Text(l.railWatchlist, style: text.displayMedium),
+                    ),
+                    // A heading until its work package.
                     SearchPage() => _Heading(l.railSearch),
-                    WatchlistPage() => _Heading(l.railWatchlist),
                   },
                 ),
               PositionedDirectional(
@@ -359,7 +424,8 @@ class _WtvShellState extends State<WtvShell> {
                 onFocusChange: (hasFocus) {
                   if (hasFocus) onFocus?.call();
                 },
-                child: child,
+                // A card's menu opens from any screen.
+                child: TitleMenuScope(onOpen: _menu, child: child),
               ),
             ),
             ?over,
@@ -385,8 +451,12 @@ class _ArrowAction extends Action<DirectionalFocusIntent> {
 
   bool _atEdge(FocusNode focus, TraversalDirection direction) {
     final items = focus.nearestScope!.traversalDescendants;
-    // A screen with no items holds the focus itself, and every arrow is at its edge.
-    if (focus is FocusScopeNode) return items.isEmpty;
+    // A screen with nothing focused holds the focus itself (its items are still loading, or it
+    // has none). The arrow towards the rail is then at its edge; with no items, every arrow is.
+    if (focus is FocusScopeNode) {
+      final rtl = Directionality.of(focus.context!) == TextDirection.rtl;
+      return items.isEmpty || direction == (rtl ? TraversalDirection.right : TraversalDirection.left);
+    }
     if (direction == TraversalDirection.up || direction == TraversalDirection.down) return false;
     // Left and right stay in the row. With no item level with this one on that side the row has ended,
     // where the framework would jump to the nearest item of another row.

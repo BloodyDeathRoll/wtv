@@ -12,6 +12,7 @@ import '../components/cards.dart';
 import '../components/chips.dart';
 import '../components/hero.dart';
 import '../components/rows.dart';
+import '../components/title_menu.dart';
 import '../theme.dart';
 
 const _columns = 4;
@@ -248,6 +249,7 @@ class _PosterGridState extends State<PosterGrid> {
                                 imageUrl: t.cardImage,
                                 title: t.displayName(hebrew: hebrew),
                                 onPressed: () => widget.onOpen(t),
+                                onMenu: () => TitleMenuScope.open(context, t),
                                 onFocused: () {
                                   setState(() => _focused = t);
                                   if (i >= _titles.length - _preload) _loadMore();
@@ -266,7 +268,7 @@ class _PosterGridState extends State<PosterGrid> {
                         // A later page failed: a Retry under the grid, since the focus may not move again.
                         if (_error != null)
                           SliverToBoxAdapter(
-                            child: Center(child: ActionButton(label: l.retry, onPressed: _loadMore)),
+                            child: Center(child: ActionButton(label: _loading ? l.loading : l.retry, onPressed: _loadMore)),
                           ),
                       ],
                     ),
