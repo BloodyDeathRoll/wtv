@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wtv/app_language.dart';
 import 'package:wtv/l10n/app_localizations.dart';
+import 'package:wtv/ui/components/side_rail.dart';
 import 'package:wtv/ui/theme.dart';
 
 import 'fakes.dart';
@@ -42,6 +43,20 @@ void main() {
     await press(tester, LogicalKeyboardKey.arrowRight);
     expect(focused(tester, find.text(en.tabMovies)), isTrue);
     expect(rail(categories), findsOneWidget);
+  });
+
+  testWidgets('Left and Right go along the tabs to Live TV and stop there; Left from the first tab is the rail', (tester) async {
+    await start(tester);
+    for (final tab in [en.tabMovies, en.tabSeries, en.tabLive, en.tabLive]) {
+      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focused(tester, find.text(tab)), isTrue, reason: tab);
+    }
+    for (final tab in [en.tabSeries, en.tabMovies, en.tabHome]) {
+      await press(tester, LogicalKeyboardKey.arrowLeft);
+      expect(focused(tester, find.text(tab)), isTrue, reason: tab);
+    }
+    await press(tester, LogicalKeyboardKey.arrowLeft);
+    expect(FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<SideRail>(), isNotNull);
   });
 
   testWidgets('a click on a tab switches the section; the pointer passing over one does not', (tester) async {

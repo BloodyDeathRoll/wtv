@@ -10,6 +10,7 @@ import 'package:wtv/app_language.dart';
 import 'package:wtv/data/api.dart';
 import 'package:wtv/data/catalog.dart';
 import 'package:wtv/data/google_sign_in.dart';
+import 'package:wtv/data/on_now.dart';
 import 'package:wtv/data/provider_login.dart';
 import 'package:wtv/data/session.dart';
 import 'package:wtv/l10n/app_localizations.dart';
@@ -28,6 +29,25 @@ final reads = <String>[];
 
 /// Each database write, as "POST path?query body" or "DELETE path?query".
 final writes = <String>[];
+
+/// What the provider's guide holds for a channel: the programmes ([programme]) of an action
+/// ("get_short_epg", "get_simple_data_table") for a stream id, or a whole response (a failure).
+/// The provider of the tests is tv.example.com.
+typedef Guide = Object? Function(String action, int streamId);
+
+/// Each guide call the app made, as "action stream-id".
+final guideCalls = <String>[];
+
+/// A programme as the provider's guide sends it: times in Unix seconds, the texts base64-encoded.
+Map<String, Object?> programme(String title, int start, int end, {String? description, bool archived = false}) => {
+  'title': base64.encode(utf8.encode(title)),
+  'description': description == null ? '' : base64.encode(utf8.encode(description)),
+  'start_timestamp': '$start',
+  'stop_timestamp': '$end',
+  // The provider's own time: the catch-up address is made from it.
+  'start': DateTime.fromMillisecondsSinceEpoch(start * 1000, isUtc: true).toIso8601String().substring(0, 19).replaceFirst('T', ' '),
+  'has_archive': archived ? '1' : '0',
+};
 
 /// Answers a database read with its rows, or with a whole response (a failure).
 /// A write is asked as "POST path?query" or "DELETE path?query": it succeeds unless the answer is a response.
@@ -138,8 +158,8 @@ http.Response _json(Object? body, [int status = 200]) =>
 
 /// The app's services in English, with an empty keyring and settings file, a server
 /// that signs anyone in, and Google's answers from [googleAnswers]. The database is
-/// empty unless `rest` answers its reads.
-void fakeServices({Rest? rest}) {
+/// empty unless `rest` answers its reads, and so is the provider's guide unless `guide` answers.
+void fakeServices({Rest? rest, Guide? guide}) {
   SharedPreferences.setMockInitialValues({});
   FlutterSecureStorage.setMockInitialValues({});
   appLanguage.value = AppLanguage.english;
@@ -147,6 +167,8 @@ void fakeServices({Rest? rest}) {
   reads.clear();
   writes.clear();
   forgetBrowseRows();
+  OnNow.forget();
+  guideCalls.clear();
   googleAnswers = [
     {'error': 'authorization_pending'},
   ];
@@ -173,6 +195,12 @@ void fakeServices({Rest? rest}) {
       reads.add(read);
       final answer = rest == null ? const <Object?>[] : rest(read);
       return answer is http.Response ? answer : _json(answer);
+    }
+    if (path == 'tv.example.com/player_api.php') {
+      final asked = request.url.queryParameters;
+      guideCalls.add('${asked['action']} ${asked['stream_id']}');
+      final answer = guide?.call(asked['action']!, int.parse(asked['stream_id']!));
+      return answer is http.Response ? answer : _json({'epg_listings': answer ?? const <Object?>[]});
     }
     calls.add(call);
     return switch (path) {
@@ -212,10 +240,14 @@ void fakeServices({Rest? rest}) {
     session: session,
     wtw: Session(client, name: 'wtw_session', url: 'https://wtw.test', key: 'wtw-key', anonymous: false),
     provider: ProviderLoginStore(),
+    http: client,
     google: GoogleSignIn(client, clientId: 'client', clientSecret: 'secret'),
     catalog: Catalog(Api(session, client, url: 'https://db.test', key: 'public-key')),
   );
 }
+
+/// Saves the provider login of the tests, as Settings does.
+Future<void> saveLogin() => services.provider.save(const ProviderLogin('tv.example.com', 'me', 'secret'));
 
 // The TV's screen, so positions here are the design's.
 void _tvScreen(WidgetTester tester) {
@@ -224,17 +256,19 @@ void _tvScreen(WidgetTester tester) {
   addTearDown(tester.view.reset);
 }
 
-/// Starts the app over [fakeServices], on the TV's screen size.
-Future<void> startApp(WidgetTester tester, {Rest? rest}) async {
-  fakeServices(rest: rest);
+/// Starts the app over [fakeServices], on the TV's screen size; `login`: with the provider login saved.
+Future<void> startApp(WidgetTester tester, {Rest? rest, Guide? guide, bool login = false}) async {
+  fakeServices(rest: rest, guide: guide);
+  if (login) await saveLogin();
   _tvScreen(tester);
   await tester.pumpWidget(const WtvApp());
   await tester.pump();
 }
 
-/// Shows one screen by itself over [fakeServices], on the TV's screen size.
-Future<void> showScreen(WidgetTester tester, Widget screen, {Rest? rest}) async {
-  fakeServices(rest: rest);
+/// Shows one screen by itself over [fakeServices], on the TV's screen size; `login`: with the provider login saved.
+Future<void> showScreen(WidgetTester tester, Widget screen, {Rest? rest, Guide? guide, bool login = false}) async {
+  fakeServices(rest: rest, guide: guide);
+  if (login) await saveLogin();
   _tvScreen(tester);
   await tester.pumpWidget(
     MaterialApp(

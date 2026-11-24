@@ -7,7 +7,16 @@ import 'pressable.dart';
 /// its text white at 50%, or full white on a darker chip when selected.
 /// Focused, it turns light like the tabs.
 class OptionChip extends StatelessWidget {
-  const OptionChip({super.key, required this.selected, required this.onPressed, required this.label, this.detail, this.focusNode});
+  const OptionChip({
+    super.key,
+    required this.selected,
+    required this.onPressed,
+    required this.label,
+    this.detail,
+    this.focusNode,
+    this.onFocusChange,
+    this.hoverFocuses = true,
+  });
 
   final bool selected;
   final VoidCallback onPressed;
@@ -16,11 +25,17 @@ class OptionChip extends StatelessWidget {
   /// A second, quieter text after the label (a category's number of titles).
   final String? detail;
   final FocusNode? focusNode;
+  final ValueChanged<bool>? onFocusChange;
+
+  /// See [Pressable.hoverFocuses].
+  final bool hoverFocuses;
 
   @override
   Widget build(BuildContext context) => Pressable(
     onPressed: onPressed,
     focusNode: focusNode,
+    onFocusChange: onFocusChange,
+    hoverFocuses: hoverFocuses,
     selected: selected,
     builder: (context, focused) => Pill(
       focused: focused,

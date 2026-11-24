@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart' hide Title;
 
 import '../../app_language.dart';
 import '../../data/catalog.dart';
+import '../../data/live.dart';
 import '../../data/session.dart';
 import '../../l10n/app_localizations.dart';
 import '../../services.dart';
@@ -20,11 +21,12 @@ const typingPause = Duration(milliseconds: 400);
 /// Suggestions under the field: a few names to pick from as you type.
 const _suggestionCount = 6;
 
-/// What a search looks in: everything (from Home), or one section's titles.
+/// What a search looks in: everything (from Home), one section's titles, or Live TV's channels.
 enum SearchScope {
   all(null),
   movies(Kind.movie),
-  series(Kind.series);
+  series(Kind.series),
+  live(null);
 
   const SearchScope(this.kind);
 
@@ -44,14 +46,15 @@ class _Searching extends _Results {
 }
 
 class _Found extends _Results {
-  const _Found(this.query, this.titles, this.people);
+  const _Found(this.query, this.titles, this.people, [this.channels = const []]);
 
   /// The one searched, which the field may have moved on from.
   final String query;
   final List<Title> titles;
   final List<CastMember> people;
+  final List<Channel> channels;
 
-  bool get empty => titles.isEmpty && people.isEmpty;
+  bool get empty => titles.isEmpty && people.isEmpty && channels.isEmpty;
 }
 
 class _Failed extends _Results {
@@ -61,11 +64,18 @@ class _Failed extends _Results {
 }
 
 /// Text search, in English or Hebrew. As the user types, suggestions appear
-/// under the field (actors and titles), then the results: actors, then title
-/// posters. Enter in the field moves on to the results; Down goes to what is
-/// below it.
+/// under the field (actors and titles, or channels), then the results:
+/// actors, then title posters, or channel cards on Live TV. Enter in the
+/// field moves on to the results; Down goes to what is below it.
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key, required this.scope, required this.field, required this.onOpen, required this.onPerson});
+  const SearchScreen({
+    super.key,
+    required this.scope,
+    required this.field,
+    required this.onOpen,
+    required this.onPerson,
+    required this.onWatch,
+  });
 
   final SearchScope scope;
 
@@ -73,6 +83,9 @@ class SearchScreen extends StatefulWidget {
   final FocusNode field;
   final ValueChanged<Title> onOpen;
   final ValueChanged<CastMember> onPerson;
+
+  /// Watch `channels[index]` of the channels found.
+  final void Function(List<Channel> channels, int index) onWatch;
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -92,6 +105,8 @@ class _SearchScreenState extends State<SearchScreen> {
   var _nearField = true;
   final _firstSuggestion = FocusNode();
   final _firstResult = FocusNode();
+  // Live TV searches the channel list, read once.
+  List<Channel>? _channels;
 
   @override
   void initState() {
@@ -142,10 +157,19 @@ class _SearchScreenState extends State<SearchScreen> {
       final kind = widget.scope.kind;
       _Results next;
       try {
-        final titles = catalog.search(q, hebrew: _hebrew!, kind: kind);
-        // Actors are a nicety: without them the titles still show.
-        final people = catalog.searchPeople(q, kind: kind).catchError((Object _) => const <CastMember>[], test: (e) => e is Exception);
-        next = _Found(q, await titles, await people);
+        if (widget.scope == SearchScope.live) {
+          final lower = q.toLowerCase();
+          // Every channel, hidden ones too, as in the TV app: a search is how a hidden one is still reached.
+          final hits = (_channels ??= await catalog.channels()).where((c) => c.name.toLowerCase().contains(lower)).toList();
+          bool starts(Channel c) => c.name.toLowerCase().startsWith(lower);
+          // Names starting with the query first, as titles and actors are ordered.
+          next = _Found(q, const [], const [], [...hits.where(starts), ...hits.where((c) => !starts(c))]);
+        } else {
+          final titles = catalog.search(q, hebrew: _hebrew!, kind: kind);
+          // Actors are a nicety: without them the titles still show.
+          final people = catalog.searchPeople(q, kind: kind).catchError((Object _) => const <CastMember>[], test: (e) => e is Exception);
+          next = _Found(q, await titles, await people);
+        }
       } on Exception catch (e) {
         next = _Failed(e is ApiException ? e.message : e.toString());
       }
@@ -187,6 +211,7 @@ class _SearchScreenState extends State<SearchScreen> {
         : [
             for (final p in r.people.take(2)) _Suggestion(p.name, l.searchActor, () => widget.onPerson(p)),
             for (final t in r.titles) _Suggestion(t.displayName(hebrew: hebrew), t.year?.toString(), () => widget.onOpen(t)),
+            for (final (i, c) in r.channels.indexed) _Suggestion(c.name, null, () => widget.onWatch(r.channels, i)),
           ].take(_suggestionCount).toList();
     final showSuggestions = _nearField && suggestions.isNotEmpty;
     final fieldStyle = text.headlineMedium!.copyWith(color: WtvColors.textPrimary);
@@ -235,6 +260,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           SearchScope.all => l.searchHint,
                           SearchScope.movies => l.searchHintMovies,
                           SearchScope.series => l.searchHintSeries,
+                          SearchScope.live => l.searchHintLive,
                         },
                         hintStyle: fieldStyle.copyWith(color: WtvColors.textMuted),
                       ),
@@ -279,8 +305,33 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  /// The results: actors (named), then title posters. The first one takes Enter from the field.
-  Widget _found(_Found r, bool hebrew) => Column(
+  /// The results: actors (named), then title posters; or channel cards. The first one takes Enter from the field.
+  Widget _found(_Found r, bool hebrew) => r.channels.isNotEmpty ? _foundChannels(r.channels) : _foundTitles(r, hebrew);
+
+  Widget _foundChannels(List<Channel> channels) => GridView.builder(
+    padding: const EdgeInsetsDirectional.only(start: 8, end: 8, top: 6, bottom: 48),
+    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      crossAxisCount: 5,
+      crossAxisSpacing: 16,
+      mainAxisSpacing: 16,
+      childAspectRatio: 16 / 9,
+    ),
+    itemCount: channels.length,
+    itemBuilder: (context, i) {
+      final c = channels[i];
+      return ChannelCard(
+        key: ValueKey(c.id),
+        logo: c.logo,
+        name: c.name,
+        number: c.num,
+        favorite: false,
+        onPressed: () => widget.onWatch(channels, i),
+        focusNode: i == 0 ? _firstResult : null,
+      );
+    },
+  );
+
+  Widget _foundTitles(_Found r, bool hebrew) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       if (r.people.isNotEmpty)

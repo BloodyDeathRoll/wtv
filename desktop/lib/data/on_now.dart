@@ -36,6 +36,9 @@ abstract final class OnNow {
     return programme;
   }
 
+  /// Drops every kept answer (for tests: the cache outlives a page).
+  static void forget() => _cache.clear();
+
   static const _noGuideSecs = 600;
   static const _failedSecs = 60;
 }

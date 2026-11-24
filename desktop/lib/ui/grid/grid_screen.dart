@@ -1,4 +1,3 @@
-import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart' hide Title;
 
 import '../../app_language.dart';
@@ -260,7 +259,7 @@ class _PosterGridState extends State<PosterGrid> {
                                 key: ValueKey(t.id),
                                 alignment: AlignmentDirectional.topStart,
                                 // Up from the first row goes to the sort chips.
-                                child: widget.sorts && i < _columns ? _UpTo(_chips, child: card) : card,
+                                child: widget.sorts && i < _columns ? UpTo(_chips, child: card) : card,
                               );
                             },
                           ),
@@ -280,26 +279,6 @@ class _PosterGridState extends State<PosterGrid> {
       ],
     );
   }
-}
-
-/// The Up arrow on `child` gives the focus to `target`.
-class _UpTo extends StatelessWidget {
-  const _UpTo(this.target, {required this.child});
-
-  final FocusNode target;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => Focus(
-    canRequestFocus: false,
-    skipTraversal: true,
-    onKeyEvent: (_, event) {
-      if (event.logicalKey != LogicalKeyboardKey.arrowUp) return KeyEventResult.ignored;
-      if (event is! KeyUpEvent) target.requestFocus();
-      return KeyEventResult.handled;
-    },
-    child: child,
-  );
 }
 
 /// Loading, empty or error message; with `onRetry`, a Retry button that can take the focus.
