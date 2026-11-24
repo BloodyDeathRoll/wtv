@@ -21,8 +21,14 @@ const _key = 'language';
 /// The language in use; the app rebuilds when it changes.
 final appLanguage = ValueNotifier(AppLanguage.english);
 
-Future<void> loadLanguage() async =>
+/// Reads the saved language. A settings file that cannot be read leaves English: it must not stop the app from starting.
+Future<void> loadLanguage() async {
+  try {
     appLanguage.value = AppLanguage.fromTag((await SharedPreferences.getInstance()).getString(_key));
+  } catch (e) {
+    debugPrint('Reading the saved language failed: $e');
+  }
+}
 
 Future<void> saveLanguage(AppLanguage language) async {
   appLanguage.value = language;

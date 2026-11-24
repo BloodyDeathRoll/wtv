@@ -18,6 +18,7 @@ class OptionChip extends StatelessWidget {
   Widget build(BuildContext context) => Pressable(
     onPressed: onPressed,
     focusNode: focusNode,
+    selected: selected,
     builder: (context, focused) => Pill(
       focused: focused,
       color: selected ? WtvColors.chipSelected : WtvColors.chip,

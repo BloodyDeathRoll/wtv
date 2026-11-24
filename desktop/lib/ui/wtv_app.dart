@@ -97,7 +97,7 @@ class _WtvShellState extends State<WtvShell> {
   void _setStack(void Function() change, {bool toTabs = false}) {
     final before = [..._stack];
     setState(change);
-    // Once their widgets are gone.
+    // Once their widgets are gone. The shell's own dispose covers the entries still on the stack, so none is disposed twice.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       for (final entry in before.where((e) => !_stack.contains(e))) {
         entry.dispose();
@@ -152,9 +152,12 @@ class _WtvShellState extends State<WtvShell> {
     if (direction == TraversalDirection.up && entry == _base) {
       _selectedTab.requestFocus();
     } else if (direction == (rtl ? TraversalDirection.right : TraversalDirection.left)) {
+      final items = _rail.values.where((n) => n.context != null);
+      // No rail on screen: the focus stays.
+      if (items.isEmpty) return;
       final y = FocusManager.instance.primaryFocus!.rect.center.dy;
       double distance(FocusNode node) => (node.rect.center.dy - y).abs();
-      _rail.values.where((n) => n.context != null).reduce((a, b) => distance(a) <= distance(b) ? a : b).requestFocus();
+      items.reduce((a, b) => distance(a) <= distance(b) ? a : b).requestFocus();
     }
   }
 
@@ -205,6 +208,8 @@ class _WtvShellState extends State<WtvShell> {
                           Pressable(
                             focusNode: _tabs[section],
                             hoverFocuses: false,
+                            selected: section == _section,
+                            // Nothing more on a press: the click gives the tab the focus, and the focus switches the section.
                             onPressed: () {},
                             onFocusChange: (focused) {
                               if (!focused) return;

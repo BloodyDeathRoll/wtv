@@ -12,6 +12,7 @@ class Pressable extends StatefulWidget {
     this.autofocus = false,
     this.onFocusChange,
     this.hoverFocuses = true,
+    this.selected,
     this.semanticLabel,
   });
 
@@ -23,6 +24,9 @@ class Pressable extends StatefulWidget {
 
   /// False where taking the focus has an effect of its own (a tab switches the section).
   final bool hoverFocuses;
+
+  /// For a screen reader: whether this is the chosen one of a group (a tab, a chip). Null for a plain button.
+  final bool? selected;
 
   /// For an item with no text of its own (an icon).
   final String? semanticLabel;
@@ -39,6 +43,12 @@ class _PressableState extends State<Pressable> {
   FocusNode get _node => widget.focusNode ?? (_own ??= FocusNode());
 
   @override
+  void didUpdateWidget(Pressable old) {
+    super.didUpdateWidget(old);
+    if (widget.focusNode != old.focusNode) _focused = _node.hasFocus;
+  }
+
+  @override
   void dispose() {
     _own?.dispose();
     super.dispose();
@@ -47,6 +57,7 @@ class _PressableState extends State<Pressable> {
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
+    selected: widget.selected,
     label: widget.semanticLabel,
     child: FocusableActionDetector(
       focusNode: _node,
