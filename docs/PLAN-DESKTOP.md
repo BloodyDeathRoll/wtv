@@ -89,7 +89,7 @@ Provider facts measured the same day:
   tried Flutter's current renderer and its older one, on Wayland and on X11.
   Decoding still runs on the graphics card. With the current renderer the 4K
   HEVC live channel dropped no frames on the proof machine; weak computers are
-  unproven. To try again on a newer `media_kit`.
+  unproven. D1-12 tries it again if `media_kit` has a newer release by then.
 - GitHub documents that draft releases are listed only for people with push
   access. It does not say whether a signed-out person with the direct file link
   can download. D1-13 tests that with a dummy file before the first real build.
@@ -114,7 +114,7 @@ request. A phase is a milestone.
 | Id | Work package |
 |---|---|
 | D1-1 | Playback proof. Done on 2026-11-24 with a throwaway app outside the repository |
-| D1-2 | App shell: the Flutter project in `desktop/`, CI, theme, side menu, routes, both languages, focus by arrow keys and mouse, the GPL-3 licence file. Graphics-card drawing was tried and does not start, so software drawing stays (Known costs) |
+| D1-2 | App shell: the Flutter project in `desktop/`, CI, theme, side menu, routes, both languages, focus by arrow keys and mouse, the GPL-3 licence file. A trial of graphics-card drawing (result under Known costs) |
 | D1-3 | Sign-in: an anonymous start, then Google by code, as on the TV |
 | D1-4 | Data layer: a Dart port of `Catalog`, `Live`, `Progress`, `Marks`, `WtwScores` and the guide calls (`Epg`, `OnNow`) |
 | D1-5 | Browse: Home, Movies, Series, category pages, the More grid with its sorts and filters |
@@ -124,7 +124,7 @@ request. A phase is a milestone.
 | D1-9 | Live TV: groups, guide, catch-up, channel numbers, favourites, hidden channels and groups, radio. The same stream rules as D1-8 |
 | D1-10 | Settings: provider login, language, WTW connect, sign out |
 | D1-11 | WTW: picks rows, % match, Recommended sort, Viewers also liked |
-| D1-12 | Parity check: every screen compared with the TV app |
+| D1-12 | Parity check: every screen compared with the TV app. Graphics-card drawing is tried again on a newer `media_kit`, if there is one |
 | D1-13 | Packaging and private release: `.deb` and AppImage with the engine's source offer, on a draft release after the dummy-file test |
 
 ### Phase 2 — Mac
