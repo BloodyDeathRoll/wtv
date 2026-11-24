@@ -54,7 +54,8 @@ class RowsAtTop extends StatelessWidget {
 /// A page of rows whose items do not line up (a form: Settings). Up and Down
 /// go to the nearest row, and in it to the item nearest sideways. The
 /// framework's own rule prefers an item straight above or below, however far,
-/// and so skips a row whose only items lie to the side.
+/// and so skips a row whose only items lie to the side. It looks at every item
+/// of the page on each key press: for a page of tens of items, not thousands.
 class NearestRows extends StatelessWidget {
   const NearestRows({super.key, required this.child});
 

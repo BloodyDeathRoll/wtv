@@ -33,6 +33,7 @@ Future<void> main() async {
   );
   await loadLanguage();
   // So Settings knows who is signed in. A failure shows again, with its reason, at the first use of the session.
+  // One try for both: a WTW session read without the WTV one would be ended by Settings as a leftover.
   try {
     await services.session.load();
     await services.wtw.load();

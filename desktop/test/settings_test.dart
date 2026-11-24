@@ -116,6 +116,15 @@ void main() {
     expect(inField(tester, en.providerPassword), isTrue);
   });
 
+  testWidgets('Up on the first row and Down on the last leave the focus where it is', (tester) async {
+    await startApp(tester, rest: database);
+    await openSettings(tester);
+    await press(tester, LogicalKeyboardKey.arrowUp);
+    expect(focusedChip(), en.languageEnglish);
+    await press(tester, LogicalKeyboardKey.arrowDown, times: 8);
+    expect(focused(tester, find.text(en.aboutTmdb)), isTrue);
+  });
+
   test('About names the version of pubspec.yaml', () {
     expect(File('pubspec.yaml').readAsStringSync(), contains('\nversion: $appVersion+'));
   });
