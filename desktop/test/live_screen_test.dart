@@ -139,9 +139,9 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowRight);
       expect(focusedChip(), 'Israel');
       expect(cards(tester), ['Kan 11', 'Keshet 12', 'Reshet 13', 'Channel 4', 'Channel 5', 'Channel 6', 'Channel 7']);
+      // The row does not scroll, as on the TV: Down lands on the card under the chip.
       await press(tester, LogicalKeyboardKey.arrowDown);
-      expect(focusedCard(), 'Kan 11');
-      await press(tester, LogicalKeyboardKey.arrowRight);
+      expect(focusedCard(), 'Keshet 12');
       await press(tester, LogicalKeyboardKey.arrowDown);
       expect(focusedCard(), 'Channel 7');
 
@@ -153,14 +153,12 @@ void main() {
       await press(tester, LogicalKeyboardKey.arrowUp, times: 2);
       expect([focusedChip(), cards(tester).length], ['Israel', 7]);
 
-      // A click on a chip shows its group too. (The test font is wide: the chip is past the row's end.)
-      await tester.ensureVisible(find.text('Sports'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Sports'));
+      // A click on a chip shows its group too.
+      await tester.tap(find.text('Favourites'));
       await tester.pumpAndSettle();
       expect([focusedChip(), cards(tester)], [
-        'Sports',
-        ['Sport 1', 'Sport 2'],
+        'Favourites',
+        ['Sport 2'],
       ]);
     });
 
@@ -356,6 +354,12 @@ void main() {
       await show(tester, guide: (_, _) => [programme('News', now - 600, now + 600), programme('Film', now + 600, now + 4200)]);
       expect(engine.opened, [(_live(1001), 0)]);
       expect(guideCalls, ['get_short_epg 1001']);
+      // As on the TV: the stream stops while the window is hidden, and live comes back at the live edge.
+      setWindow(tester, AppLifecycleState.hidden);
+      expect(engine.closed, [1]);
+      setWindow(tester, AppLifecycleState.resumed);
+      expect(engine.opened, [(_live(1001), 0), (_live(1001), 0)]);
+      await tester.pump();
       expect(
         [find.text('Kan 11'), find.text('News'), find.text(en.liveNext(_time(now + 600), 'Film')), find.text(en.liveEarlierHint)],
         everyElement(findsOneWidget),
@@ -499,6 +503,13 @@ void main() {
       expect(engine.seeks, [const Duration(seconds: 330), const Duration(minutes: 5), const Duration(seconds: 270)]);
       expect(engine.opened.length, 2);
 
+      // As on the TV: the stream stops while the window is hidden, and catch-up goes on where it was.
+      setWindow(tester, AppLifecycleState.hidden);
+      expect(engine.closed.last, 2);
+      setWindow(tester, AppLifecycleState.resumed);
+      expect(engine.opened.last, (shifted, engine.position.inSeconds));
+      expect(engine.opened.length, 3);
+
       // Paused, the banner stays.
       await press(tester, LogicalKeyboardKey.enter);
       expect([engine.paused, find.text(en.liveCatchupPaused)], [isTrue, findsOneWidget]);
@@ -612,4 +623,11 @@ void main() {
       expect(engine.opened.last.$1, _live(1021));
     });
   });
+}
+
+/// The window hidden (minimised) or shown again, through the states in between.
+void setWindow(WidgetTester tester, AppLifecycleState to) {
+  for (final state in [AppLifecycleState.inactive, to]) {
+    tester.binding.handleAppLifecycleStateChanged(state);
+  }
 }

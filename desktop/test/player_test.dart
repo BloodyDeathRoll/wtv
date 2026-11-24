@@ -361,23 +361,32 @@ void main() {
       engine.plays(length: _minute * 20, at: _minute * 20);
       engine.now((e) => e.ended = true);
       await tester.pumpAndSettle();
-      expect([find.text(en.upNext), find.text(en.playCutOff)], [findsNothing, findsNothing]);
+      expect(find.text(en.upNext), findsNothing);
     });
 
-    testWidgets('a stream that stops well before its end was cut: that is said, the position is saved, Close leaves', (tester) async {
+    testWidgets('a stream that stops well before its end is the end, as on the TV: the position is saved, Up next shows', (tester) async {
       await show(tester, episode: true, next: 'S1 E3');
       engine.plays(length: _minute * 100, at: _minute * 30);
       await tester.pump();
       engine.now((e) => e.ended = true);
       await tester.pumpAndSettle();
-      expect([find.text(en.playCutOff), find.text(en.upNext)], [findsOneWidget, findsNothing]);
+      expect(find.text(en.upNext), findsOneWidget);
       expect(reports, [(1800, 6000, false)]);
-      expect(focusedButton(), en.close);
-      // The picture's keys are off.
-      await press(tester, LogicalKeyboardKey.arrowRight);
-      expect(engine.seeks, isEmpty);
-      await press(tester, LogicalKeyboardKey.enter);
-      expect(closes, 1);
+    });
+
+    testWidgets('the film pauses when the window is hidden, as on the TV', (tester) async {
+      await show(tester);
+      engine.plays(length: _minute * 100, at: _minute * 30);
+      await tester.pump();
+      expect(engine.paused, isFalse);
+      for (final state in [AppLifecycleState.inactive, AppLifecycleState.hidden]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      expect(engine.paused, isTrue);
+      for (final state in [AppLifecycleState.inactive, AppLifecycleState.resumed]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+      expect(engine.paused, isTrue);
     });
 
     testWidgets('a stream that does not open says why, with Close; nothing is saved', (tester) async {

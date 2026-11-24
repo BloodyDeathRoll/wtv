@@ -87,9 +87,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   var _wasEnded = false;
   // Left for another episode: the position is saved already.
   var _left = false;
-  // The stream stopped well before its end.
-  var _cutOff = false;
   var _upNext = false;
+  late final AppLifecycleListener _lifecycle;
   var _secondsLeft = upNextSecs;
   Timer? _countdown;
   final _overlayButton = FocusNode();
@@ -109,7 +108,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   var _lastStepAt = Duration.zero;
   Timer? _scrubIdle;
 
-  bool get _failed => _engine.failure != null || _cutOff;
+  bool get _failed => _engine.failure != null;
 
   /// The error and Up next have their own button, and the keys.
   bool get _overlay => _failed || _upNext;
@@ -118,6 +117,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     _stream = _engine.open(widget.url, startSecs: widget.startSecs);
+    // As on the TV: a film pauses when the window is hidden (minimised).
+    _lifecycle = AppLifecycleListener(onHide: _engine.pause);
     _engine.addListener(_onEngine);
     _saver = Timer.periodic(saveEvery, (_) {
       final e = _engine;
@@ -131,6 +132,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     _engine.removeListener(_onEngine);
     if (!_left) _save(isFinal: true);
     // The stream closes with the page. Nothing, if the next episode's has replaced it.
@@ -157,12 +159,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     if (e.ended && !_wasEnded) {
       _save(isFinal: false);
-      final length = e.length;
-      if (length != null && e.position < length - cutOffMargin) {
-        _cutOff = true;
-      } else if (widget.next != null) {
-        _startUpNext();
-      }
+      if (widget.next != null) _startUpNext();
     }
     _wasEnded = e.ended;
     if (_overlay) _focusOverlay();
@@ -457,7 +454,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         Text(widget.title, style: text.headlineMedium, textAlign: TextAlign.center),
                         const SizedBox(height: 8),
                         Text(
-                          failure != null ? l.playFailed(failure) : l.playCutOff,
+                          l.playFailed(failure!),
                           style: text.bodyLarge!.copyWith(color: WtvColors.textSecondary),
                           textAlign: TextAlign.center,
                         ),
@@ -734,7 +731,5 @@ const heldStepGap = Duration(milliseconds: 150);
 const scrubIdleAfter = Duration(milliseconds: 600);
 const endMargin = Duration(seconds: 5);
 
-/// A stream that ends this long before its length was cut, not finished.
-const cutOffMargin = Duration(seconds: 30);
 const clockTick = Duration(milliseconds: 250);
 const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];

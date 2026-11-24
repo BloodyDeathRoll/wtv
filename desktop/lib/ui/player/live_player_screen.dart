@@ -105,10 +105,34 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
     });
     _play();
     _showBanner();
+    _lifecycle = AppLifecycleListener(onHide: _hidden, onShow: _shownAgain);
+  }
+
+  late final AppLifecycleListener _lifecycle;
+
+  /// Where catch-up was when the window was hidden; null while not hidden.
+  Duration? _hiddenAt;
+
+  /// As on the TV: the stream stops while the window is hidden (minimised). Live comes back
+  /// at the live edge, catch-up where it was.
+  void _hidden() {
+    final stream = _stream;
+    if (stream == null) return;
+    _hiddenAt = _catchup != null ? _engine.position : Duration.zero;
+    _engine.close(stream);
+    _stream = null;
+  }
+
+  void _shownAgain() {
+    final at = _hiddenAt;
+    if (at == null) return;
+    _hiddenAt = null;
+    _play(startSecs: at.inSeconds);
   }
 
   @override
   void dispose() {
+    _lifecycle.dispose();
     _engine.removeListener(_onEngine);
     if (_stream case final stream?) _engine.close(stream);
     for (final timer in [_clock, _ticker, _bannerTimer, _stall]) {
