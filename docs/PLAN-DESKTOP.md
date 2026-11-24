@@ -24,8 +24,9 @@ Decided on 2026-11-24.
   and kept in the system keyring. It never goes into code, a build, an issue or
   a pull request. The app's own keys are inside every build and can be read out
   of it, as with the TV app's build; keeping builds private covers them too.
-- **Order of work.** WTV-public (`docs/PLAN-PUBLIC.md`) starts first. The two
-  plans touch different folders and may run in parallel.
+- **Order of work.** The Linux desktop app started first, with D1-2 on
+  2026-11-24. WTV-public (`docs/PLAN-PUBLIC.md`) touches different folders and
+  may run in parallel.
 
 ## 2. Architecture
 
