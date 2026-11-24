@@ -92,7 +92,7 @@ milestone.
 | G2-4 | Viewers also liked and Watch again, by TMDB key |
 | G2-5 | Ratings on the server by TMDB key, because the ranking reads them |
 | G2-6 | Move current testers' data (progress, watchlist, ratings, favourites, hidden channels) to the new keys; then remove today's server-backed mode from the app |
-| G2-7 | Retire the 4-hourly sync and the server's copy of the catalog; keep the TMDB cache. This deletes data: the issue lists what goes, and it runs only on Shahar's explicit go-ahead |
+| G2-7 | Retire the 4-hourly sync and the server's copy of the catalog; keep the TMDB cache. This deletes data: the issue lists what goes, and it runs only on Shahar's explicit go-ahead, and not while the desktop app still reads that copy (`docs/PLAN-DESKTOP.md`, section 5) |
 
 ## 5. Later
 
@@ -100,4 +100,4 @@ Not in either goal:
 
 - Several playlists active at the same time.
 - Catch-up on M3U channels.
-- Web version (`docs/PLAN.md`, section 5).
+- Desktop app (`docs/PLAN-DESKTOP.md`).
