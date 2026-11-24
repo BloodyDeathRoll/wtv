@@ -49,7 +49,7 @@ class MpvEngine extends VideoEngine {
   // The engine's commands, one after another.
   late Future<void> _work;
 
-  // The number of the stream wanted now; 0 before the first.
+  // The number of the stream wanted now; 0 before the first, and after a close a number no stream has.
   var _stream = 0;
   // A stream is wanted (opened and not closed).
   var _wanted = false;
@@ -72,6 +72,7 @@ class MpvEngine extends VideoEngine {
   var _subtitles = const <MediaTrack>[];
   String? _audioTrack;
   String? _subtitleTrack;
+  // mpv's last messages, for [failureReason] only. They quote the address: they never leave this class.
   final _messages = <String>[];
 
   Future<void> _setUp() async {
@@ -135,6 +136,8 @@ class MpvEngine extends VideoEngine {
   void close(int stream) {
     if (stream != _stream || !_wanted) return;
     _wanted = _opened = false;
+    // An open still waiting its turn is dropped: its stream would take one of the provider's places only to be stopped.
+    _stream++;
     _queue(() => _mpv.command(['stop']));
     notifyListeners();
   }
@@ -245,10 +248,12 @@ class MpvEngine extends VideoEngine {
   void seek(Duration to) {
     _seeking = to;
     _sought = false;
+    // shortcut: a seek mpv refuses is not told apart, so while paused the time line stays on `to` until playback moves on.
     _queue(() async {
       await _mpv.command(['seek', (to.inMilliseconds / 1000).toStringAsFixed(3), 'absolute']);
       _sought = _seeking == to;
     });
+    notifyListeners();
   }
 
   @override

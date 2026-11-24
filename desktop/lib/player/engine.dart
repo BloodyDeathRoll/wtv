@@ -67,6 +67,7 @@ abstract class VideoEngine extends ChangeNotifier {
 
 /// Why a stream did not open, from the engine's last messages: the HTTP status, if one was logged.
 /// Never the messages themselves: they quote the stream's address, which holds the provider login.
+/// "HTTP error 404" is ffmpeg's wording, as the libmpv in use logs it; another wording falls back to "no stream".
 String failureReason(Iterable<String> messages) {
   for (final message in messages.toList().reversed) {
     final status = RegExp(r'HTTP error (\d{3})').firstMatch(message);
