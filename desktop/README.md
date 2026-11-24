@@ -25,10 +25,10 @@ flutter run -d linux --dart-define-from-file=.env
 ## Keys
 
 The app's own keys are read at build time from `desktop/.env`, which git
-ignores. Take only these four names from the project's key file:
+ignores. Take only these six names from the project's key file:
 
 ```
-grep -E '^(SUPABASE_URL|SUPABASE_PUBLISHABLE_KEY|GOOGLE_TV_CLIENT_ID|GOOGLE_TV_CLIENT_SECRET)=' /path/to/.env.local > .env
+grep -E '^(SUPABASE_URL|SUPABASE_PUBLISHABLE_KEY|GOOGLE_TV_CLIENT_ID|GOOGLE_TV_CLIENT_SECRET|WTW_SUPABASE_URL|WTW_SUPABASE_ANON_KEY)=' /path/to/.env.local > .env
 ```
 
 Never pass the whole key file to a build: every value in it would go into the
@@ -51,8 +51,9 @@ needs one.
   scroll that way, its wheel does.
 - **Images.** Posters and backdrops are kept in memory only, so each start
   loads them again.
-- **Session.** The signed-in session is kept in the system keyring (libsecret),
-  not in a file.
+- **Session and provider login.** The signed-in session and the provider login
+  typed in Settings are kept in the system keyring (libsecret), not in a file.
+  The provider login is sent to the provider only.
 
 ## Licence
 

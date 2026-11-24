@@ -59,6 +59,8 @@ final wtvTheme = ThemeData(
     // Synopsis.
     bodyLarge: _style(15, 22, FontWeight.normal),
     bodyMedium: _style(13, 18, FontWeight.normal),
+    // A hint under a setting (the TV library's own size: the TV app sets none).
+    bodySmall: _style(12, 16, FontWeight.normal),
     // Badges and card labels.
     labelLarge: _style(14, 18, FontWeight.w600),
     labelMedium: _style(12, 16, FontWeight.bold),

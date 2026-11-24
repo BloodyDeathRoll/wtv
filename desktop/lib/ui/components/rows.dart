@@ -50,3 +50,41 @@ class RowsAtTop extends StatelessWidget {
     }
   }
 }
+
+/// A page of rows whose items do not line up (a form: Settings). Up and Down
+/// go to the nearest row, and in it to the item nearest sideways. The
+/// framework's own rule prefers an item straight above or below, however far,
+/// and so skips a row whose only items lie to the side.
+class NearestRows extends StatelessWidget {
+  const NearestRows({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => FocusTraversalGroup(policy: _NearestRowPolicy(), child: child);
+}
+
+class _NearestRowPolicy extends ReadingOrderTraversalPolicy {
+  @override
+  bool inDirection(FocusNode currentNode, TraversalDirection direction) {
+    if (direction != TraversalDirection.up && direction != TraversalDirection.down) return super.inDirection(currentNode, direction);
+    final down = direction == TraversalDirection.down;
+    final from = currentNode.rect;
+    double gap(FocusNode node) => down ? node.rect.top - from.bottom : from.top - node.rect.bottom;
+    // What lies wholly beyond this item (a pixel of overlap is rounding).
+    final beyond = [
+      for (final node in currentNode.nearestScope!.traversalDescendants)
+        if (node != currentNode && gap(node) > -1) node,
+    ];
+    if (beyond.isEmpty) return false;
+    final nearest = beyond.reduce((a, b) => gap(a) <= gap(b) ? a : b);
+    // Its row: what lies level with it.
+    final row = beyond.where((node) => node.rect.top < nearest.rect.bottom && node.rect.bottom > nearest.rect.top);
+    double aside(FocusNode node) => (node.rect.center.dx - from.center.dx).abs();
+    requestFocusCallback(
+      row.reduce((a, b) => aside(a) <= aside(b) ? a : b),
+      alignmentPolicy: down ? ScrollPositionAlignmentPolicy.keepVisibleAtEnd : ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+    );
+    return true;
+  }
+}

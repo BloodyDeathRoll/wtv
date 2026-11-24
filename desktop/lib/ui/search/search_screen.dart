@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart' hide Title;
 
 import '../../app_language.dart';
@@ -10,6 +9,7 @@ import '../../l10n/app_localizations.dart';
 import '../../services.dart';
 import '../components/badges.dart';
 import '../components/cards.dart';
+import '../components/fields.dart';
 import '../components/pressable.dart';
 import '../components/title_menu.dart';
 import '../theme.dart';
@@ -175,23 +175,6 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  KeyEventResult _fieldKey(bool suggestions, KeyEvent event) {
-    if (event is KeyUpEvent) return KeyEventResult.ignored;
-    // A text field keeps Down for its cursor; here Down means "to what is below".
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      final below = suggestions ? _firstSuggestion : _firstResult;
-      if (below.context != null) below.requestFocus();
-      return KeyEventResult.handled;
-    }
-    // Left and right move the cursor. In an empty field there is nothing to move in: the one towards the side rail goes there.
-    final rtl = Directionality.of(context) == TextDirection.rtl;
-    if (_text.text.isEmpty && event.logicalKey == (rtl ? LogicalKeyboardKey.arrowRight : LogicalKeyboardKey.arrowLeft)) {
-      Actions.invoke(context, DirectionalFocusIntent(rtl ? TraversalDirection.right : TraversalDirection.left));
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
@@ -207,10 +190,6 @@ class _SearchScreenState extends State<SearchScreen> {
           ].take(_suggestionCount).toList();
     final showSuggestions = _nearField && suggestions.isNotEmpty;
     final fieldStyle = text.headlineMedium!.copyWith(color: WtvColors.textPrimary);
-    OutlineInputBorder border(Color color) => OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: BorderSide(color: color, width: 2),
-    );
     Widget note(String message) => Padding(
       padding: const EdgeInsetsDirectional.only(start: 8),
       child: Text(message, style: text.titleMedium!.copyWith(color: WtvColors.textMuted)),
@@ -230,10 +209,13 @@ class _SearchScreenState extends State<SearchScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Focus(
-                    canRequestFocus: false,
-                    skipTraversal: true,
-                    onKeyEvent: (_, event) => _fieldKey(showSuggestions, event),
+                  FieldKeys(
+                    controller: _text,
+                    // The first suggestion or the first result, not whichever card is nearest.
+                    onDown: () {
+                      final below = showSuggestions ? _firstSuggestion : _firstResult;
+                      if (below.context != null) below.requestFocus();
+                    },
                     child: TextField(
                       controller: _text,
                       focusNode: widget.field,
@@ -247,21 +229,14 @@ class _SearchScreenState extends State<SearchScreen> {
                       onSubmitted: (_) => _submit(),
                       // A click on the page's background leaves the focus where it is.
                       onTapOutside: (_) {},
-                      decoration: InputDecoration(
-                        hintText: switch (widget.scope) {
+                      decoration: fieldDecoration(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        hint: switch (widget.scope) {
                           SearchScope.all => l.searchHint,
                           SearchScope.movies => l.searchHintMovies,
                           SearchScope.series => l.searchHintSeries,
                         },
                         hintStyle: fieldStyle.copyWith(color: WtvColors.textMuted),
-                        hintMaxLines: 1,
-                        isDense: true,
-                        filled: true,
-                        fillColor: WtvColors.surface,
-                        hoverColor: Colors.transparent,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        enabledBorder: border(WtvColors.surface),
-                        focusedBorder: border(WtvColors.focus),
                       ),
                     ),
                   ),

@@ -90,7 +90,10 @@ class WatchlistPage extends AppPage {
 }
 
 class SettingsPage extends AppPage {
-  const SettingsPage();
+  const SettingsPage({this.providerFirst = false});
+
+  /// Opened by Play when there is no provider login: the page opens on it.
+  final bool providerFirst;
 
   @override
   String get id => 'settings';
@@ -365,7 +368,7 @@ class _WtvShellState extends State<WtvShell> {
                   entry,
                   covered: entry != _stack.last,
                   child: switch (entry.page!) {
-                    SettingsPage() => SettingsScreen(firstFocus: entry.first),
+                    SettingsPage(:final providerFirst) => SettingsScreen(firstFocus: entry.first, providerFirst: providerFirst),
                     CategoriesPage(:final kind) => CategoriesScreen(
                       kind,
                       firstFocus: entry.first,
