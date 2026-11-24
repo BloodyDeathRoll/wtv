@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
+import 'components/buttons.dart';
 import 'components/chips.dart';
 import 'components/pressable.dart';
 import 'components/side_rail.dart';
@@ -302,9 +303,24 @@ class _ArrowAction extends Action<DirectionalFocusIntent> {
   void invoke(DirectionalFocusIntent intent) {
     final focus = FocusManager.instance.primaryFocus;
     if (focus == null) return;
+    if (_atEdge(focus, intent.direction) || !focus.focusInDirection(intent.direction)) onEdge(intent.direction);
+  }
+
+  bool _atEdge(FocusNode focus, TraversalDirection direction) {
+    final items = focus.nearestScope!.traversalDescendants;
     // A screen with no items holds the focus itself, and every arrow is at its edge.
-    final empty = focus is FocusScopeNode && focus.traversalDescendants.isEmpty;
-    if (empty || !focus.focusInDirection(intent.direction)) onEdge(intent.direction);
+    if (focus is FocusScopeNode) return items.isEmpty;
+    if (direction == TraversalDirection.up || direction == TraversalDirection.down) return false;
+    // Left and right stay in the row. With no item level with this one on that side the row has ended,
+    // where the framework would jump to the nearest item of another row.
+    final from = focus.rect;
+    return !items.any(
+      (item) =>
+          item != focus &&
+          item.rect.top < from.bottom &&
+          item.rect.bottom > from.top &&
+          (direction == TraversalDirection.left ? item.rect.center.dx < from.center.dx : item.rect.center.dx > from.center.dx),
+    );
   }
 }
 
@@ -331,17 +347,8 @@ class _ExitDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
-    Widget button(String label, bool answer) => Pressable(
-      autofocus: answer,
-      onPressed: () => Navigator.pop(context, answer),
-      builder: (context, focused) => Pill(
-        focused: focused,
-        color: WtvColors.chip,
-        textColor: WtvColors.textPrimary,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        label: label,
-      ),
-    );
+    Widget button(String label, bool answer) =>
+        ActionButton(label: label, autofocus: answer, onPressed: () => Navigator.pop(context, answer));
     return Dialog(
       backgroundColor: WtvColors.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

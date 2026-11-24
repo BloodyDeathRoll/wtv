@@ -46,6 +46,8 @@ final wtvTheme = ThemeData(
   textTheme: TextTheme(
     // Title in the header.
     displayMedium: _style(36, 42, FontWeight.bold),
+    // The sign-in code.
+    displaySmall: _style(36, 44, FontWeight.normal),
     // Person name, big page titles.
     headlineMedium: _style(28, 34, FontWeight.bold),
     // Questions in a dialog.
