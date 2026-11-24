@@ -112,7 +112,10 @@ void main() {
     var told = 0;
     scores.addListener(() => told++);
     scores.request([]);
-    expect((scores[2], told), (null, 1));
+    // Listeners hear of the dropped answers after the call returns: it may be made while a page is being built.
+    expect((scores[2], told), (null, 0));
+    await pumpEventQueue();
+    expect(told, 1);
     scores.request([2]);
     await pumpEventQueue();
     expect((asked.last['wtw_token'], scores[2]), ('w2', 2));

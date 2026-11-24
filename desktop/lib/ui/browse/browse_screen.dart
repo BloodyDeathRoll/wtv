@@ -16,15 +16,18 @@ import '../components/rows.dart';
 import '../components/title_menu.dart';
 import '../theme.dart';
 
-/// A row on the page. Its "More" card opens `category`'s grid. `progress`
-/// (Continue watching) gives a card its watched bar and label, by title id.
+/// A row on the page. Its "More" card opens `category`'s grid, or, with
+/// `forYou`, the Recommended for You page of `forYouKind` (null: both kinds).
+/// `progress` (Continue watching) gives a card its watched bar and label, by title id.
 class BrowseRow {
-  const BrowseRow(this.label, this.category, this.titles, {this.progress = const {}});
+  const BrowseRow(this.label, this.category, this.titles, {this.progress = const {}, this.forYou = false, this.forYouKind});
 
   final String label;
   final Category? category;
   final List<Title> titles;
   final Map<int, (double?, String?)> progress;
+  final bool forYou;
+  final Kind? forYouKind;
 }
 
 sealed class _Load {
@@ -50,11 +53,20 @@ class _Failed extends _Load {
 
 const _continueWait = Duration(seconds: 5);
 
+/// A first ranking takes about 10 s; after that the server answers at once.
+const _rankingWait = Duration(seconds: 30);
+
+/// Rows whose WTW match is asked for as soon as the page shows.
+const _firstScoredRows = 3;
+
+/// Titles in a section's "Recommended for You" row, before its More card.
+const _sectionPicks = 10;
+
 /// How long a page's rows are shown again as they are; older ones are shown, then read again.
 const _rowsFresh = Duration(minutes: 10);
 
-/// Whose rows these are: another language or account never sees them.
-typedef _Owner = (bool hebrew, String? email);
+/// Whose rows these are: another language or account (WTW's too) never sees them.
+typedef _Owner = (bool hebrew, String? email, String? wtwEmail);
 
 /// A page's rows as last loaded, for `owner`, after `ratings` and `progress` changes.
 class _Shown {
@@ -69,6 +81,9 @@ class _Shown {
 
 /// Each page's last rows (by its kind; null is Home), kept while the app runs: switching tabs does not load them again.
 final _shown = <Kind?, _Shown>{};
+
+/// New rankings made while the app runs; a load that saw an older count does not keep its rows.
+var _rankings = 0;
 
 /// Continue watching as last loaded, and for whom.
 (_Owner, List<ContinueItem>)? _lastWatching;
@@ -87,6 +102,11 @@ String _reason(Object error) => error is ApiException ? error.message : error.to
 /// `firstFocus` is where Down from the tabs lands. Home starts with Continue
 /// watching, reloaded when [progressVersion] changes (a player closed) without
 /// reloading the rest. When `tabsFocused`, the page is back at its top.
+///
+/// With WTW connected: Top picks and New for you on Home, Recommended for You
+/// first in a section, Watch it again from what was Loved or Liked in WTW, and
+/// each card's "% match". Home then has the server rank the catalog, and
+/// reloads when a new ranking was made.
 class BrowseScreen extends StatefulWidget {
   const BrowseScreen({
     super.key,
@@ -95,6 +115,7 @@ class BrowseScreen extends StatefulWidget {
     required this.tabsFocused,
     required this.onMore,
     required this.onOpen,
+    required this.onForYou,
   });
 
   final Kind? kind;
@@ -102,6 +123,9 @@ class BrowseScreen extends StatefulWidget {
   final ValueListenable<bool> tabsFocused;
   final ValueChanged<Category> onMore;
   final ValueChanged<Title> onOpen;
+
+  /// Opens Recommended for You, for one kind or (null) both.
+  final ValueChanged<Kind?> onForYou;
 
   @override
   State<BrowseScreen> createState() => _BrowseScreenState();
@@ -122,13 +146,30 @@ class _BrowseScreenState extends State<BrowseScreen> {
 
   Catalog get _catalog => services.catalog;
   bool get _home => widget.kind == null;
-  _Owner get _owner => (_hebrew!, services.session.email);
+  _Owner get _owner => (_hebrew!, services.session.email, services.wtw.email);
 
   @override
   void initState() {
     super.initState();
     _catalog.ratingsVersion.addListener(_reload);
     progressVersion.addListener(_loadWatching);
+    if (_home) _rank();
+  }
+
+  /// With WTW connected, has the server rank the catalog (it keeps a ranking for an hour, so this
+  /// is cheap). A new ranking reloads the rows, quietly. A nicety: on failure Home keeps what it shows.
+  Future<void> _rank() async {
+    final wtw = services.wtw;
+    if (wtw.email == null) return;
+    try {
+      if (!await _catalog.refreshRanking(await wtw.token()).timeout(_rankingWait)) return;
+    } on Exception {
+      return;
+    }
+    // The other pages' recommendations come from the ranking too.
+    _shown.clear();
+    _rankings++;
+    if (mounted) _reload(quiet: true);
   }
 
   @override
@@ -153,17 +194,19 @@ class _BrowseScreenState extends State<BrowseScreen> {
     _rows = null;
   }
 
-  Future<void> _reload() async {
+  /// `quiet`: the rows on screen stay until the new ones are in.
+  Future<void> _reload({bool quiet = false}) async {
     final run = ++_run;
     final l = AppLocalizations.of(context)!;
     final (owner, hebrew) = (_owner, _hebrew!);
     final ratings = _catalog.ratingsVersion.value;
     final progress = progressVersion.value;
+    final epoch = _rankings;
     // A page switched back to shows its last rows at once; they are read again,
     // quietly, only after a rating or a playback, or when old.
     final kept = _shown[widget.kind];
     final cached = kept != null && kept.owner == owner ? kept : null;
-    if (cached != null) {
+    if (cached != null && !quiet) {
       setState(() => _show(cached.load));
       if (cached.ratings == ratings && cached.progress == progress && DateTime.now().difference(cached.at) < _rowsFresh) {
         _ratingsSeen = ratings;
@@ -171,19 +214,20 @@ class _BrowseScreenState extends State<BrowseScreen> {
       }
     }
     // A reload after a rating keeps the rows on screen until the new ones are in.
-    final keep = (ratings != _ratingsSeen || cached != null) && _load is _Ready;
+    final keep = (quiet || ratings != _ratingsSeen || cached != null) && _load is _Ready;
     _ratingsSeen = ratings;
     if (!keep) setState(() => _show(const _Loading()));
     _Load next;
     try {
-      final rows = await _loadRows(_catalog, widget.kind, hebrew, l);
+      final rows = await _loadRows(_catalog, widget.kind, hebrew, l, wtw: owner.$3 != null);
       // Genre names are a nicety: without them the meta line just has no genres.
       final genres = await _catalog.genres().catchError((Object _) => const <(Kind, int), Genre>{}, test: (e) => e is Exception);
       next = _Ready(rows, genres);
     } on Exception catch (e) {
       next = _Failed(_reason(e));
     }
-    if (next is _Ready) _shown[widget.kind] = _Shown(owner, ratings, progress, next, DateTime.now());
+    // Rows read before a new ranking arrived are not kept: they hold the old one's picks.
+    if (next is _Ready && epoch == _rankings) _shown[widget.kind] = _Shown(owner, ratings, progress, next, DateTime.now());
     if (!mounted || run != _run) return;
     // A failed quiet reload leaves what is shown.
     if (!(keep && next is _Failed)) setState(() => _show(next));
@@ -242,6 +286,7 @@ class _BrowseScreenState extends State<BrowseScreen> {
           tabsFocused: widget.tabsFocused,
           onMore: widget.onMore,
           onOpen: widget.onOpen,
+          onForYou: widget.onForYou,
           storage: widget.kind?.name ?? 'home',
         );
     }
@@ -268,30 +313,43 @@ BrowseRow? continueRow(List<ContinueItem> items, String label, String Function(i
         },
       );
 
-/// The page's rows: the newest titles on Home, the categories' rows in a
-/// section, and Watch it again from what the user finished. Empty rows are left out.
-Future<List<BrowseRow>> _loadRows(Catalog catalog, Kind? kind, bool hebrew, AppLocalizations l) async {
+/// The page's rows. With WTW connected (`wtw`): Top picks and New for you on
+/// Home, "Recommended for You" first on Movies and Series, and Watch it again
+/// from the titles Loved or Liked in WTW. Without WTW, Watch it again holds
+/// what the user finished. Empty rows are left out.
+Future<List<BrowseRow>> _loadRows(Catalog catalog, Kind? kind, bool hebrew, AppLocalizations l, {required bool wtw}) async {
+  Future<List<Title>> none() async => const [];
+  Future<List<Title>> orNone(Future<List<Title>> titles) => titles.catchError((Object _) => const <Title>[], test: (e) => e is Exception);
   if (kind == null) {
-    final [movies, series, again] = await Future.wait([
+    final [picks, fresh, movies, series, again] = await Future.wait([
+      wtw ? catalog.topPicks() : none(),
+      wtw ? catalog.newForYou() : none(),
       catalog.latest(Kind.movie),
       catalog.latest(Kind.series),
-      catalog.finishedTitles(),
+      wtw ? catalog.watchAgain() : catalog.finishedTitles(),
     ]);
     return [
+      BrowseRow(l.rowTopPicks, null, picks, forYou: true),
+      BrowseRow(l.rowNewForYou, null, fresh),
       BrowseRow(l.rowRecentMovies, null, movies),
       BrowseRow(l.rowRecentSeries, null, series),
       BrowseRow(l.rowWatchAgain, null, again),
     ].where((row) => row.titles.isNotEmpty).toList();
   }
-  // A nicety: without it the section has no Watch it again row.
-  final again = catalog.finishedTitles(kind: kind).catchError((Object _) => const <Title>[], test: (e) => e is Exception);
+  // A nicety: when it fails, the section just has no Recommended row.
+  final recommended = wtw ? orNone(catalog.topPicksPage(kind, offset: 0, limit: _sectionPicks)) : none();
+  // A nicety too: without it the section has no Watch it again row.
+  final again = orNone(wtw ? catalog.watchAgain(kind: kind) : catalog.finishedTitles(kind: kind));
   // The provider files series by service only: their genre rows come from TMDB (movies have the provider's).
   final genres = kind == Kind.series
       ? await catalog.genreCategories(Kind.series, hebrew: hebrew).catchError((Object _) => const <Category>[], test: (e) => e is Exception)
       : const <Category>[];
   final rows = [for (final (category, titles) in await catalog.rows(kind, extra: genres)) BrowseRow(category.label(hebrew: hebrew), category, titles)];
   return [
-    ...[BrowseRow(l.rowWatchAgain, null, await again)].where((row) => row.titles.isNotEmpty),
+    ...[
+      BrowseRow(l.rowRecommended, null, await recommended, forYou: true, forYouKind: kind),
+      BrowseRow(l.rowWatchAgain, null, await again),
+    ].where((row) => row.titles.isNotEmpty),
     ...rows,
   ];
 }
@@ -304,6 +362,7 @@ class _Rows extends StatefulWidget {
     required this.tabsFocused,
     required this.onMore,
     required this.onOpen,
+    required this.onForYou,
     required this.storage,
   });
 
@@ -313,6 +372,7 @@ class _Rows extends StatefulWidget {
   final ValueListenable<bool> tabsFocused;
   final ValueChanged<Category> onMore;
   final ValueChanged<Title> onOpen;
+  final ValueChanged<Kind?> onForYou;
 
   /// Tells this page's rows from another page's with the same category number, where each row's place is kept.
   final String storage;
@@ -327,10 +387,26 @@ class _RowsState extends State<_Rows> {
   // Kept when only Continue watching changes: the header stays on the focused card.
   late Title _focused = widget.rows.first.titles.first;
 
+  // WTW's own match: listeners are told as the answers arrive.
+  final _scores = services.wtwScores;
+
   @override
   void initState() {
     super.initState();
     widget.tabsFocused.addListener(_toTop);
+    _scores.addListener(_onScores);
+    _scores.requestFor(_titlesOf(widget.rows.take(_firstScoredRows)));
+  }
+
+  void _onScores() => setState(() {});
+
+  Iterable<Title> _titlesOf(Iterable<BrowseRow> rows) => rows.expand((row) => row.titles);
+
+  /// The cards not answered yet are asked for: the first rows at once, then the focused row and
+  /// the one under it as the user moves down, not the whole page at once.
+  void _focus(Title title, int row) {
+    setState(() => _focused = title);
+    _scores.requestFor(_titlesOf(widget.rows.skip(row).take(2)));
   }
 
   @override
@@ -340,15 +416,16 @@ class _RowsState extends State<_Rows> {
       old.tabsFocused.removeListener(_toTop);
       widget.tabsFocused.addListener(_toTop);
     }
+    if (identical(widget.rows, old.rows)) return;
     // A reload (retry, language) brings new title objects: the header moves to the first card.
-    if (!identical(widget.rows, old.rows) && !widget.rows.any((row) => row.titles.any((t) => t.id == _focused.id))) {
-      _focused = widget.rows.first.titles.first;
-    }
+    if (!widget.rows.any((row) => row.titles.any((t) => t.id == _focused.id))) _focused = widget.rows.first.titles.first;
+    _scores.requestFor(_titlesOf(widget.rows.take(_firstScoredRows)));
   }
 
   @override
   void dispose() {
     widget.tabsFocused.removeListener(_toTop);
+    _scores.removeListener(_onScores);
     _list.dispose();
     super.dispose();
   }
@@ -368,6 +445,7 @@ class _RowsState extends State<_Rows> {
       fit: StackFit.expand,
       children: [
         Backdrop(_focused.heroImage),
+        if (_scores.matchOf(_focused) case final match?) HeaderMatch(match),
         Padding(
           // 8 less than the page's 88: the rows keep that room for the focused card's lift.
           padding: const EdgeInsetsDirectional.only(start: 80, top: headerTop),
@@ -405,11 +483,15 @@ class _RowsState extends State<_Rows> {
                                 key: PageStorageKey('${widget.storage}:$key'),
                                 scrollDirection: Axis.horizontal,
                                 padding: const EdgeInsetsDirectional.only(start: 8, end: 48, top: 6, bottom: 6),
-                                itemCount: row.titles.length + (category == null ? 0 : 1),
+                                itemCount: row.titles.length + (category == null && !row.forYou ? 0 : 1),
                                 separatorBuilder: (_, _) => const SizedBox(width: 14),
                                 itemBuilder: (context, i) {
                                   if (i == row.titles.length) {
-                                    return ImageCard.landscape(imageUrl: null, title: l.more, onPressed: () => widget.onMore(category!));
+                                    return ImageCard.landscape(
+                                      imageUrl: null,
+                                      title: l.more,
+                                      onPressed: () => category != null ? widget.onMore(category) : widget.onForYou(row.forYouKind),
+                                    );
                                   }
                                   final t = row.titles[i];
                                   final (watched, episode) = row.progress[t.id] ?? (null, null);
@@ -419,10 +501,11 @@ class _RowsState extends State<_Rows> {
                                     title: t.displayName(hebrew: hebrew),
                                     label: episode,
                                     progress: watched,
+                                    match: _scores.matchOf(t),
                                     onPressed: () => widget.onOpen(t),
                                     // From Continue watching the menu can also take the title out of that row.
                                     onMenu: () => TitleMenuScope.open(context, t, continuing: row.progress.isNotEmpty),
-                                    onFocused: () => setState(() => _focused = t),
+                                    onFocused: () => _focus(t, at),
                                     focusNode: at == 0 && i == 0 ? widget.firstFocus : null,
                                   );
                                 },

@@ -25,6 +25,17 @@ class WtwScores extends ChangeNotifier {
   /// WTW's percent for this card once answered; null before, or when WTW does not score it.
   int? operator [](int id) => _known[id];
 
+  /// What a title's card shows: WTW's own percent once answered, else the one that came with
+  /// the title; null while WTW is not connected.
+  int? matchOf(Title title) {
+    final email = _wtw.email;
+    if (email == null) return null;
+    return (email == _account ? _known[title.id] : null) ?? title.match;
+  }
+
+  /// Asks for the titles that came without a percent.
+  void requestFor(Iterable<Title> titles) => request([for (final t in titles) if (t.match == null) t.id]);
+
   /// Asks for the cards not asked yet, in order (the first rows first).
   void request(List<int> ids) {
     final email = _wtw.email;
@@ -34,7 +45,8 @@ class WtwScores extends ChangeNotifier {
       _known.clear();
       _asked.clear();
       _account = email;
-      if (had) notifyListeners();
+      // Told after this call returns: it may be made while a page is being built.
+      if (had) scheduleMicrotask(notifyListeners);
     }
     final fresh = ids.where(_asked.add).toList();
     for (var i = 0; i < fresh.length; i += _perCall) {
