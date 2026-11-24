@@ -30,7 +30,12 @@ Future<void> loadLanguage() async {
   }
 }
 
+/// Switches the language at once and keeps it for the next start. A failed write leaves the switch in place for this run.
 Future<void> saveLanguage(AppLanguage language) async {
   appLanguage.value = language;
-  await (await SharedPreferences.getInstance()).setString(_key, language.tag);
+  try {
+    await (await SharedPreferences.getInstance()).setString(_key, language.tag);
+  } catch (e) {
+    debugPrint('Saving the language failed: $e');
+  }
 }

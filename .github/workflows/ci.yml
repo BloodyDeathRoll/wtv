@@ -111,11 +111,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
 
+      # Flutter with the engine it downloads, and the packages: kept between runs.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/flutter
+            ~/.pub-cache
+          key: flutter-${{ env.FLUTTER_VERSION }}-${{ hashFiles('desktop/pubspec.lock') }}
+          restore-keys: flutter-${{ env.FLUTTER_VERSION }}-
+
       # Flutter's own repository at the release tag: no third-party action.
       - name: Install Flutter
         working-directory: ${{ runner.temp }}
         run: |
-          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git
+          [ -d flutter ] || git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git
           echo "$PWD/flutter/bin" >> "$GITHUB_PATH"
           flutter/bin/flutter --disable-analytics
 
