@@ -455,10 +455,10 @@ class _WtvShellState extends State<WtvShell> {
                           ? -1
                           : 0;
                       final rtl = Directionality.of(context) == TextDirection.rtl;
-                      final to = step == 0 ? null : Section.values.elementAtOrNull(_section.index + (rtl ? -step : step));
+                      final to = _section.index + (rtl ? -step : step);
                       // Past the first tab is the rail, as the framework finds it.
-                      if (to == null) return KeyEventResult.ignored;
-                      if (event is! KeyUpEvent) _tabs[to]!.requestFocus();
+                      if (step == 0 || to < 0 || to >= Section.values.length) return KeyEventResult.ignored;
+                      if (event is! KeyUpEvent) _tabs[Section.values[to]]!.requestFocus();
                       return KeyEventResult.handled;
                     },
                     child: Row(

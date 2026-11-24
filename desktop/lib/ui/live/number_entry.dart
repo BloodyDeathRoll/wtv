@@ -45,6 +45,15 @@ class NumberEntry extends ChangeNotifier {
     return true;
   }
 
+  /// Drops the digits typed so far: the screen they were for is no longer the one in use.
+  void clear() {
+    _timer?.cancel();
+    if (digits.isEmpty && missing == null) return;
+    digits = '';
+    missing = null;
+    notifyListeners();
+  }
+
   void _take() {
     final number = int.parse(digits);
     digits = '';

@@ -238,6 +238,11 @@ class _LiveScreenState extends State<LiveScreen> {
     return Focus(
       canRequestFocus: false,
       skipTraversal: true,
+      // A number still being typed when the focus leaves the page (another page opened) is dropped:
+      // taken later, it would open the player over that page.
+      onFocusChange: (focused) {
+        if (!focused) _numbers.clear();
+      },
       onKeyEvent: (_, event) => _numbers.key(event) ? KeyEventResult.handled : KeyEventResult.ignored,
       child: Stack(
         fit: StackFit.expand,

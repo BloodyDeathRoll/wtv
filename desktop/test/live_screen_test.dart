@@ -248,6 +248,18 @@ void main() {
       await tester.pump();
       expect(typed(en.liveNoChannel(99)), findsNothing);
 
+      // A number still being typed when the page loses the focus is dropped.
+      await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+      await tester.pump();
+      expect(typed('2'), findsOneWidget);
+      FocusManager.instance.primaryFocus!.unfocus();
+      await tester.pumpAndSettle();
+      expect(typed('2'), findsNothing);
+      await tester.pump(numberWait);
+      expect(watched.length, 1);
+      first.requestFocus();
+      await tester.pumpAndSettle();
+
       // The fourth digit takes the number at once.
       for (final digit in [LogicalKeyboardKey.digit1, LogicalKeyboardKey.digit2, LogicalKeyboardKey.digit3, LogicalKeyboardKey.digit4]) {
         await tester.sendKeyEvent(digit);

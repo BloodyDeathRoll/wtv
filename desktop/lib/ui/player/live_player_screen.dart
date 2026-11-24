@@ -121,10 +121,13 @@ class _LivePlayerScreenState extends State<LivePlayerScreen> {
 
   /// Opens the channel's stream: the programme chosen from its archive, or live.
   void _play({int startSecs = 0}) {
-    final catchup = _catchup;
-    final url =
-        (catchup == null ? null : timeshiftUrl(widget.login, _channel.extId, catchup)) ??
-        streamUrl(widget.login, StreamKind.live, _channel.extId, 'ts');
+    final shifted = switch (_catchup) {
+      final programme? => timeshiftUrl(widget.login, _channel.extId, programme),
+      null => null,
+    };
+    // No address for the programme (the list holds only those with one): live, and shown as live.
+    if (shifted == null) _catchup = null;
+    final url = shifted ?? streamUrl(widget.login, StreamKind.live, _channel.extId, 'ts');
     _error = null;
     _stall?.cancel();
     _wasBuffering = _wasEnded = _wasPaused = false;

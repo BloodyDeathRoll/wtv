@@ -159,6 +159,7 @@ class _SearchScreenState extends State<SearchScreen> {
       try {
         if (widget.scope == SearchScope.live) {
           final lower = q.toLowerCase();
+          // Every channel, hidden ones too, as in the TV app: a search is how a hidden one is still reached.
           final hits = (_channels ??= await catalog.channels()).where((c) => c.name.toLowerCase().contains(lower)).toList();
           bool starts(Channel c) => c.name.toLowerCase().startsWith(lower);
           // Names starting with the query first, as titles and actors are ordered.
