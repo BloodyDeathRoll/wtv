@@ -57,13 +57,12 @@ class ImageCard extends StatelessWidget {
        match = null;
 
   /// Portrait card for a cast member.
-  const ImageCard.person({super.key, required this.imageUrl, required this.title, required this.onPressed, this.label})
+  const ImageCard.person({super.key, required this.imageUrl, required this.title, required this.onPressed, this.label, this.focusNode})
     : width = 96,
       aspectRatio = 3 / 4,
       onFocused = null,
       progress = null,
       match = null,
-      focusNode = null,
       onMenu = null;
 
   final String? imageUrl;

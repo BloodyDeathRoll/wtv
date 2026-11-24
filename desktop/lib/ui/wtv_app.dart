@@ -14,6 +14,7 @@ import 'components/side_rail.dart';
 import 'components/title_menu.dart';
 import 'grid/grid_screen.dart';
 import 'person/person_screen.dart';
+import 'search/search_screen.dart';
 import 'settings/settings_screen.dart';
 import 'theme.dart';
 import 'title/title_screen.dart';
@@ -29,11 +30,14 @@ sealed class AppPage {
   String get id;
 }
 
+/// Side rail → Search: it looks in the section on screen.
 class SearchPage extends AppPage {
-  const SearchPage();
+  const SearchPage(this.scope);
+
+  final SearchScope scope;
 
   @override
-  String get id => 'search';
+  String get id => 'search:${scope.name}';
 }
 
 /// Side rail → Categories: the provider's categories and the genres of a kind.
@@ -208,7 +212,14 @@ class _WtvShellState extends State<WtvShell> {
   }
 
   void _select(RailItem item) => switch (item) {
-    RailItem.search => _open(const SearchPage()),
+    RailItem.search => _open(
+      SearchPage(switch (_section) {
+        Section.movies => SearchScope.movies,
+        Section.series => SearchScope.series,
+        // The channel search comes with Live TV's work package.
+        Section.home || Section.liveTv => SearchScope.all,
+      }),
+    ),
     RailItem.categories => _open(CategoriesPage(_section == Section.series ? Kind.series : Kind.movie)),
     RailItem.mainMenu => _stack.isEmpty ? _selectedTab.requestFocus() : _setStack(_stack.clear, toTabs: true),
     RailItem.watchlist => _open(const WatchlistPage()),
@@ -381,8 +392,12 @@ class _WtvShellState extends State<WtvShell> {
                       kinds: true,
                       header: (context, _) => Text(l.railWatchlist, style: text.displayMedium),
                     ),
-                    // A heading until its work package.
-                    SearchPage() => _Heading(l.railSearch),
+                    SearchPage(:final scope) => SearchScreen(
+                      scope: scope,
+                      field: entry.first,
+                      onOpen: _openTitle,
+                      onPerson: (person) => _open(PersonPage(person)),
+                    ),
                   },
                 ),
               PositionedDirectional(
@@ -469,22 +484,6 @@ class _ArrowAction extends Action<DirectionalFocusIntent> {
           (direction == TraversalDirection.left ? item.rect.center.dx < from.center.dx : item.rect.center.dx > from.center.dx),
     );
   }
-}
-
-/// A page's heading, where its content will be.
-class _Heading extends StatelessWidget {
-  const _Heading(this.title);
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) => Align(
-    alignment: AlignmentDirectional.topStart,
-    child: Padding(
-      padding: const EdgeInsetsDirectional.only(start: 88, top: 48),
-      child: Text(title, style: Theme.of(context).textTheme.displayMedium),
-    ),
-  );
 }
 
 /// "Exit the app?" with Yes (focused) and No; Back answers No.
