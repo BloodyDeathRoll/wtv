@@ -14,6 +14,7 @@ import 'package:wtv/data/provider_login.dart';
 import 'package:wtv/data/session.dart';
 import 'package:wtv/l10n/app_localizations.dart';
 import 'package:wtv/main.dart';
+import 'package:wtv/player/engine.dart';
 import 'package:wtv/services.dart';
 import 'package:wtv/ui/browse/browse_screen.dart';
 import 'package:wtv/ui/theme.dart';
@@ -31,6 +32,102 @@ final writes = <String>[];
 /// Answers a database read with its rows, or with a whole response (a failure).
 /// A write is asked as "POST path?query" or "DELETE path?query": it succeeds unless the answer is a response.
 typedef Rest = Object? Function(String read);
+
+/// The video engine of the tests: it records what it was asked, and plays what the test says.
+class FakeEngine extends VideoEngine {
+  /// Each stream opened, as (address, second to start at), and the numbers of those closed.
+  final opened = <(String, int)>[];
+  final closed = <int>[];
+  final seeks = <Duration>[];
+
+  /// The number of the stream open now; null for none.
+  int? stream;
+
+  @override
+  Duration position = Duration.zero;
+  @override
+  Duration? length;
+  @override
+  bool paused = false;
+  @override
+  bool started = false;
+  @override
+  bool buffering = false;
+  @override
+  bool ended = false;
+  @override
+  String? failure;
+  @override
+  List<MediaTrack> audioTracks = const [];
+  @override
+  List<MediaTrack> subtitleTracks = const [];
+  @override
+  String? audioTrack;
+  @override
+  String? subtitleTrack;
+  @override
+  double speed = 1;
+
+  /// What the stream does next; the screens are told.
+  void now(void Function(FakeEngine e) change) {
+    change(this);
+    notifyListeners();
+  }
+
+  /// The stream opens and plays: `length` long, now at `at`.
+  void plays({required Duration length, Duration? at}) => now((e) {
+    e.started = true;
+    e.length = length;
+    if (at != null) e.position = at;
+  });
+
+  @override
+  int open(String url, {int startSecs = 0}) {
+    opened.add((url, startSecs));
+    position = Duration(seconds: startSecs);
+    length = null;
+    paused = started = buffering = ended = false;
+    failure = null;
+    audioTracks = subtitleTracks = const [];
+    audioTrack = subtitleTrack = null;
+    speed = 1;
+    return stream = opened.length;
+  }
+
+  @override
+  void close(int stream) {
+    closed.add(stream);
+    // As the real one: a stream that was replaced is closed already.
+    if (stream == this.stream) this.stream = null;
+  }
+
+  @override
+  void play() => now((e) => e.paused = false);
+
+  @override
+  void pause() => now((e) => e.paused = true);
+
+  @override
+  void seek(Duration to) => now((e) {
+    e.seeks.add(to);
+    e.position = to;
+  });
+
+  @override
+  void setSpeed(double speed) => now((e) => e.speed = speed);
+
+  @override
+  void setAudioTrack(String id) => now((e) => e.audioTrack = id);
+
+  @override
+  void setSubtitleTrack(String? id) => now((e) => e.subtitleTrack = id);
+
+  @override
+  Widget view() => const SizedBox.expand();
+}
+
+/// The engine of the test now running.
+var engine = FakeEngine();
 
 /// What Google's token endpoint answers while the code is on screen; the last answer repeats.
 var googleAnswers = <Map<String, Object?>>[];
@@ -109,7 +206,9 @@ void fakeServices({Rest? rest}) {
     };
   });
   final session = Session(client, url: 'https://db.test', key: 'public-key');
+  engine = FakeEngine();
   services = Services(
+    engine: () => engine,
     session: session,
     wtw: Session(client, name: 'wtw_session', url: 'https://wtw.test', key: 'wtw-key', anonymous: false),
     provider: ProviderLoginStore(),
