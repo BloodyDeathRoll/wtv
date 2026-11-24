@@ -27,6 +27,11 @@ void main() {
       expect(o.optInt(key), 0, reason: key);
     }
     expect(o.optInt('s'), 12);
+    // Text that is a number but no whole one.
+    for (final text in ['NaN', 'Infinity', '-Infinity']) {
+      expect(() => {'x': text}.getInt('x'), throwsFormatException, reason: text);
+      expect({'x': text}.optInt('x'), 0, reason: text);
+    }
     expect(o.optArray('list')!.ints(), [1, 2, 3]);
     expect(() => ['x'].ints(), throwsFormatException);
   });

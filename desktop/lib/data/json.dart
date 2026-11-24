@@ -60,6 +60,10 @@ num? _number(Object? value) => switch (value) {
   _ => null,
 };
 
-int? _int(Object? value) => _number(value)?.toInt();
+// "NaN" and "Infinity" are no whole number: `toInt` on them throws an Error, which no `on Exception` catches.
+int? _int(Object? value) => switch (_number(value)) {
+  final num number when number.isFinite => number.toInt(),
+  _ => null,
+};
 
 String _text(Object? value) => value is String ? value : jsonEncode(value);
