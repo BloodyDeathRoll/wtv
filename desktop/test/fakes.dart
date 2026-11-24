@@ -4,12 +4,14 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wtv/app_language.dart';
 import 'package:wtv/data/api.dart';
 import 'package:wtv/data/catalog.dart';
 import 'package:wtv/data/google_sign_in.dart';
 import 'package:wtv/data/session.dart';
+import 'package:wtv/l10n/app_localizations.dart';
 import 'package:wtv/main.dart';
 import 'package:wtv/services.dart';
 import 'package:wtv/ui/browse/browse_screen.dart';
@@ -22,7 +24,11 @@ final calls = <String>[];
 /// then each database read as "path?query" (what follows "rest/v1/").
 final reads = <String>[];
 
+/// Each database write, as "POST path?query body" or "DELETE path?query".
+final writes = <String>[];
+
 /// Answers a database read with its rows, or with a whole response (a failure).
+/// A write is asked as "POST path?query" or "DELETE path?query": it succeeds unless the answer is a response.
 typedef Rest = Object? Function(String read);
 
 /// What Google's token endpoint answers while the code is on screen; the last answer repeats.
@@ -32,15 +38,16 @@ var googleAnswers = <Map<String, Object?>>[];
 http.Response _json(Object? body, [int status = 200]) =>
     http.Response.bytes(utf8.encode(jsonEncode(body)), status, headers: {'content-type': 'application/json; charset=utf-8'});
 
-/// Starts the app in English on the TV's screen size, with an empty keyring and
-/// settings file, a server that signs anyone in, and Google's answers from [googleAnswers].
-/// The database is empty unless `rest` answers its reads.
-Future<void> startApp(WidgetTester tester, {Rest? rest}) async {
+/// The app's services in English, with an empty keyring and settings file, a server
+/// that signs anyone in, and Google's answers from [googleAnswers]. The database is
+/// empty unless `rest` answers its reads.
+void fakeServices({Rest? rest}) {
   SharedPreferences.setMockInitialValues({});
   FlutterSecureStorage.setMockInitialValues({});
   appLanguage.value = AppLanguage.english;
   calls.clear();
   reads.clear();
+  writes.clear();
   forgetBrowseRows();
   googleAnswers = [
     {'error': 'authorization_pending'},
@@ -59,6 +66,12 @@ Future<void> startApp(WidgetTester tester, {Rest? rest}) async {
     }
     if (path.startsWith('db.test/rest/v1/')) {
       final read = call.substring('db.test/rest/v1/'.length);
+      if (request.method != 'GET') {
+        final write = '${request.method} $read';
+        writes.add(request.body.isEmpty ? write : '$write ${request.body}');
+        final answer = rest?.call(write);
+        return answer is http.Response ? answer : http.Response('', 201);
+      }
       reads.add(read);
       final answer = rest == null ? const <Object?>[] : rest(read);
       return answer is http.Response ? answer : _json(answer);
@@ -92,10 +105,35 @@ Future<void> startApp(WidgetTester tester, {Rest? rest}) async {
     google: GoogleSignIn(client, clientId: 'client', clientSecret: 'secret'),
     catalog: Catalog(Api(session, client, url: 'https://db.test', key: 'public-key')),
   );
-  // The TV's screen, so positions here are the design's.
+}
+
+// The TV's screen, so positions here are the design's.
+void _tvScreen(WidgetTester tester) {
   tester.view.physicalSize = DesignScale.screen;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
+}
+
+/// Starts the app over [fakeServices], on the TV's screen size.
+Future<void> startApp(WidgetTester tester, {Rest? rest}) async {
+  fakeServices(rest: rest);
+  _tvScreen(tester);
   await tester.pumpWidget(const WtvApp());
+  await tester.pump();
+}
+
+/// Shows one screen by itself over [fakeServices], on the TV's screen size.
+Future<void> showScreen(WidgetTester tester, Widget screen, {Rest? rest}) async {
+  fakeServices(rest: rest);
+  _tvScreen(tester);
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: wtvTheme,
+      locale: const Locale('en'),
+      localizationsDelegates: const [AppLocalizations.delegate, ...GlobalMaterialLocalizations.delegates],
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Material(color: WtvColors.background, child: screen),
+    ),
+  );
   await tester.pump();
 }

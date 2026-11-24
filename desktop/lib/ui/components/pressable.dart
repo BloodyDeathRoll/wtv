@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// An item the arrow keys can reach and Enter, Space or a click presses.
@@ -14,6 +15,7 @@ class Pressable extends StatefulWidget {
     this.hoverFocuses = true,
     this.selected,
     this.semanticLabel,
+    this.onMenu,
   });
 
   final VoidCallback onPressed;
@@ -30,6 +32,9 @@ class Pressable extends StatefulWidget {
 
   /// For an item with no text of its own (an icon).
   final String? semanticLabel;
+
+  /// Opens the item's menu, where the TV has "hold OK": a right click, the Menu key or Shift+F10.
+  final VoidCallback? onMenu;
 
   @override
   State<Pressable> createState() => _PressableState();
@@ -63,7 +68,11 @@ class _PressableState extends State<Pressable> {
       focusNode: _node,
       autofocus: widget.autofocus,
       mouseCursor: SystemMouseCursors.click,
-      actions: {ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => widget.onPressed())},
+      shortcuts: widget.onMenu == null ? null : _menuKeys,
+      actions: {
+        ActivateIntent: CallbackAction<ActivateIntent>(onInvoke: (_) => widget.onPressed()),
+        _MenuIntent: CallbackAction<_MenuIntent>(onInvoke: (_) => widget.onMenu?.call()),
+      },
       onFocusChange: (focused) {
         setState(() => _focused = focused);
         widget.onFocusChange?.call(focused);
@@ -77,9 +86,24 @@ class _PressableState extends State<Pressable> {
             _node.requestFocus();
             widget.onPressed();
           },
+          onSecondaryTap: widget.onMenu == null
+              ? null
+              : () {
+                  _node.requestFocus();
+                  widget.onMenu!();
+                },
           child: widget.builder(context, _focused),
         ),
       ),
     ),
   );
 }
+
+class _MenuIntent extends Intent {
+  const _MenuIntent();
+}
+
+const _menuKeys = <ShortcutActivator, Intent>{
+  SingleActivator(LogicalKeyboardKey.contextMenu): _MenuIntent(),
+  SingleActivator(LogicalKeyboardKey.f10, shift: true): _MenuIntent(),
+};

@@ -23,6 +23,7 @@ class ImageCard extends StatelessWidget {
     this.progress,
     this.match,
     this.focusNode,
+    this.onMenu,
   });
 
   /// 16:9 card for rows of titles and episodes.
@@ -36,8 +37,34 @@ class ImageCard extends StatelessWidget {
     this.progress,
     this.match,
     this.focusNode,
+    this.onMenu,
   }) : width = 200,
        aspectRatio = 16 / 9;
+
+  /// 2:3 poster for grids of titles (a person's titles, the watchlist).
+  const ImageCard.poster({
+    super.key,
+    required this.imageUrl,
+    required this.title,
+    required this.onPressed,
+    this.onFocused,
+    this.focusNode,
+    this.onMenu,
+  }) : width = 120,
+       aspectRatio = 2 / 3,
+       label = null,
+       progress = null,
+       match = null;
+
+  /// Portrait card for a cast member.
+  const ImageCard.person({super.key, required this.imageUrl, required this.title, required this.onPressed, this.label})
+    : width = 96,
+      aspectRatio = 3 / 4,
+      onFocused = null,
+      progress = null,
+      match = null,
+      focusNode = null,
+      onMenu = null;
 
   final String? imageUrl;
   final String title;
@@ -51,6 +78,9 @@ class ImageCard extends StatelessWidget {
   /// WTW's "% match", in the top right corner.
   final int? match;
   final FocusNode? focusNode;
+
+  /// Opens the card's menu (see [Pressable.onMenu]).
+  final VoidCallback? onMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -66,6 +96,7 @@ class ImageCard extends StatelessWidget {
     return Pressable(
       onPressed: onPressed,
       focusNode: focusNode,
+      onMenu: onMenu,
       semanticLabel: title,
       onFocusChange: (focused) {
         if (focused) onFocused?.call();
