@@ -522,13 +522,16 @@ class _CardRow extends StatelessWidget {
         SizedBox(
           // And room for the focused card's lift.
           height: height + 12,
-          child: ListView.separated(
-            key: listKey,
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsetsDirectional.only(start: 8, end: 48, top: 6, bottom: 6),
-            itemCount: count,
-            separatorBuilder: (_, _) => const SizedBox(width: 14),
-            itemBuilder: card,
+          child: SideArrows(
+            builder: (controller) => ListView.separated(
+              controller: controller,
+              key: listKey,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsetsDirectional.only(start: 8, end: 48, top: 6, bottom: 6),
+              itemCount: count,
+              separatorBuilder: (_, _) => const SizedBox(width: 14),
+              itemBuilder: card,
+            ),
           ),
         ),
       ],

@@ -52,6 +52,89 @@ class RowsAtTop extends StatelessWidget {
   }
 }
 
+/// Mouse arrows on a sideways row: while the pointer is over the row, an arrow
+/// shows at each end it can still scroll to, and a click moves the row by most
+/// of its width. The arrows take no focus: the keys keep their own way.
+class SideArrows extends StatefulWidget {
+  const SideArrows({super.key, required this.builder});
+
+  /// The row's list, built on this controller.
+  final Widget Function(ScrollController controller) builder;
+
+  @override
+  State<SideArrows> createState() => _SideArrowsState();
+}
+
+class _SideArrowsState extends State<SideArrows> {
+  final _controller = ScrollController();
+  bool _hover = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _page(double sign) {
+    final p = _controller.position;
+    p.animateTo(
+      (p.pixels + sign * p.viewportDimension * 0.8).clamp(p.minScrollExtent, p.maxScrollExtent),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    onEnter: (_) => setState(() => _hover = true),
+    onExit: (_) => setState(() => _hover = false),
+    child: Stack(
+      children: [
+        widget.builder(_controller),
+        if (_hover)
+          ListenableBuilder(
+            listenable: _controller,
+            builder: (context, _) {
+              if (!_controller.hasClients || !_controller.position.hasContentDimensions) return const SizedBox.shrink();
+              final p = _controller.position;
+              return Positioned.fill(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (p.pixels > p.minScrollExtent) _Arrow(Icons.chevron_left, () => _page(-1)),
+                    const Spacer(),
+                    if (p.pixels < p.maxScrollExtent) _Arrow(Icons.chevron_right, () => _page(1)),
+                  ],
+                ),
+              );
+            },
+          ),
+      ],
+    ),
+  );
+}
+
+class _Arrow extends StatelessWidget {
+  const _Arrow(this.icon, this.onTap);
+
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => MouseRegion(
+    cursor: SystemMouseCursors.click,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        width: 44,
+        color: const Color(0xB30F171E),
+        child: Icon(icon, size: 36, color: const Color(0xFFFFFFFF)),
+      ),
+    ),
+  );
+}
+
 /// A page of rows whose items do not line up (a form: Settings). Up and Down
 /// go to the nearest row, and in it to the item nearest sideways. The
 /// framework's own rule prefers an item straight above or below, however far,

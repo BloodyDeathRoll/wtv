@@ -478,37 +478,40 @@ class _RowsState extends State<_Rows> {
                             SizedBox(
                               // A 200 wide landscape card, and room for its lift.
                               height: 200 * 9 / 16 + 12,
-                              child: ListView.separated(
-                                // The row's place is kept while it is off the screen.
-                                key: PageStorageKey('${widget.storage}:$key'),
-                                scrollDirection: Axis.horizontal,
-                                padding: const EdgeInsetsDirectional.only(start: 8, end: 48, top: 6, bottom: 6),
-                                itemCount: row.titles.length + (category == null && !row.forYou ? 0 : 1),
-                                separatorBuilder: (_, _) => const SizedBox(width: 14),
-                                itemBuilder: (context, i) {
-                                  if (i == row.titles.length) {
+                              child: SideArrows(
+                                builder: (controller) => ListView.separated(
+                                  controller: controller,
+                                  // The row's place is kept while it is off the screen.
+                                  key: PageStorageKey('${widget.storage}:$key'),
+                                  scrollDirection: Axis.horizontal,
+                                  padding: const EdgeInsetsDirectional.only(start: 8, end: 48, top: 6, bottom: 6),
+                                  itemCount: row.titles.length + (category == null && !row.forYou ? 0 : 1),
+                                  separatorBuilder: (_, _) => const SizedBox(width: 14),
+                                  itemBuilder: (context, i) {
+                                    if (i == row.titles.length) {
+                                      return ImageCard.landscape(
+                                        imageUrl: null,
+                                        title: l.more,
+                                        onPressed: () => category != null ? widget.onMore(category) : widget.onForYou(row.forYouKind),
+                                      );
+                                    }
+                                    final t = row.titles[i];
+                                    final (watched, episode) = row.progress[t.id] ?? (null, null);
                                     return ImageCard.landscape(
-                                      imageUrl: null,
-                                      title: l.more,
-                                      onPressed: () => category != null ? widget.onMore(category) : widget.onForYou(row.forYouKind),
+                                      key: ValueKey(t.id),
+                                      imageUrl: t.cardImage,
+                                      title: t.displayName(hebrew: hebrew),
+                                      label: episode,
+                                      progress: watched,
+                                      match: _scores.matchOf(t),
+                                      onPressed: () => widget.onOpen(t),
+                                      // From Continue watching the menu can also take the title out of that row.
+                                      onMenu: () => TitleMenuScope.open(context, t, continuing: row.progress.isNotEmpty),
+                                      onFocused: () => _focus(t, at),
+                                      focusNode: at == 0 && i == 0 ? widget.firstFocus : null,
                                     );
-                                  }
-                                  final t = row.titles[i];
-                                  final (watched, episode) = row.progress[t.id] ?? (null, null);
-                                  return ImageCard.landscape(
-                                    key: ValueKey(t.id),
-                                    imageUrl: t.cardImage,
-                                    title: t.displayName(hebrew: hebrew),
-                                    label: episode,
-                                    progress: watched,
-                                    match: _scores.matchOf(t),
-                                    onPressed: () => widget.onOpen(t),
-                                    // From Continue watching the menu can also take the title out of that row.
-                                    onMenu: () => TitleMenuScope.open(context, t, continuing: row.progress.isNotEmpty),
-                                    onFocused: () => _focus(t, at),
-                                    focusNode: at == 0 && i == 0 ? widget.firstFocus : null,
-                                  );
-                                },
+                                  },
+                                ),
                               ),
                             ),
                           ],
