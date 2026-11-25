@@ -17,6 +17,7 @@ analyzer:
     - third_party/**
     # Built from the ARB files.
     - lib/l10n/app_localizations*.dart
+    - macos/**
 
 linter:
   # The lint rules applied to this project can be customized in the

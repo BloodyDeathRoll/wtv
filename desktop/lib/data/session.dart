@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../config.dart' as config;
+import 'keyring.dart';
 
 /// A failure with a message for the user.
 class ApiException implements Exception {
@@ -40,7 +41,7 @@ class Session {
     this.key = config.supabaseKey,
     this.anonymous = true,
     this.settingNames = 'SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY',
-    this._storage = const FlutterSecureStorage(),
+    this._storage = keyring,
     this._now = DateTime.now,
   });
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'epg.dart';
+import 'keyring.dart';
 
 /// The Xtream provider login, typed in Settings and kept on this device only.
 class ProviderLogin {
@@ -15,9 +16,9 @@ class ProviderLogin {
   bool get isComplete => server.trim().isNotEmpty && user.trim().isNotEmpty && password.trim().isNotEmpty;
 }
 
-/// Keeps the login in the system keyring (libsecret), as the session is: never in a file, never sent anywhere but to the provider.
+/// Keeps the login in the system keyring, as the session is: never in a file, never sent anywhere but to the provider.
 class ProviderLoginStore {
-  ProviderLoginStore([this._storage = const FlutterSecureStorage()]);
+  ProviderLoginStore([this._storage = keyring]);
 
   final FlutterSecureStorage _storage;
   static const _key = 'provider_login';
