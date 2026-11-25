@@ -12,6 +12,7 @@ import '../components/badges.dart';
 import '../components/cards.dart';
 import '../components/fields.dart';
 import '../components/pressable.dart';
+import '../components/rows.dart';
 import '../components/title_menu.dart';
 import '../theme.dart';
 
@@ -338,22 +339,25 @@ class _SearchScreenState extends State<SearchScreen> {
         SizedBox(
           // A 96 wide portrait's height, and the padding.
           height: 128 + 6 + 12,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsetsDirectional.only(start: 8, top: 6, bottom: 12),
-            itemCount: r.people.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 14),
-            itemBuilder: (context, i) {
-              final p = r.people[i];
-              return ImageCard.person(
-                key: ValueKey(p.personId),
-                imageUrl: p.photo,
-                title: p.name,
-                label: p.name,
-                onPressed: () => widget.onPerson(p),
-                focusNode: i == 0 ? _firstResult : null,
-              );
-            },
+          child: SideArrows(
+            builder: (controller) => ListView.separated(
+              controller: controller,
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsetsDirectional.only(start: 8, top: 6, bottom: 12),
+              itemCount: r.people.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 14),
+              itemBuilder: (context, i) {
+                final p = r.people[i];
+                return ImageCard.person(
+                  key: ValueKey(p.personId),
+                  imageUrl: p.photo,
+                  title: p.name,
+                  label: p.name,
+                  onPressed: () => widget.onPerson(p),
+                  focusNode: i == 0 ? _firstResult : null,
+                );
+              },
+            ),
           ),
         ),
       Expanded(
