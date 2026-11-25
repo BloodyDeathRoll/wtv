@@ -32,3 +32,10 @@ flutter:
     - assets/tmdb_logo.png
   # Builds lib/l10n/app_localizations*.dart from the ARB files.
   generate: true
+
+# media_kit_video 2.0.1 with one fix for Linux: software-drawn frames are copied under
+# mpv's lock before Flutter uploads them, so fast motion no longer tears
+# (third_party/media_kit_video/linux/texture_sw.cc, "WTV patch").
+dependency_overrides:
+  media_kit_video:
+    path: third_party/media_kit_video

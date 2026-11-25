@@ -13,6 +13,8 @@ analyzer:
   exclude:
     - build/**
     - linux/**
+    # A copy of media_kit_video with one Linux fix: its own code, not ours.
+    - third_party/**
     # Built from the ARB files.
     - lib/l10n/app_localizations*.dart
 
