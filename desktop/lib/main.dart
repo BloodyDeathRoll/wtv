@@ -12,6 +12,7 @@ import 'l10n/app_localizations.dart';
 import 'services.dart';
 import 'ui/theme.dart';
 import 'ui/wtv_app.dart';
+import 'window.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -60,7 +61,7 @@ class WtvApp extends StatelessWidget {
       localizationsDelegates: const [AppLocalizations.delegate, ...GlobalMaterialLocalizations.delegates],
       supportedLocales: AppLocalizations.supportedLocales,
       // Around the navigator, so dialogs are scaled with the pages.
-      builder: (context, child) => DesignScale(child: child!),
+      builder: (context, child) => FullScreenKeys(child: DesignScale(child: child!)),
       // A new frame after sign-in or sign-out: back on the tabs, every screen read again.
       home: WtvShell(key: ValueKey(appGeneration.value)),
     ),
