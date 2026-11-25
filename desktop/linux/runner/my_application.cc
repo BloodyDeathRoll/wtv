@@ -87,6 +87,7 @@ static void my_application_activate(GApplication* application) {
 
   g_signal_connect(window, "window-state-event", G_CALLBACK(window_state_cb), self);
   g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  g_clear_object(&self->window_channel);
   self->window_channel = fl_method_channel_new(
       fl_engine_get_binary_messenger(fl_view_get_engine(view)), "wtv/window",
       FL_METHOD_CODEC(codec));

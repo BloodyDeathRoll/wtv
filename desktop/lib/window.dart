@@ -14,7 +14,7 @@ Future<void> toggleFullScreen() async {
   }
 }
 
-/// F11, anywhere in the app, toggles full screen.
+/// F11, anywhere in the app, toggles full screen. A held key toggles it once.
 class FullScreenKeys extends StatelessWidget {
   const FullScreenKeys({super.key, required this.child});
 
@@ -22,5 +22,5 @@ class FullScreenKeys extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      CallbackShortcuts(bindings: {const SingleActivator(LogicalKeyboardKey.f11): toggleFullScreen}, child: child);
+      CallbackShortcuts(bindings: {const SingleActivator(LogicalKeyboardKey.f11, includeRepeats: false): toggleFullScreen}, child: child);
 }

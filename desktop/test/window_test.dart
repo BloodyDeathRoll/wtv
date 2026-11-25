@@ -16,5 +16,11 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.f11);
     await tester.sendKeyEvent(LogicalKeyboardKey.f11);
     expect(calls, ['toggleFullScreen', 'toggleFullScreen']);
+    // Held down, it toggles once.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.f11);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.f11);
+    await tester.sendKeyRepeatEvent(LogicalKeyboardKey.f11);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.f11);
+    expect(calls, hasLength(3));
   });
 }
