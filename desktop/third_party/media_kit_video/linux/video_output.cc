@@ -152,6 +152,8 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
     // On X11, GDK 3 draws through GLX, where EGL images do not reach Flutter: software stays.
     if (flutter_display == EGL_NO_DISPLAY) {
       GdkDisplay* gdk_display = gdk_display_get_default();
+      // WTV patch: each step is logged, to tell why a machine falls back to software.
+      g_print("media_kit: VideoOutput: GDK display: %s\n", gdk_display != NULL ? G_OBJECT_TYPE_NAME(gdk_display) : "none");
       if (GDK_IS_WAYLAND_DISPLAY(gdk_display)) {
         // Through the extension: libepoxy refuses the EGL 1.5 call before a display exists.
         auto get_platform_display = (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress(
@@ -160,11 +162,22 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
           flutter_display = get_platform_display(
               EGL_PLATFORM_WAYLAND_EXT,
               gdk_wayland_display_get_wl_display(gdk_display), NULL);
+          g_print("media_kit: VideoOutput: eglGetPlatformDisplayEXT: %s (0x%x)\n",
+                  flutter_display == EGL_NO_DISPLAY ? "none" : "ok", eglGetError());
+        } else {
+          g_print("media_kit: VideoOutput: eglGetPlatformDisplayEXT not found\n");
         }
         // Shared with GDK: it is never terminated here.
-        if (flutter_display != EGL_NO_DISPLAY &&
-            !eglInitialize(flutter_display, NULL, NULL)) {
-          flutter_display = EGL_NO_DISPLAY;
+        if (flutter_display != EGL_NO_DISPLAY) {
+          EGLint major = 0, minor = 0;
+          if (eglInitialize(flutter_display, &major, &minor)) {
+            const char* vendor = eglQueryString(flutter_display, EGL_VENDOR);
+            g_print("media_kit: VideoOutput: EGL %d.%d, vendor %s\n", major, minor,
+                    vendor != NULL ? vendor : "unknown");
+          } else {
+            g_print("media_kit: VideoOutput: eglInitialize failed (0x%x)\n", eglGetError());
+            flutter_display = EGL_NO_DISPLAY;
+          }
         }
       }
     }
