@@ -153,7 +153,7 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
     if (flutter_display == EGL_NO_DISPLAY) {
       GdkDisplay* gdk_display = gdk_display_get_default();
       // WTV patch: each step is logged, to tell why a machine falls back to software.
-      g_print("media_kit: VideoOutput: GDK display: %s\n", G_OBJECT_TYPE_NAME(gdk_display));
+      g_print("media_kit: VideoOutput: GDK display: %s\n", gdk_display != NULL ? G_OBJECT_TYPE_NAME(gdk_display) : "none");
       if (GDK_IS_WAYLAND_DISPLAY(gdk_display)) {
         // Through the extension: libepoxy refuses the EGL 1.5 call before a display exists.
         auto get_platform_display = (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress(
@@ -171,8 +171,9 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
         if (flutter_display != EGL_NO_DISPLAY) {
           EGLint major = 0, minor = 0;
           if (eglInitialize(flutter_display, &major, &minor)) {
+            const char* vendor = eglQueryString(flutter_display, EGL_VENDOR);
             g_print("media_kit: VideoOutput: EGL %d.%d, vendor %s\n", major, minor,
-                    eglQueryString(flutter_display, EGL_VENDOR));
+                    vendor != NULL ? vendor : "unknown");
           } else {
             g_print("media_kit: VideoOutput: eglInitialize failed (0x%x)\n", eglGetError());
             flutter_display = EGL_NO_DISPLAY;
