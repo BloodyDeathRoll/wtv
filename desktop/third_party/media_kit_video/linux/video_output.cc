@@ -161,6 +161,7 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
               EGL_PLATFORM_WAYLAND_EXT,
               gdk_wayland_display_get_wl_display(gdk_display), NULL);
         }
+        // Shared with GDK: it is never terminated here.
         if (flutter_display != EGL_NO_DISPLAY &&
             !eglInitialize(flutter_display, NULL, NULL)) {
           flutter_display = EGL_NO_DISPLAY;
@@ -180,8 +181,10 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
       
       if (flutter_context == EGL_NO_CONTEXT) {
         // WTV patch: no context to copy the config from: any OpenGL ES 2 config, for a surfaceless context.
-        EGLint wanted[] = {EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT, EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8,
-                           EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8, EGL_NONE};
+        // No surface type: the context is surfaceless, and some drivers have few window configs.
+        EGLint wanted[] = {EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT, EGL_SURFACE_TYPE, 0,
+                           EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8,
+                           EGL_ALPHA_SIZE, 8, EGL_NONE};
         EGLint found = 0;
         if (!eglChooseConfig(self->egl_display, wanted, &config, 1, &found) || found == 0) {
           config = NULL;
