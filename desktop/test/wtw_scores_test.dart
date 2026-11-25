@@ -84,6 +84,15 @@ void main() {
     expect(told, 4);
   });
 
+  test('never more than six calls at once', () async {
+    scores.request([for (var id = 1; id <= 60; id++) id]);
+    await pumpEventQueue();
+    expect(running, 6);
+    release.complete();
+    await pumpEventQueue();
+    expect((most, asked.length), (6, 10));
+  });
+
   test('a call that fails leaves its cards to be asked again', () async {
     release.complete();
     answer = (_) => http.Response('', 500);

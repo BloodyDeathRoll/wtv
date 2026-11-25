@@ -72,7 +72,8 @@ class WtwScores extends ChangeNotifier {
   }
 }
 
-/// Titles per server call: WTW answers them at once, within the app's 20 s call timeout.
+/// Titles per server call: WTW answers them at once, within the app's 20 s call timeout
+/// when it is not slowed by the other calls; a call that times out is asked again later.
 const _perCall = 6;
 // Six at once: WTW takes about 10 s a title, and the owner asked for faster filling than the TV's two.
 const _parallelCalls = 6;
