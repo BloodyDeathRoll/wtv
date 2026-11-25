@@ -1,6 +1,6 @@
 # WTV desktop
 
-The WTV TV app as a desktop app, Linux first. The plan is `docs/PLAN-DESKTOP.md`.
+The WTV TV app as a desktop app: Linux first, then Mac. The plan is `docs/PLAN-DESKTOP.md`.
 
 ## Build
 
@@ -61,6 +61,25 @@ puts a `.deb` and an AppImage in `build/packages/`. It needs `docker`,
   the repository can see or download. A signed-out download of a draft's file was checked to fail
   (HTTP 404) on 2026-11-24.
 
+## Mac
+
+The Mac app is built on GitHub's Mac machines; no Mac is needed to build it.
+
+- **Every pull request** builds it without keys (the `desktop-macos` job of
+  `.github/workflows/ci.yml`). That build starts and says which setting is
+  missing.
+- **A build with keys** comes from the "Desktop Mac release" workflow
+  (`.github/workflows/desktop-mac-release.yml`), started by hand:
+  `gh workflow run desktop-mac-release.yml -f tag=desktop-v0.1.0`. It attaches
+  `wtv-desktop-<version>-macos.zip` to that draft release. It reads the six key
+  names above from the repository's secrets.
+- **Unsigned.** The app has no Apple signature. On first open macOS blocks it:
+  open System Settings → Privacy & Security and choose Open Anyway.
+- **Session and provider login** are kept in the Mac's login keychain.
+
+On a Mac, `flutter build macos --release --dart-define-from-file=.env` puts the
+app in `build/macos/Build/Products/Release/WTV.app`.
+
 ## Notes
 
 - **Layout.** The window shows the TV app's 960 x 540 layout scaled to fit
@@ -77,7 +96,7 @@ puts a `.deb` and an AppImage in `build/packages/`. It needs `docker`,
 - **Images.** Posters and backdrops are kept in memory only, so each start
   loads them again.
 - **Session and provider login.** The signed-in session and the provider login
-  typed in Settings are kept in the system keyring (libsecret), not in a file.
+  typed in Settings are kept in the system keyring (libsecret on Linux), not in a file.
   The provider login is sent to the provider only.
 
 ## Licence

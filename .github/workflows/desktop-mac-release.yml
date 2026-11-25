@@ -1,0 +1,72 @@
+name: Desktop Mac release
+
+# Builds the Mac app with the app's own keys and attaches it to a draft release.
+# Started by hand, by someone with write access. The build never becomes an
+# artifact: this repository is public, and artifacts of a public repository can
+# be downloaded by any signed-in person. A draft release is seen only by people
+# with write access (desktop/README.md).
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The draft release to attach the app to
+        required: true
+        default: desktop-v0.1.0
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      # To attach the file to the release.
+      contents: write
+    defaults:
+      run:
+        working-directory: desktop
+    env:
+      FLUTTER_VERSION: 3.50.1
+      TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Before the long build: only a draft may receive a build with keys.
+      - name: The release is a draft
+        run: test "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = true
+
+      - name: Install Flutter
+        working-directory: ${{ runner.temp }}
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git
+          echo "$PWD/flutter/bin" >> "$GITHUB_PATH"
+          flutter/bin/flutter --disable-analytics
+
+      - run: flutter pub get
+
+      # The six names of desktop/README.md, and no others. An empty one fails here, not as a broken app.
+      - name: Write the keys file
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          GOOGLE_TV_CLIENT_ID: ${{ secrets.GOOGLE_TV_CLIENT_ID }}
+          GOOGLE_TV_CLIENT_SECRET: ${{ secrets.GOOGLE_TV_CLIENT_SECRET }}
+          WTW_SUPABASE_URL: ${{ secrets.WTW_SUPABASE_URL }}
+          WTW_SUPABASE_ANON_KEY: ${{ secrets.WTW_SUPABASE_ANON_KEY }}
+        run: |
+          umask 077
+          for name in SUPABASE_URL SUPABASE_PUBLISHABLE_KEY GOOGLE_TV_CLIENT_ID GOOGLE_TV_CLIENT_SECRET WTW_SUPABASE_URL WTW_SUPABASE_ANON_KEY; do
+            [ -n "${!name}" ] || { echo "The secret $name is not set"; exit 1; }
+            printf '%s=%s\n' "$name" "${!name}"
+          done > "$RUNNER_TEMP/keys.env"
+
+      - run: flutter build macos --release --dart-define-from-file="$RUNNER_TEMP/keys.env"
+
+      # ditto keeps the app's links and signature, which a plain zip loses.
+      - name: Pack and attach
+        run: |
+          version=$(sed -n 's/^version: \([^+]*\).*/\1/p' pubspec.yaml)
+          file="$RUNNER_TEMP/wtv-desktop-$version-macos.zip"
+          ditto -c -k --keepParent build/macos/Build/Products/Release/WTV.app "$file"
+          gh release upload "$TAG" "$file" --clobber
