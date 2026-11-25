@@ -84,12 +84,12 @@ Provider facts measured the same day:
 
 - Two codebases: each later TV feature is built again for the desktop.
 - The 3 streams are shared between the TV and the desktop.
-- Software drawing stays. `media_kit` 1.2.6's graphics-card drawing path does
-  not start on Flutter 3.50.1 ("EGL display or context is invalid"): D1-2
-  tried Flutter's current renderer and its older one, on Wayland and on X11.
-  Decoding still runs on the graphics card. With the current renderer the 4K
-  HEVC live channel dropped no frames on the proof machine; weak computers are
-  unproven. D1-12 tries it again if `media_kit` has a newer release by then.
+- Graphics-card drawing works on Wayland since 2026-11-25: `media_kit_video`
+  1.2.6 / 2.0.1 looked for Flutter's EGL context on the wrong thread ("EGL
+  display or context is invalid"), and a patched copy in
+  `desktop/third_party/media_kit_video` takes the display from GDK instead.
+  On X11, where GDK draws through GLX, the app still draws in software (with
+  the tearing fix in the same copy).
 - GitHub documents that draft releases are listed only for people with push
   access. It does not say whether a signed-out person with the direct file link
   can download. D1-13 tests that with a dummy file before the first real build.

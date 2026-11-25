@@ -145,8 +145,31 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
     EGLContext flutter_context = eglGetCurrentContext();
     EGLSurface flutter_draw_surface = eglGetCurrentSurface(EGL_DRAW);
     EGLSurface flutter_read_surface = eglGetCurrentSurface(EGL_READ);
-    
-    if (flutter_display != EGL_NO_DISPLAY && flutter_context != EGL_NO_CONTEXT) {
+
+    // WTV patch: newer Flutter (3.50) has no EGL context current on this thread, so the
+    // display GDK renders with is used: on Wayland, GDK draws through EGL on the
+    // compositor's display, and the same native display gives the same EGLDisplay.
+    // On X11, GDK 3 draws through GLX, where EGL images do not reach Flutter: software stays.
+    if (flutter_display == EGL_NO_DISPLAY) {
+      GdkDisplay* gdk_display = gdk_display_get_default();
+      if (GDK_IS_WAYLAND_DISPLAY(gdk_display)) {
+        // Through the extension: libepoxy refuses the EGL 1.5 call before a display exists.
+        auto get_platform_display = (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress(
+            "eglGetPlatformDisplayEXT");
+        if (get_platform_display != NULL) {
+          flutter_display = get_platform_display(
+              EGL_PLATFORM_WAYLAND_EXT,
+              gdk_wayland_display_get_wl_display(gdk_display), NULL);
+        }
+        // Shared with GDK: it is never terminated here.
+        if (flutter_display != EGL_NO_DISPLAY &&
+            !eglInitialize(flutter_display, NULL, NULL)) {
+          flutter_display = EGL_NO_DISPLAY;
+        }
+      }
+    }
+
+    if (flutter_display != EGL_NO_DISPLAY) {
       self->egl_display = flutter_display;
       
       // Bind OpenGL ES API (Flutter uses OpenGL ES on Linux)
@@ -156,7 +179,17 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
       EGLConfig config = NULL;
       EGLint config_id = 0;
       
-      if (eglQueryContext(self->egl_display, flutter_context, EGL_CONFIG_ID, &config_id)) {
+      if (flutter_context == EGL_NO_CONTEXT) {
+        // WTV patch: no context to copy the config from: any OpenGL ES 2 config, for a surfaceless context.
+        // No surface type: the context is surfaceless, and some drivers have few window configs.
+        EGLint wanted[] = {EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT, EGL_SURFACE_TYPE, 0,
+                           EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8,
+                           EGL_ALPHA_SIZE, 8, EGL_NONE};
+        EGLint found = 0;
+        if (!eglChooseConfig(self->egl_display, wanted, &config, 1, &found) || found == 0) {
+          config = NULL;
+        }
+      } else if (eglQueryContext(self->egl_display, flutter_context, EGL_CONFIG_ID, &config_id)) {
         g_print("media_kit: VideoOutput: Flutter's EGL config ID: %d\n", config_id);
         
         // Get Flutter's exact config
@@ -238,8 +271,12 @@ VideoOutput* video_output_new(FlTextureRegistrar* texture_registrar,
               g_printerr("media_kit: VideoOutput: Failed to register texture.\n");
             }
             
-            // Restore Flutter's context
-            eglMakeCurrent(flutter_display, flutter_draw_surface, flutter_read_surface, flutter_context);
+            // Restore Flutter's context (WTV patch: or none, when none was current).
+            if (flutter_context == EGL_NO_CONTEXT) {
+              eglMakeCurrent(flutter_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+            } else {
+              eglMakeCurrent(flutter_display, flutter_draw_surface, flutter_read_surface, flutter_context);
+            }
           } else {
             g_printerr("media_kit: VideoOutput: Failed to make isolated EGL context current. Error: 0x%x\n", eglGetError());
           }
