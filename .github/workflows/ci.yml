@@ -134,6 +134,51 @@ jobs:
       - run: flutter test
       - run: flutter build linux --release
 
+  # The same desktop code as a Mac app (docs/PLAN-DESKTOP.md, Phase 2). Analyze and the tests run in `desktop`.
+  desktop-macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: desktop
+    env:
+      FLUTTER_VERSION: 3.50.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/flutter
+            ~/.pub-cache
+          key: flutter-macos-${{ env.FLUTTER_VERSION }}-${{ hashFiles('desktop/pubspec.lock') }}
+          restore-keys: flutter-macos-${{ env.FLUTTER_VERSION }}-
+
+      - name: Install Flutter
+        working-directory: ${{ runner.temp }}
+        run: |
+          [ -d flutter ] || git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git
+          echo "$PWD/flutter/bin" >> "$GITHUB_PATH"
+          flutter/bin/flutter --disable-analytics
+
+      - run: flutter pub get
+      # No keys: this build starts and says which setting is missing. It carries nothing private.
+      - run: flutter build macos --release
+
+      # ditto keeps the app's links and signature, which a plain zip loses.
+      - name: Pack the app
+        run: ditto -c -k --keepParent build/macos/Build/Products/Release/WTV.app "$RUNNER_TEMP/WTV-macos.zip"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wtv-macos-no-keys
+          path: ${{ runner.temp }}/WTV-macos.zip
+          if-no-files-found: error
+
   # The remote's Back and focus rules (androidTest/NavigationTest), on an Android TV emulator.
   # The build has no database settings, so the pages show their error page; the rules hold either way.
   android-navigation:
