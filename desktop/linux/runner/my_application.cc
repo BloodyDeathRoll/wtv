@@ -1,12 +1,16 @@
 #include "my_application.h"
 
 #include <flutter_linux/flutter_linux.h>
+#include <string.h>
 
 #include "flutter/generated_plugin_registrant.h"
 
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  // "wtv/window": the app asks for full screen through it.
+  FlMethodChannel* window_channel;
+  gboolean full_screen;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -14,6 +18,31 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
+}
+
+// The window manager reports full screen, whoever asked for it.
+static gboolean window_state_cb(GtkWidget* widget, GdkEventWindowState* event, gpointer data) {
+  MY_APPLICATION(data)->full_screen = (event->new_window_state & GDK_WINDOW_STATE_FULLSCREEN) != 0;
+  return FALSE;
+}
+
+// "toggleFullScreen" on the "wtv/window" channel.
+static void window_method_cb(FlMethodChannel* channel, FlMethodCall* call, gpointer data) {
+  MyApplication* self = MY_APPLICATION(data);
+  if (strcmp(fl_method_call_get_name(call), "toggleFullScreen") != 0) {
+    fl_method_call_respond_not_implemented(call, nullptr);
+    return;
+  }
+  GList* windows = gtk_application_get_windows(GTK_APPLICATION(self));
+  if (windows != nullptr) {
+    GtkWindow* window = GTK_WINDOW(windows->data);
+    if (self->full_screen) {
+      gtk_window_unfullscreen(window);
+    } else {
+      gtk_window_fullscreen(window);
+    }
+  }
+  fl_method_call_respond_success(call, nullptr, nullptr);
 }
 
 // Implements GApplication::activate.
@@ -55,6 +84,14 @@ static void my_application_activate(GApplication* application) {
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+
+  g_signal_connect(window, "window-state-event", G_CALLBACK(window_state_cb), self);
+  g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
+  g_clear_object(&self->window_channel);
+  self->window_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(fl_view_get_engine(view)), "wtv/window",
+      FL_METHOD_CODEC(codec));
+  fl_method_channel_set_method_call_handler(self->window_channel, window_method_cb, self, nullptr);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
@@ -102,6 +139,7 @@ static void my_application_shutdown(GApplication* application) {
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
+  g_clear_object(&self->window_channel);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);
 }
 

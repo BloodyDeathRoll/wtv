@@ -62,13 +62,13 @@ void main() {
     scores = WtwScores(catalog, wtw);
   });
 
-  test('asks six cards a call, two calls at once, each card once; listeners hear of the answers', () async {
+  test('asks six cards a call, up to six calls at once, each card once; listeners hear of the answers', () async {
     var told = 0;
     scores.addListener(() => told++);
     scores.request([for (var id = 1; id <= 15; id++) id]);
     scores.request([3, 4, 16]);
     await pumpEventQueue();
-    expect(running, 2);
+    expect(running, 4);
     expect(scores[2], isNull);
     release.complete();
     await pumpEventQueue();
@@ -79,9 +79,18 @@ void main() {
       [16],
     ]);
     expect(asked.first['wtw_token'], 'w1');
-    expect(most, 2);
+    expect(most, 4);
     expect((scores[2], scores[3], scores[16], scores[99]), (2, null, 16, null));
     expect(told, 4);
+  });
+
+  test('never more than six calls at once', () async {
+    scores.request([for (var id = 1; id <= 60; id++) id]);
+    await pumpEventQueue();
+    expect(running, 6);
+    release.complete();
+    await pumpEventQueue();
+    expect((most, asked.length), (6, 10));
   });
 
   test('a call that fails leaves its cards to be asked again', () async {
