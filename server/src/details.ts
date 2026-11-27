@@ -47,10 +47,9 @@ const TITLE_HITS = 5
 /** Minutes a movie's running time may differ from TMDB's (cuts, credits). */
 const RUNTIME_SLACK_MIN = 5
 const CAST_TRIED = 2
-
-/** Other spellings searched per name, at most: each is one more search. */
-const MAX_SPELLINGS = 4
 const CAST_SHOWS = 6
+/** Other Hebrew spellings searched per series, at most: each is one more search. */
+const MAX_SPELLINGS = 4
 
 /** Parallel requests. The provider handled 6 without errors (measured 2026-11-17). */
 const MOVIE_PARALLEL = 6
@@ -122,7 +121,7 @@ export async function matchSeries(
     if (found !== null) return found
   }
   // TMDB search does not match across Hebrew spellings ("ויניל" finds nothing, "וייניל" finds Vinyl).
-  for (const name of names.flatMap(hebrewSpellings)) {
+  for (const name of names.flatMap(hebrewSpellings).slice(0, MAX_SPELLINGS)) {
     const found = await confirm(await tmdb.searchSeries(name, null, TITLE_HITS))
     if (found !== null) return found
   }
@@ -201,11 +200,12 @@ export function titleNames(name: string): string[] {
  */
 export function hebrewSpellings(name: string): string[] {
   const out = new Set<string>()
-  for (const m of name.matchAll(/(?<=\p{L})([וי])\1?(?=\p{L})/gu)) {
+  // A run of the same letter is changed as a whole, and only when it is one or two long.
+  for (const m of name.matchAll(/(?<=\p{L})(?:(?<!ו)ו{1,2}(?!ו)|(?<!י)י{1,2}(?!י))(?=\p{L})/gu)) {
     const run = m[0]
     out.add(name.slice(0, m.index) + (run.length === 1 ? run + run : run[0]) + name.slice(m.index + run.length))
   }
-  return [...out].slice(0, MAX_SPELLINGS)
+  return [...out]
 }
 
 /**

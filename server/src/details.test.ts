@@ -149,12 +149,22 @@ test('match without season ids: another Hebrew spelling is searched when the nam
   assert.equal(await matchSeries(tmdb, { name: 'ויניל', year: null, castNames: null }, [1], { 1: 10 }), 63535)
 })
 
+test('match without season ids: at most 4 other spellings are searched per series', async () => {
+  const { tmdb } = fakeTmdb({})
+  const searched: string[] = []
+  const counting: typeof tmdb = { ...tmdb, searchSeries: async (name, year) => (searched.push(name), tmdb.searchSeries(name, year)) }
+  // 3 names (the whole and each side of the dash), each with other spellings.
+  assert.equal(await matchSeries(counting, { name: 'שיווק - ביוב', year: null, castNames: null }, [], { 1: 6 }), null)
+  assert.equal(searched.length, 3 + 4)
+})
+
 test('Hebrew spellings: a ו or י inside a word doubled or made single, never at the edges', () => {
   assert.deepEqual(hebrewSpellings('ויניל'), ['וייניל', 'וינייל'])
   assert.deepEqual(hebrewSpellings('וייניל'), ['ויניל', 'ויינייל'])
   assert.deepEqual(hebrewSpellings('Vinyl'), [])
   assert.deepEqual(hebrewSpellings('יום ו'), ['יוום ו'])
-  assert.equal(hebrewSpellings('ויויויויו').length, 4)
+  // The first ו starts the word; the second follows a ו: neither is changed.
+  assert.deepEqual(hebrewSpellings('ווינייל'), ['וויינייל', 'וויניל'])
   assert.equal(nameKey('ויניל'), nameKey('וייניל'))
 })
 
