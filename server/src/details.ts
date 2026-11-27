@@ -47,6 +47,9 @@ const TITLE_HITS = 5
 /** Minutes a movie's running time may differ from TMDB's (cuts, credits). */
 const RUNTIME_SLACK_MIN = 5
 const CAST_TRIED = 2
+
+/** Other spellings searched per name, at most: each is one more search. */
+const MAX_SPELLINGS = 4
 const CAST_SHOWS = 6
 
 /** Parallel requests. The provider handled 6 without errors (measured 2026-11-17). */
@@ -118,6 +121,11 @@ export async function matchSeries(
       (await confirm(await tmdb.searchSeries(name, null, TITLE_HITS)))
     if (found !== null) return found
   }
+  // TMDB search does not match across Hebrew spellings ("ויניל" finds nothing, "וייניל" finds Vinyl).
+  for (const name of names.flatMap(hebrewSpellings)) {
+    const found = await confirm(await tmdb.searchSeries(name, null, TITLE_HITS))
+    if (found !== null) return found
+  }
   if (want.size === 0) return null
 
   const cast = (title.castNames ?? '').split(/,|\s{2,}/).map(n => n.trim()).filter(Boolean).slice(0, CAST_TRIED)
@@ -187,13 +195,30 @@ export function titleNames(name: string): string[] {
   return [...new Set([bare, ...bare.split(/\s+[-–—|]\s+/)].map(n => n.trim()).filter(Boolean))]
 }
 
-/** A name for comparing: lower case, letters and digits only, no "the", no country tag ("US", "ארה"ב"). */
+/**
+ * Other Hebrew spellings of a name, one letter changed in each: a ו or י inside
+ * a word doubled ("ויניל" to "וייניל"), or a doubled one made single.
+ */
+export function hebrewSpellings(name: string): string[] {
+  const out = new Set<string>()
+  for (const m of name.matchAll(/(?<=\p{L})([וי])\1?(?=\p{L})/gu)) {
+    const run = m[0]
+    out.add(name.slice(0, m.index) + (run.length === 1 ? run + run : run[0]) + name.slice(m.index + run.length))
+  }
+  return [...out].slice(0, MAX_SPELLINGS)
+}
+
+/**
+ * A name for comparing: lower case, letters and digits only, no "the", no country tag ("US", "ארה"ב"),
+ * and a doubled ו or י made single (Hebrew spells them either way).
+ */
 export function nameKey(name: string): string {
   return name
     .toLowerCase()
     .replace(/\((?:us|uk|il)\)|\b(?:us|uk)\b|ארה"ב/g, ' ')
     .replace(/^\s*the\b/, '')
     .replace(/[^\p{L}\p{N}]+/gu, '')
+    .replace(/([וי])\1/g, '$1')
 }
 
 const describe = (err: unknown) => (err instanceof Error ? err.message : String(err))

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Db, Row } from './db.ts'
-import { fetchDetails, matchMovie, matchSeries, nameKey, titleNames, type Pending } from './details.ts'
+import { fetchDetails, hebrewSpellings, matchMovie, matchSeries, nameKey, titleNames, type Pending } from './details.ts'
 import type { Tmdb, TmdbCredit, TmdbMovieFull, TmdbSeries } from './tmdb.ts'
 import type { Xtream } from './xtream.ts'
 
@@ -139,6 +139,23 @@ test('match without season ids: a trailing year in the provider name is left out
     shows: { 113828: { ...officeShow('Spy City', '2020-12-03', '2020-12-03', [6]), translations: { translations: [{ iso_639_1: 'he', data: { name: 'עיר של מרגלים' } }] } } },
   })
   assert.equal(await matchSeries(tmdb, { name: 'עיר של מרגלים (2020)', year: 2020, castNames: null }, [], { 1: 6 }), 113828)
+})
+
+test('match without season ids: another Hebrew spelling is searched when the name finds nothing', async () => {
+  const { tmdb } = fakeTmdb({
+    search: { 'וייניל|': [63535] },
+    shows: { 63535: { ...officeShow('Vinyl', '2016-02-14', '2016-04-17', [10]), translations: { translations: [{ iso_639_1: 'he', data: { name: 'וייניל' } }] } } },
+  })
+  assert.equal(await matchSeries(tmdb, { name: 'ויניל', year: null, castNames: null }, [1], { 1: 10 }), 63535)
+})
+
+test('Hebrew spellings: a ו or י inside a word doubled or made single, never at the edges', () => {
+  assert.deepEqual(hebrewSpellings('ויניל'), ['וייניל', 'וינייל'])
+  assert.deepEqual(hebrewSpellings('וייניל'), ['ויניל', 'ויינייל'])
+  assert.deepEqual(hebrewSpellings('Vinyl'), [])
+  assert.deepEqual(hebrewSpellings('יום ו'), ['יוום ו'])
+  assert.equal(hebrewSpellings('ויויויויו').length, 4)
+  assert.equal(nameKey('ויניל'), nameKey('וייניל'))
 })
 
 test('match without season ids: a name with no letters matches nothing', async () => {
