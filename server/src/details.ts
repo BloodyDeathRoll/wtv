@@ -143,7 +143,7 @@ export async function matchMovie(
   title: { name: string; year: number | null },
   durationSecs: number | null,
 ): Promise<number | null> {
-  const names = titleNames(title.name.replace(/\s*\(\d{4}\)\s*$/, ''))
+  const names = titleNames(title.name)
   const keys = new Set(names.map(nameKey).filter(Boolean))
   if (keys.size === 0) return null
   const minutes = durationSecs ? durationSecs / 60 : null
@@ -176,9 +176,13 @@ function episodeCounts(episodes: { season: number }[]): Record<number, number> {
   return out
 }
 
-/** The names in a provider title: the whole, then each side of " - " ("Shtisel - שטיסל"; – — | too). */
+/**
+ * The names in a provider title: the whole, then each side of " - " ("Shtisel - שטיסל"; – — | too).
+ * A trailing year ("עיר של מרגלים (2020)") is dropped: TMDB finds no title with it.
+ */
 export function titleNames(name: string): string[] {
-  return [...new Set([name, ...name.split(/\s+[-–—|]\s+/)].map(n => n.trim()).filter(Boolean))]
+  const bare = name.replace(/\s*\(\d{4}\)\s*$/, '')
+  return [...new Set([bare, ...bare.split(/\s+[-–—|]\s+/)].map(n => n.trim()).filter(Boolean))]
 }
 
 /** A name for comparing: lower case, letters and digits only, no "the", no country tag ("US", "ארה"ב"). */

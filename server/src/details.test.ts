@@ -125,10 +125,20 @@ test('series names: each side of a dash; keys ignore case, punctuation, "the" an
   assert.deepEqual(titleNames('Shtisel - שטיסל'), ['Shtisel - שטיסל', 'Shtisel', 'שטיסל'])
   assert.deepEqual(titleNames('לוחם  – Warrior'), ['לוחם  – Warrior', 'לוחם', 'Warrior'])
   assert.deepEqual(titleNames('Spider-Man'), ['Spider-Man'])
+  assert.deepEqual(titleNames('עיר של מרגלים (2020)'), ['עיר של מרגלים'])
+  assert.deepEqual(titleNames('Shtisel - שטיסל (2013)'), ['Shtisel - שטיסל', 'Shtisel', 'שטיסל'])
   assert.equal(nameKey('The Office US'), nameKey('The Office'))
   assert.equal(nameKey('המשרד ארה"ב'), 'המשרד')
   assert.equal(nameKey('Theodore'), 'theodore')
   assert.equal(nameKey('US'), '')
+})
+
+test('match without season ids: a trailing year in the provider name is left out of the search', async () => {
+  const { tmdb } = fakeTmdb({
+    search: { 'עיר של מרגלים|2020': [113828] },
+    shows: { 113828: { ...officeShow('עיר של מרגלים', '2020-12-03', '2020-12-03', [6]), original_name: 'Spy City' } },
+  })
+  assert.equal(await matchSeries(tmdb, { name: 'עיר של מרגלים (2020)', year: 2020, castNames: null }, [], { 1: 6 }), 113828)
 })
 
 test('match without season ids: a name with no letters matches nothing', async () => {
