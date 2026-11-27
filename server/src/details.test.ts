@@ -136,7 +136,7 @@ test('series names: each side of a dash; keys ignore case, punctuation, "the" an
 test('match without season ids: a trailing year in the provider name is left out of the search', async () => {
   const { tmdb } = fakeTmdb({
     search: { 'עיר של מרגלים|2020': [113828] },
-    shows: { 113828: { ...officeShow('עיר של מרגלים', '2020-12-03', '2020-12-03', [6]), original_name: 'Spy City' } },
+    shows: { 113828: { ...officeShow('Spy City', '2020-12-03', '2020-12-03', [6]), translations: { translations: [{ iso_639_1: 'he', data: { name: 'עיר של מרגלים' } }] } } },
   })
   assert.equal(await matchSeries(tmdb, { name: 'עיר של מרגלים (2020)', year: 2020, castNames: null }, [], { 1: 6 }), 113828)
 })

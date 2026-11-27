@@ -6,7 +6,7 @@
  * - series: the episodes, and a TMDB id found by search. The provider gives no
  *   TMDB id for a series, only for its seasons (and most often dummies): a
  *   search hit counts when one of its seasons has one of those ids, or else
- *   when its name, years and seasons agree with the provider's.
+ *   when its name (English, original or Hebrew), years and seasons agree with the provider's.
  *
  * Resumable: results are written every chunk, and a run stops at its time budget.
  *
@@ -71,8 +71,8 @@ const MAX_FAILURES_IN_A_ROW = 25
  *
  * With real provider season ids, a hit counts when one of its seasons has one,
  * and the TV credits of the first cast members are searched too (nearest year
- * first). Without them (most series), a hit counts only when its name or
- * original name is one of the provider's names, its air years cover the
+ * first). Without them (most series), a hit counts only when its name,
+ * original name or Hebrew name is one of the provider's names, its air years cover the
  * provider's year, and every provider season exists with at least as many
  * episodes (one fewer allowed).
  */
@@ -92,7 +92,9 @@ export async function matchSeries(
   const tried = new Set<number>()
 
   function agrees(s: TmdbSeries): boolean {
-    if (![s.name, s.original_name].some(n => n !== undefined && keys.has(nameKey(n)))) return false
+    // Provider names are often only Hebrew, and TMDB's name is English: its Hebrew translation counts too.
+    const hebrew = s.translations?.translations.find(x => x.iso_639_1 === 'he')?.data.name
+    if (![s.name, s.original_name, hebrew].some(n => n && keys.has(nameKey(n)))) return false
     const first = Number(s.first_air_date?.slice(0, 4)) || null
     const last = Number(s.last_air_date?.slice(0, 4)) || first
     if (title.year !== null && first !== null && (title.year < first - 1 || title.year > (last ?? first) + 1)) return false
