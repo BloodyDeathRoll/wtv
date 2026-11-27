@@ -11,6 +11,7 @@ export interface TmdbSeries {
   first_air_date?: string
   last_air_date?: string
   seasons: { id: number; season_number?: number; episode_count?: number }[]
+  translations?: { translations: Translation[] }
 }
 
 export interface TmdbCredit {
@@ -142,7 +143,7 @@ export function createTmdb(apiKey: string, fetchFn: typeof fetch = fetch, sleep 
     },
 
     async series(id: number): Promise<TmdbSeries> {
-      return get<TmdbSeries>(`tv/${id}`)
+      return get<TmdbSeries>(`tv/${id}`, { append_to_response: 'translations' })
     },
 
     async searchPerson(name: string): Promise<number | null> {

@@ -6,7 +6,7 @@
  * - series: the episodes, and a TMDB id found by search. The provider gives no
  *   TMDB id for a series, only for its seasons (and most often dummies): a
  *   search hit counts when one of its seasons has one of those ids, or else
- *   when its name, years and seasons agree with the provider's.
+ *   when its name (English, original or Hebrew), years and seasons agree with the provider's.
  *
  * Resumable: results are written every chunk, and a run stops at its time budget.
  *
@@ -48,6 +48,8 @@ const TITLE_HITS = 5
 const RUNTIME_SLACK_MIN = 5
 const CAST_TRIED = 2
 const CAST_SHOWS = 6
+/** Other Hebrew spellings searched per series, at most: each is one more search. */
+const MAX_SPELLINGS = 4
 
 /** Parallel requests. The provider handled 6 without errors (measured 2026-11-17). */
 const MOVIE_PARALLEL = 6
@@ -71,8 +73,8 @@ const MAX_FAILURES_IN_A_ROW = 25
  *
  * With real provider season ids, a hit counts when one of its seasons has one,
  * and the TV credits of the first cast members are searched too (nearest year
- * first). Without them (most series), a hit counts only when its name or
- * original name is one of the provider's names, its air years cover the
+ * first). Without them (most series), a hit counts only when its name,
+ * original name or Hebrew name is one of the provider's names, its air years cover the
  * provider's year, and every provider season exists with at least as many
  * episodes (one fewer allowed).
  */
@@ -92,7 +94,9 @@ export async function matchSeries(
   const tried = new Set<number>()
 
   function agrees(s: TmdbSeries): boolean {
-    if (![s.name, s.original_name].some(n => n !== undefined && keys.has(nameKey(n)))) return false
+    // Provider names are often only Hebrew, and TMDB's name is English: its Hebrew translation counts too.
+    const hebrew = s.translations?.translations.find(x => x.iso_639_1 === 'he')?.data.name
+    if (![s.name, s.original_name, hebrew].some(n => n && keys.has(nameKey(n)))) return false
     const first = Number(s.first_air_date?.slice(0, 4)) || null
     const last = Number(s.last_air_date?.slice(0, 4)) || first
     if (title.year !== null && first !== null && (title.year < first - 1 || title.year > (last ?? first) + 1)) return false
@@ -114,6 +118,11 @@ export async function matchSeries(
     const found =
       (title.year !== null ? await confirm(await tmdb.searchSeries(name, title.year, TITLE_HITS)) : null) ??
       (await confirm(await tmdb.searchSeries(name, null, TITLE_HITS)))
+    if (found !== null) return found
+  }
+  // TMDB search does not match across Hebrew spellings ("ויניל" finds nothing, "וייניל" finds Vinyl).
+  for (const name of names.flatMap(hebrewSpellings).slice(0, MAX_SPELLINGS)) {
+    const found = await confirm(await tmdb.searchSeries(name, null, TITLE_HITS))
     if (found !== null) return found
   }
   if (want.size === 0) return null
@@ -185,13 +194,31 @@ export function titleNames(name: string): string[] {
   return [...new Set([bare, ...bare.split(/\s+[-–—|]\s+/)].map(n => n.trim()).filter(Boolean))]
 }
 
-/** A name for comparing: lower case, letters and digits only, no "the", no country tag ("US", "ארה"ב"). */
+/**
+ * Other Hebrew spellings of a name, one letter changed in each: a ו or י inside
+ * a word doubled ("ויניל" to "וייניל"), or a doubled one made single.
+ */
+export function hebrewSpellings(name: string): string[] {
+  const out = new Set<string>()
+  // A run of the same letter is changed as a whole, and only when it is one or two long.
+  for (const m of name.matchAll(/(?<=\p{L})(?:(?<!ו)ו{1,2}(?!ו)|(?<!י)י{1,2}(?!י))(?=\p{L})/gu)) {
+    const run = m[0]
+    out.add(name.slice(0, m.index) + (run.length === 1 ? run + run : run[0]) + name.slice(m.index + run.length))
+  }
+  return [...out]
+}
+
+/**
+ * A name for comparing: lower case, letters and digits only, no "the", no country tag ("US", "ארה"ב"),
+ * and a doubled ו or י made single (Hebrew spells them either way).
+ */
 export function nameKey(name: string): string {
   return name
     .toLowerCase()
     .replace(/\((?:us|uk|il)\)|\b(?:us|uk)\b|ארה"ב/g, ' ')
     .replace(/^\s*the\b/, '')
     .replace(/[^\p{L}\p{N}]+/gu, '')
+    .replace(/([וי])\1/g, '$1')
 }
 
 const describe = (err: unknown) => (err instanceof Error ? err.message : String(err))

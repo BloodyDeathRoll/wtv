@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Db, Row } from './db.ts'
-import { fetchDetails, matchMovie, matchSeries, nameKey, titleNames, type Pending } from './details.ts'
+import { fetchDetails, hebrewSpellings, matchMovie, matchSeries, nameKey, titleNames, type Pending } from './details.ts'
 import type { Tmdb, TmdbCredit, TmdbMovieFull, TmdbSeries } from './tmdb.ts'
 import type { Xtream } from './xtream.ts'
 
@@ -136,9 +136,36 @@ test('series names: each side of a dash; keys ignore case, punctuation, "the" an
 test('match without season ids: a trailing year in the provider name is left out of the search', async () => {
   const { tmdb } = fakeTmdb({
     search: { 'עיר של מרגלים|2020': [113828] },
-    shows: { 113828: { ...officeShow('עיר של מרגלים', '2020-12-03', '2020-12-03', [6]), original_name: 'Spy City' } },
+    shows: { 113828: { ...officeShow('Spy City', '2020-12-03', '2020-12-03', [6]), translations: { translations: [{ iso_639_1: 'he', data: { name: 'עיר של מרגלים' } }] } } },
   })
   assert.equal(await matchSeries(tmdb, { name: 'עיר של מרגלים (2020)', year: 2020, castNames: null }, [], { 1: 6 }), 113828)
+})
+
+test('match without season ids: another Hebrew spelling is searched when the name finds nothing', async () => {
+  const { tmdb } = fakeTmdb({
+    search: { 'וייניל|': [63535] },
+    shows: { 63535: { ...officeShow('Vinyl', '2016-02-14', '2016-04-17', [10]), translations: { translations: [{ iso_639_1: 'he', data: { name: 'וייניל' } }] } } },
+  })
+  assert.equal(await matchSeries(tmdb, { name: 'ויניל', year: null, castNames: null }, [1], { 1: 10 }), 63535)
+})
+
+test('match without season ids: at most 4 other spellings are searched per series', async () => {
+  const { tmdb } = fakeTmdb({})
+  const searched: string[] = []
+  const counting: typeof tmdb = { ...tmdb, searchSeries: async (name, year) => (searched.push(name), tmdb.searchSeries(name, year)) }
+  // 3 names (the whole and each side of the dash), each with other spellings.
+  assert.equal(await matchSeries(counting, { name: 'שיווק - ביוב', year: null, castNames: null }, [], { 1: 6 }), null)
+  assert.equal(searched.length, 3 + 4)
+})
+
+test('Hebrew spellings: a ו or י inside a word doubled or made single, never at the edges', () => {
+  assert.deepEqual(hebrewSpellings('ויניל'), ['וייניל', 'וינייל'])
+  assert.deepEqual(hebrewSpellings('וייניל'), ['ויניל', 'ויינייל'])
+  assert.deepEqual(hebrewSpellings('Vinyl'), [])
+  assert.deepEqual(hebrewSpellings('יום ו'), ['יוום ו'])
+  // The first ו starts the word; the second follows a ו: neither is changed.
+  assert.deepEqual(hebrewSpellings('ווינייל'), ['וויינייל', 'וויניל'])
+  assert.equal(nameKey('ויניל'), nameKey('וייניל'))
 })
 
 test('match without season ids: a name with no letters matches nothing', async () => {
