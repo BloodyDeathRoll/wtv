@@ -16,6 +16,7 @@ import 'window.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  watchFullScreen();
   final client = http.Client();
   final session = Session(client);
   services = Services(

@@ -299,6 +299,26 @@ void main() {
       expect(focusedButton(), en.railSettings);
     });
 
+    testWidgets('a double click on the picture toggles full screen and leaves the film playing', (tester) async {
+      final calls = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(const MethodChannel('wtv/window'), (call) async {
+        calls.add(call.method);
+        return null;
+      });
+      await show(tester);
+      engine.plays(length: _minute * 100);
+      await tester.pump();
+      await tester.tapAt(const Offset(400, 200));
+      await tester.tapAt(const Offset(400, 200));
+      await tester.pump();
+      expect((calls.length, engine.paused), (1, false));
+      // A third click is a single one again: it pauses.
+      await tester.tapAt(const Offset(400, 200));
+      await tester.pump();
+      expect((calls.length, engine.paused), (1, true));
+      await leave(tester);
+    });
+
     testWidgets('an episode: the previous and next buttons; with no previous episode that button is greyed', (tester) async {
       await show(tester, episode: true, next: 'S1 E3 · Third', previous: true);
       engine.plays(length: _minute * 20, at: _minute);

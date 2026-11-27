@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart' show kDoubleTapTimeout;
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -7,6 +8,7 @@ import '../../l10n/app_localizations.dart';
 import '../../player/engine.dart';
 import '../../player/subtitles.dart';
 import '../../services.dart';
+import '../../window.dart';
 import '../components/buttons.dart';
 import '../components/dialogs.dart';
 import '../components/pressable.dart';
@@ -98,6 +100,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   var _onButtons = false;
   var _menuOpen = false;
   var _byPointer = false;
+  // The last click on the picture: a second one soon after is a double click.
+  DateTime? _lastClick;
   Timer? _hide;
   final _playButton = FocusNode();
   // The second on the time line, to draw it again only when it changes.
@@ -364,11 +368,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
             children: [
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
+                // Not onDoubleTap: it would hold every single click back until the double-click time is up.
                 onTap: _overlay
                     ? null
                     : () {
                         _toPicture();
                         _toggle();
+                        final now = DateTime.now();
+                        final last = _lastClick;
+                        if (last != null && now.difference(last) < kDoubleTapTimeout) {
+                          // The second click undid the first's pause.
+                          toggleFullScreen();
+                          _lastClick = null;
+                        } else {
+                          _lastClick = now;
+                        }
                       },
                 child: ColoredBox(color: Colors.black, child: e.view()),
               ),

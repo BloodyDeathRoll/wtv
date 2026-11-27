@@ -20,9 +20,15 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
-// The window manager reports full screen, whoever asked for it.
+// The window manager reports full screen, whoever asked for it; the app hears of each change.
 static gboolean window_state_cb(GtkWidget* widget, GdkEventWindowState* event, gpointer data) {
-  MY_APPLICATION(data)->full_screen = (event->new_window_state & GDK_WINDOW_STATE_FULLSCREEN) != 0;
+  MyApplication* self = MY_APPLICATION(data);
+  gboolean full_screen = (event->new_window_state & GDK_WINDOW_STATE_FULLSCREEN) != 0;
+  if (full_screen != self->full_screen && self->window_channel != nullptr) {
+    g_autoptr(FlValue) args = fl_value_new_bool(full_screen);
+    fl_method_channel_invoke_method(self->window_channel, "fullScreen", args, nullptr, nullptr, nullptr);
+  }
+  self->full_screen = full_screen;
   return FALSE;
 }
 
