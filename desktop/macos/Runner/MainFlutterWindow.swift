@@ -20,6 +20,12 @@ class MainFlutterWindow: NSWindow {
       self?.toggleFullScreen(nil)
       result(nil)
     }
+    // The app hears of each change, whoever asked for it.
+    for (name, full) in [(NSWindow.didEnterFullScreenNotification, true), (NSWindow.didExitFullScreenNotification, false)] {
+      NotificationCenter.default.addObserver(forName: name, object: self, queue: .main) { _ in
+        channel.invokeMethod("fullScreen", arguments: full)
+      }
+    }
 
     super.awakeFromNib()
   }
